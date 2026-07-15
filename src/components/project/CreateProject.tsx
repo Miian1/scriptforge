@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Film, ArrowLeft, Sparkles, Check, AlertCircle, RefreshCw, ArrowRight } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Film, ArrowLeft, Sparkles, Check, AlertCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
@@ -61,7 +61,7 @@ const GENERATION_STAGES = [
   { active: 'Researching topic...', completed: 'Research complete' },
   { active: 'Building story structure...', completed: 'Story structured' },
   { active: 'Generating scenes with AI...', completed: 'Scenes generated' },
-  { active: 'Saving to database...', completed: 'Saved successfully' },
+  { active: 'Finalizing...', completed: 'Finalized' },
 ] as const;
 
 const STAGE_INTERVAL_MS = 5000;
@@ -78,8 +78,8 @@ export default function CreateProject() {
     loadScenes,
   } = useAppStore();
 
-  // Phase: 'form' | 'generating' | 'success' | 'error'
-  const [phase, setPhase] = useState<'form' | 'generating' | 'success' | 'error'>('form');
+  // Phase: 'form' | 'generating' | 'error'
+  const [phase, setPhase] = useState<'form' | 'generating' | 'error'>('form');
   const [currentStage, setCurrentStage] = useState(-1);
   const [errorMessage, setErrorMessage] = useState('');
   const [elapsed, setElapsed] = useState(0);
@@ -163,15 +163,16 @@ export default function CreateProject() {
       await addScenes(scenesWithCorrectId);
       await updateProject(mongoId, { status: 'completed' });
 
-      // Brief pause to show "Saved successfully" stage
+      // Brief pause to show "Finalized" stage
       await new Promise((r) => setTimeout(r, 800));
 
       // Clean up timers
       if (stageTimerRef.current) clearInterval(stageTimerRef.current);
       if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
 
-      // Switch to success phase
-      setPhase('success');
+      // Pre-load scenes into store, then auto-redirect to editor
+      await loadScenes(mongoId);
+      setCurrentView('editor');
     } catch (error) {
       if (stageTimerRef.current) clearInterval(stageTimerRef.current);
       if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
@@ -192,13 +193,6 @@ export default function CreateProject() {
     }
   }, []);
 
-  const onGoToProject = useCallback(async () => {
-    const mongoId = projectIdRef.current;
-    if (!mongoId) return;
-    await loadScenes(mongoId);
-    setCurrentView('editor');
-  }, [loadScenes, setCurrentView]);
-
   const onSubmit = useCallback((values: FormValues) => {
     formValuesRef.current = values;
     startGeneration(values);
@@ -215,54 +209,6 @@ export default function CreateProject() {
     const sec = s % 60;
     return `${m}:${sec.toString().padStart(2, '0')}`;
   };
-
-  // ─── SUCCESS VIEW ─────────────────────────────────────────────────────────
-  if (phase === 'success') {
-    return (
-      <div className="flex min-h-full items-center justify-center px-4 py-8 md:py-12">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.4 }}
-          className="w-full max-w-md text-center space-y-6"
-        >
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.1 }}
-            className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10"
-          >
-            <Check className="h-8 w-8 text-emerald-500" />
-          </motion.div>
-
-          <div className="space-y-2">
-            <h2 className="text-2xl font-bold tracking-tight">Script Generated!</h2>
-            <p className="text-muted-foreground">
-              Your production script is ready with narration, image prompts, and animation prompts.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <Button
-              size="lg"
-              onClick={onGoToProject}
-              className="w-full text-base font-semibold gap-2"
-            >
-              View Project
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              onClick={onBackToDashboard}
-              className="w-full"
-            >
-              Back to Dashboard
-            </Button>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
 
   // ─── ERROR VIEW ──────────────────────────────────────────────────────────
   if (phase === 'error') {
