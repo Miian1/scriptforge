@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   title: "ScriptForge — AI YouTube Script Studio",
   description: "Transform your video ideas into production-ready scripts with AI. Scene-by-scene narration, image prompts, and animation prompts.",
   icons: {
-    icon: "/favicon.svg",
+    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
 };
 

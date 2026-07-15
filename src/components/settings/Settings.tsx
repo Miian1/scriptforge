@@ -2,13 +2,17 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, Shield, ShieldCheck } from 'lucide-react';
+import { Settings, Trash2, Save, Shield, ShieldCheck } from 'lucide-react';
+import { toast } from 'sonner';
 import type { AppSettings } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import ConfirmDialog from '@/components/shared/ConfirmDialog';
+import { useAppStore } from '@/lib/store';
 import { useAuthStore } from '@/lib/auth-store';
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -66,13 +70,18 @@ function Monitor(props: React.SVGProps<SVGSVGElement>) {
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [saving, setSaving] = useState(false);
+  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { loadProjects } = useAppStore();
   const { user } = useAuthStore();
 
   const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
     setSettings(loadSettings());
+    setLoadingSettings(false);
   }, []);
 
   const autoPersist = useCallback(
@@ -96,6 +105,25 @@ export default function SettingsPage() {
     },
     [autoPersist]
   );
+
+  const handleSaveLocal = async () => {
+    setSaving(true);
+    try {
+      persistSettings(settings);
+      toast.success('Settings saved successfully');
+    } catch {
+      toast.error('Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClearData = async () => {
+    setConfirmOpen(false);
+    localStorage.removeItem(SETTINGS_KEY);
+    toast.success('Local settings cleared');
+    loadProjects();
+  };
 
   return (
     <motion.div
@@ -194,6 +222,32 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Danger Zone */}
+      <Card className="border-destructive/50">
+        <CardHeader>
+          <CardTitle className="text-lg text-destructive">Danger Zone</CardTitle>
+          <CardDescription>
+            Clear local settings and reload data from the server
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="destructive" onClick={() => setConfirmOpen(true)}>
+            <Trash2 className="mr-2 h-4 w-4" />
+            Clear Local Data
+          </Button>
+        </CardContent>
+      </Card>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Clear Local Data"
+        description="This will clear your locally cached settings and reload data from the server."
+        onConfirm={handleClearData}
+        confirmText="Clear Everything"
+        variant="destructive"
+      />
     </motion.div>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Mail, ArrowLeft, Loader2, RefreshCw, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
+import { Mail, ArrowLeft, Loader2, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/auth-store';
 
@@ -67,7 +67,7 @@ export default function VerifyEmailPending({ email, onBack }: { email: string; o
           ) : null}
 
           <p className="text-sm text-muted-foreground mb-6">
-            Click the link in the email to verify your account. The link expires in 24 hours.
+            Click the link in the email to verify your account. The link expires in 15 minutes.
             Make sure to check your spam folder.
           </p>
 
@@ -95,69 +95,6 @@ export default function VerifyEmailPending({ email, onBack }: { email: string; o
           >
             <ArrowLeft className="size-4" />
             Back to Sign In
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function VerifyEmailResult({ result }: { result: 'success' | 'expired' | 'invalid' | 'error'; msg?: string }) {
-  const { setPendingVerificationEmail } = useAuthStore();
-
-  const configs = {
-    success: {
-      icon: CheckCircle,
-      color: 'text-green-500',
-      bg: 'bg-green-500/10',
-      title: 'Email Verified!',
-      description: 'Your account has been verified successfully. You can now sign in.',
-    },
-    expired: {
-      icon: XCircle,
-      color: 'text-amber-500',
-      bg: 'bg-amber-500/10',
-      title: 'Link Expired',
-      description: 'This verification link has expired. Please request a new one.',
-    },
-    invalid: {
-      icon: XCircle,
-      color: 'text-red-500',
-      bg: 'bg-red-500/10',
-      title: 'Invalid Link',
-      description: 'This verification link is invalid or has already been used.',
-    },
-    error: {
-      icon: AlertCircle,
-      color: 'text-red-500',
-      bg: 'bg-red-500/10',
-      title: 'Verification Failed',
-      description: msg || 'Something went wrong. Please try again.',
-    },
-  };
-
-  const config = configs[result];
-  const Icon = config.icon;
-
-  return (
-    <div className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="rounded-2xl border border-border bg-background p-8 shadow-lg text-center">
-          <div className={`mx-auto mb-6 flex size-16 items-center justify-center rounded-full ${config.bg}`}>
-            <Icon className={`size-8 ${config.color}`} />
-          </div>
-
-          <h1 className="text-2xl font-bold tracking-tight mb-2">{config.title}</h1>
-          <p className="text-muted-foreground mb-8">{config.description}</p>
-
-          <Button
-            className="w-full"
-            onClick={() => {
-              setPendingVerificationEmail(null);
-              window.location.href = '/';
-            }}
-          >
-            Go to Sign In
           </Button>
         </div>
       </div>

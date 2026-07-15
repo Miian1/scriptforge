@@ -17,14 +17,19 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
 
-    const user = await User.findOne({ verificationToken: token });
+    // 1. Check token exists in DB
+    const user = await User.findOne({
+      verificationToken: token,
+    });
+
     if (!user) {
       return NextResponse.json(
-        { error: 'Invalid verification token.' },
+        { error: 'Invalid verification token. The token does not exist.' },
         { status: 400 }
       );
     }
 
+    // 2. Check token not expired
     if (user.verificationTokenExpires && new Date() > user.verificationTokenExpires) {
       return NextResponse.json(
         { error: 'This verification link has expired. Please request a new one.' },
@@ -32,11 +37,13 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // 3. Token is valid — verify the user
     user.isVerified = true;
     user.verificationToken = null;
     user.verificationTokenExpires = null;
     await user.save();
 
+    // 4. Auto-login: create JWT and set cookie
     const jwtToken = await signToken({
       userId: (user._id as string).toString(),
       email: user.email,
@@ -45,8 +52,19 @@ export async function GET(req: NextRequest) {
 
     const cookie = createSessionCookie(jwtToken);
 
+    // 5. Return success with session cookie set
     return NextResponse.json(
-      { success: true, message: 'Email verified successfully!' },
+      {
+        success: true,
+        message: 'Email verified successfully!',
+        user: {
+          id: (user._id as string).toString(),
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isVerified: true,
+        },
+      },
       {
         headers: {
           'Set-Cookie': `${cookie.name}=${cookie.value}; Path=${cookie.path}; HttpOnly; SameSite=${cookie.sameSite}; Max-Age=${cookie.maxAge}`,
@@ -55,6 +73,9 @@ export async function GET(req: NextRequest) {
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Verification failed';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: `Verification failed: ${message}` },
+      { status: 500 }
+    );
   }
 }

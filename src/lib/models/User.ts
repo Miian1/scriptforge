@@ -2,14 +2,11 @@ import mongoose, { Schema, type Document } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
 export type UserRole = 'user' | 'admin';
-export type AuthProvider = 'email' | 'google';
 
 export interface IUser extends Document {
   name: string;
   email: string;
-  password?: string;
-  googleId?: string;
-  provider: AuthProvider;
+  password: string;
   role: UserRole;
   isVerified: boolean;
   verificationToken: string | null;
@@ -30,9 +27,7 @@ const UserSchema = new Schema<IUser>(
       trim: true,
       maxlength: 255,
     },
-    password: { type: String, minlength: 6, select: false },
-    googleId: { type: String, unique: true, sparse: true, index: true },
-    provider: { type: String, enum: ['email', 'google'], default: 'email' },
+    password: { type: String, required: true, minlength: 6, select: false },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
     isVerified: { type: Boolean, default: false },
     verificationToken: { type: String, default: null },
@@ -42,13 +37,12 @@ const UserSchema = new Schema<IUser>(
 );
 
 UserSchema.pre('save', async function () {
-  if (!this.isModified('password') || !this.password) return;
+  if (!this.isModified('password')) return;
   const salt = await bcrypt.genSalt(12);
   this.password = await bcrypt.hash(this.password, salt);
 });
 
 UserSchema.methods.comparePassword = async function (candidate: string): Promise<boolean> {
-  if (!this.password) return false;
   return bcrypt.compare(candidate, this.password);
 };
 
