@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Film, ArrowLeft, Sparkles, Check } from 'lucide-react';
 import { toast } from 'sonner';
-import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -115,11 +114,10 @@ export default function CreateProject() {
   }, []);
 
   const onSubmit = async (values: FormValues) => {
-    const projectId = uuidv4();
     const now = Date.now();
 
     const project: Project = {
-      id: projectId,
+      id: '', // will be replaced by MongoDB _id
       title: values.title,
       topic: values.topic,
       description: values.description ?? '',
@@ -135,12 +133,12 @@ export default function CreateProject() {
       updatedAt: now,
     };
 
-    // Save project and start generation
-    await addProject(project);
-    setGeneratingProjectId(projectId);
-    setActiveProjectId(projectId);
+    // Save project to MongoDB and get the real ID back
+    const mongoId = await addProject(project);
+    setGeneratingProjectId(mongoId);
+    setActiveProjectId(mongoId);
     setCurrentView('editor');
-    projectIdRef.current = projectId;
+    projectIdRef.current = mongoId;
 
     // Start simulated stage progression
     setIsGenerating(true);
@@ -149,15 +147,20 @@ export default function CreateProject() {
     stageTimerRef.current = setInterval(advanceStage, STAGE_INTERVAL_MS);
 
     try {
-      const scenes = await generateScript(project);
-      await addScenes(scenes);
-      await updateProject(projectId, { status: 'completed' });
+      // Use the real MongoDB project from store for generation
+      const realProject = useAppStore.getState().projects.find(p => p.id === mongoId);
+      const projectToGenerate = realProject || { ...project, id: mongoId };
+      const scenes = await generateScript(projectToGenerate);
+      // Update projectId on each scene to match the MongoDB ID
+      const scenesWithCorrectId = scenes.map(s => ({ ...s, projectId: mongoId }));
+      await addScenes(scenesWithCorrectId);
+      await updateProject(mongoId, { status: 'completed' });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'An unexpected error occurred';
       toast.error('Script generation failed', {
         description: message,
       });
-      await updateProject(projectId, { status: 'error' });
+      await updateProject(mongoId, { status: 'error' });
     } finally {
       if (stageTimerRef.current) clearInterval(stageTimerRef.current);
       setGeneratingProjectId(null);

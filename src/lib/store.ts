@@ -114,11 +114,15 @@ export const useAppStore = create<AppState>((set, get) => ({
         const data = await res.json();
         const created = mapProject(data.project);
         set((s) => ({ projects: [created, ...s.projects] }));
+        // Return the MongoDB-assigned ID so callers can use it
+        return created.id;
       }
     } catch {
       // fallback: add locally
       set((s) => ({ projects: [project, ...s.projects] }));
+      return project.id;
     }
+    return project.id;
   },
   updateProject: async (id, changes) => {
     try {
