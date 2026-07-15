@@ -39,15 +39,15 @@ const NAV_ITEMS = [
   { view: 'about' as AppView, label: 'About', icon: Info, primary: false },
 ];
 
-// ── Sidebar Dark Palette ───────────────────────────────
+// ── Sidebar Palette (theme-aware) ─────────────────────
 
 const sidebar = {
-  bg: 'bg-[#0a0a0a]',
-  active: 'bg-[#1a1a1a]',
-  text: 'text-white',
-  muted: 'text-white/50',
-  border: 'border-white/10',
-  hover: 'hover:bg-white/5',
+  bg: 'bg-background',
+  active: 'bg-accent',
+  text: 'text-foreground',
+  muted: 'text-muted-foreground',
+  border: 'border-border',
+  hover: 'hover:bg-accent/50',
 };
 
 // ── Icon Slot (fixed, left-aligned, never moves) ──────
@@ -178,7 +178,7 @@ function LogoutButton({ collapsed }: { collapsed: boolean }) {
       variant="ghost"
       onClick={handleLogout}
       className={cn(
-        'h-10 w-full rounded-lg justify-start pl-0 text-red-400 hover:text-red-300 hover:bg-red-500/10',
+        'h-10 w-full rounded-lg justify-start pl-0 text-destructive hover:text-destructive hover:bg-destructive/10',
       )}
       aria-label="Log out"
     >
@@ -227,7 +227,7 @@ function MobileLogoutButton({ onClose }: { onClose: () => void }) {
     <Button
       variant="ghost"
       onClick={handleLogout}
-      className="h-11 w-full justify-start gap-3 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10"
+      className="h-11 w-full justify-start gap-3 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10"
     >
       <LogOut className="size-5 shrink-0" />
       Log Out
@@ -248,8 +248,8 @@ function DesktopSidebar() {
       animate={{ width: sidebarCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       className={cn(
-        'hidden md:fixed md:inset-y-0 md:z-40 md:flex md:flex-col overflow-hidden',
-        sidebar.bg, sidebar.border, 'border-r'
+        'hidden md:fixed md:inset-y-0 md:z-40 md:flex md:flex-col overflow-hidden border-r shadow-sm',
+        sidebar.bg, sidebar.border
       )}
     >
       {/* Brand — hidden when collapsed on tablet */}
@@ -267,10 +267,10 @@ function DesktopSidebar() {
                 <Film className="size-4 text-primary-foreground" />
               </div>
               <div className="overflow-hidden whitespace-nowrap">
-                <h1 className="text-sm font-bold tracking-tight text-white leading-tight">
+                <h1 className="text-sm font-bold tracking-tight text-foreground leading-tight">
                   ScriptForge
                 </h1>
-                <p className="text-[10px] text-white/40 leading-none">
+                <p className="text-[10px] text-muted-foreground leading-none">
                   AI Script Agent
                 </p>
               </div>
@@ -305,7 +305,7 @@ function DesktopSidebar() {
               className="overflow-hidden"
             >
               <div className="flex items-center h-7 px-3 gap-2">
-                <p className="text-[11px] text-white/40 truncate">
+                <p className="text-[11px] text-muted-foreground truncate">
                   {userName ?? ''}
                 </p>
                 {userRole === 'admin' && (
@@ -358,10 +358,10 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
                   <Film className="size-4 text-primary-foreground" />
                 </div>
                 <div>
-                  <h1 className="text-sm font-bold tracking-tight text-white leading-tight">
+                  <h1 className="text-sm font-bold tracking-tight text-foreground leading-tight">
                     ScriptForge
                   </h1>
-                  <p className="text-[10px] text-white/40 leading-none">
+                  <p className="text-[10px] text-muted-foreground leading-none">
                     AI Script Agent
                   </p>
                 </div>
@@ -370,7 +370,7 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                className="text-white/60 hover:text-white hover:bg-white/10 h-9 w-9"
+                className="text-muted-foreground hover:text-foreground hover:bg-accent/50 h-9 w-9"
                 aria-label="Close menu"
               >
                 <X className="size-5" />
@@ -429,7 +429,7 @@ function BottomNavBar() {
     <div
       className={cn(
         'fixed bottom-0 left-0 right-0 z-30 flex md:hidden h-16 items-center justify-around px-2',
-        'bg-[#0a0a0a] border-t border-white/10'
+        'bg-background border-t border-border shadow-[0_-1px_3px_rgba(0,0,0,0.05)]'
       )}
     >
       {bottomItems.map((item) => {
@@ -441,7 +441,7 @@ function BottomNavBar() {
             onClick={() => setCurrentView(item.view)}
             className={cn(
               'flex flex-col items-center justify-center gap-0.5 w-16 h-full rounded-lg transition-colors',
-              isActive ? 'text-white' : 'text-white/40 hover:text-white/70'
+              isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             <Icon className="size-5" />
