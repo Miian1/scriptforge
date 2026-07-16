@@ -33,10 +33,13 @@ export async function geminiServerCall(
 
   const plan = user.plan || 'free';
   const limits = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS];
-  const usage = resetIfNewDay(user.dailyUsage);
+  const usage = resetIfNewDay(user.dailyUsage, plan as 'free' | 'pro');
 
+  const isLifetime = plan === 'free';
   if (usage.aiGenerations >= limits.aiGenerationsPerDay) {
-    throw new Error(`Daily AI limit reached (${limits.aiGenerationsPerDay}). Upgrade to Pro for more.`);
+    throw new Error(isLifetime
+      ? `You've used all ${limits.aiGenerationsPerDay} AI generations on the Free plan. Upgrade to Pro for 100 daily generations.`
+      : `Daily AI limit reached (${limits.aiGenerationsPerDay}). Upgrade to Pro for more.`);
   }
 
   // Increment usage

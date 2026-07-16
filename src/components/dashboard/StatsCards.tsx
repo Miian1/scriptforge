@@ -72,7 +72,7 @@ export default function StatsCards() {
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                    Projects Today
+                    {isPro ? 'Projects Today' : 'Projects Used'}
                   </p>
                   <p className="text-lg font-bold leading-tight">
                     {isPro ? (
@@ -130,7 +130,7 @@ export default function StatsCards() {
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                    AI Generations Today
+                    {isPro ? 'AI Generations Today' : 'AI Generations Used'}
                   </p>
                   <p className="text-lg font-bold leading-tight">
                     {isPro ? (

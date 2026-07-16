@@ -31,11 +31,14 @@ export async function POST(request: NextRequest) {
 
     const plan = user.plan || 'free';
     const limits = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS];
-    const usage = resetIfNewDay(user.dailyUsage);
+    const usage = resetIfNewDay(user.dailyUsage, plan as 'free' | 'pro');
 
+    const isLifetime = plan === 'free';
     if (usage.aiGenerations >= limits.aiGenerationsPerDay) {
       return NextResponse.json({
-        error: `You've reached your daily AI generation limit (${limits.aiGenerationsPerDay}). Upgrade to Pro for 10x more generations.`,
+        error: isLifetime
+          ? `You've used all ${limits.aiGenerationsPerDay} AI generations on the Free plan. Upgrade to Pro for 100 daily generations.`
+          : `You've reached your daily AI generation limit (${limits.aiGenerationsPerDay}). Upgrade to Pro for 10x more generations.`,
         code: 'PLAN_LIMIT_REACHED',
       }, { status: 429 });
     }

@@ -56,11 +56,14 @@ export async function POST(req: NextRequest) {
 
     const plan = user.plan || 'free';
     const limits = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS];
-    const usage = resetIfNewDay(user.dailyUsage);
+    const usage = resetIfNewDay(user.dailyUsage, plan as 'free' | 'pro');
 
+    const isLifetime = plan === 'free';
     if (usage.projectsCreated >= limits.projectsPerDay) {
       return NextResponse.json({
-        error: `You've reached your daily project limit (${limits.projectsPerDay}). Upgrade to Pro for unlimited projects.`,
+        error: isLifetime
+          ? `You've used your 1 free project. Upgrade to Pro for unlimited projects.`
+          : `You've reached your daily project limit (${limits.projectsPerDay}). Upgrade to Pro for unlimited projects.`,
         code: 'PLAN_LIMIT_REACHED',
       }, { status: 429 });
     }

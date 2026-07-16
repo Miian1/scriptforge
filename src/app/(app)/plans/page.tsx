@@ -17,16 +17,21 @@ const ADMIN_WHATSAPP = '9203177730490';
 const WHATSAPP_LINK = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent('Hi! I want to upgrade to ScriptForge Pro plan via Easypaisa/JazzCash. Please share the payment details.')}`;
 
 const FREE_FEATURES = [
-  'Up to 3 projects per day',
-  '10 AI generations per day',
-  'Scene-by-scene script generation',
+  '1 project (one-time)',
+  '3 AI generations (one-time)',
+  'Connect YouTube channel',
+  'View video details & comments',
   'Basic editing & reordering',
 ];
 
 const PRO_FEATURES = [
-  'Unlimited projects per day',
-  '100 AI generations per day (10x more)',
+  'Unlimited projects',
+  '100 AI generations per day',
   'Regenerate any scene content',
+  'Connect YouTube channel',
+  'AI-powered comment replies',
+  'AI description & tag improvement',
+  'Apply changes directly to YouTube',
   'Priority AI processing',
   'All Free features included',
 ];
@@ -102,7 +107,7 @@ export default function PlansPage() {
               <p className="text-sm text-muted-foreground">
                 {isPro
                   ? 'You have unlimited access to all features.'
-                  : `Today: ${usage.projectsCreated}/${freeLimits.projectsPerDay === Infinity ? '∞' : freeLimits.projectsPerDay} projects, ${usage.aiGenerations}/${freeLimits.aiGenerationsPerDay} AI generations`}
+                  : `Used: ${usage.projectsCreated}/${freeLimits.projectsPerDay === Infinity ? '∞' : freeLimits.projectsPerDay} project, ${usage.aiGenerations}/${freeLimits.aiGenerationsPerDay} AI generations (one-time)`}
               </p>
             </div>
             {!isPro && (
@@ -117,7 +122,7 @@ export default function PlansPage() {
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-muted-foreground">Projects Today</span>
+                  <span className="text-muted-foreground">Projects Used</span>
                   <span className="font-medium">{usage.projectsCreated} / {freeLimits.projectsPerDay}</span>
                 </div>
                 <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -129,7 +134,7 @@ export default function PlansPage() {
               </div>
               <div>
                 <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-muted-foreground">AI Generations Today</span>
+                  <span className="text-muted-foreground">AI Generations Used</span>
                   <span className="font-medium">{usage.aiGenerations} / {freeLimits.aiGenerationsPerDay}</span>
                 </div>
                 <div className="h-2 rounded-full bg-muted overflow-hidden">

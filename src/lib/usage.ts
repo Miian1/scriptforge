@@ -4,8 +4,8 @@ import type { UserPlan, IDailyUsage } from './models/User';
 
 export const PLAN_LIMITS = {
   free: {
-    projectsPerDay: 3,
-    aiGenerationsPerDay: 10,
+    projectsPerDay: 1,
+    aiGenerationsPerDay: 3,
     canRegenerate: false,
     label: 'Free',
   },
@@ -23,7 +23,14 @@ export function getTodayKey(): string {
   return new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
 }
 
-export function resetIfNewDay(usage: IDailyUsage): IDailyUsage {
+// For free users: limits are ONE-TIME (lifetime), never reset.
+// For pro users: limits are daily and reset each day.
+export function resetIfNewDay(usage: IDailyUsage, plan: 'free' | 'pro' = 'free'): IDailyUsage {
+  // Free plan: one-time limits, never reset
+  if (plan === 'free') {
+    return usage;
+  }
+  // Pro plan: daily reset
   const today = getTodayKey();
   if (usage.date !== today) {
     return { date: today, projectsCreated: 0, aiGenerations: 0 };
@@ -40,8 +47,9 @@ export function formatUserResponse(user: {
   isVerified: boolean;
   dailyUsage?: IDailyUsage;
 }) {
+  const plan = (user.plan || 'free') as UserPlan;
   const usage = user.dailyUsage
-    ? resetIfNewDay(user.dailyUsage)
+    ? resetIfNewDay(user.dailyUsage, plan)
     : { date: getTodayKey(), projectsCreated: 0, aiGenerations: 0 };
 
   return {
@@ -49,7 +57,7 @@ export function formatUserResponse(user: {
     name: user.name,
     email: user.email,
     role: user.role,
-    plan: (user.plan || 'free') as UserPlan,
+    plan,
     isVerified: user.isVerified,
     dailyUsage: usage,
   };
