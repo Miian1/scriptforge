@@ -5,7 +5,11 @@ import { getSession } from '@/lib/auth';
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID;
-const BASE_URL = process.env.BASE_URL || 'https://scriptforge-six.vercel.app';
+// Ensure BASE_URL always has https:// scheme
+let BASE_URL = process.env.BASE_URL || 'https://scriptforge-six.vercel.app';
+if (BASE_URL && !BASE_URL.startsWith('http://') && !BASE_URL.startsWith('https://')) {
+  BASE_URL = `https://${BASE_URL}`;
+}
 
 export async function POST() {
   try {
