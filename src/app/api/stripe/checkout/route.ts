@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import Stripe from 'stripe';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models/User';
 import { getSession } from '@/lib/auth';
@@ -31,12 +32,10 @@ export async function POST() {
       return NextResponse.json({ error: 'You already have a Pro plan.' }, { status: 400 });
     }
 
-    // Create Stripe Checkout Session
-    const stripe = await import('stripe');
-    const stripeClient = new stripe.default(STRIPE_SECRET_KEY);
+    const stripeClient = new Stripe(STRIPE_SECRET_KEY);
 
     const checkoutSession = await stripeClient.checkout.sessions.create({
-      mode: 'payment', // one-time payment
+      mode: 'subscription',
       line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
       success_url: `${BASE_URL}/plans?success=true`,
       cancel_url: `${BASE_URL}/plans?canceled=true`,
@@ -49,6 +48,7 @@ export async function POST() {
     return NextResponse.json({ url: checkoutSession.url });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to create checkout session';
+    console.error('[Stripe Checkout Error]', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
