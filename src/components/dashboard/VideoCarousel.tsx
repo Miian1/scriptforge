@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import type { YouTubeVideo } from '@/lib/youtube';
 
 function formatCount(n: number): string {
+  if (n == null || isNaN(n)) return '0';
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
   return n.toLocaleString();

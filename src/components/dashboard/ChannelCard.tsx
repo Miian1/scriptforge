@@ -7,6 +7,7 @@ import type { YouTubeChannel } from '@/lib/youtube';
 import { cn } from '@/lib/utils';
 
 function formatCount(n: number): string {
+  if (n == null || isNaN(n)) return '0';
   if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B';
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';

@@ -61,7 +61,7 @@ export default function PlansPage() {
 
   const isPro = user.plan === 'pro';
   const freeLimits = PLAN_LIMITS.free;
-  const usage = user.dailyUsage;
+  const usage = user.dailyUsage || { date: '', projectsCreated: 0, aiGenerations: 0 };
 
   const handleUpgradeStripe = async () => {
     setLoadingStripe(true);
@@ -107,7 +107,7 @@ export default function PlansPage() {
               <p className="text-sm text-muted-foreground">
                 {isPro
                   ? 'You have unlimited access to all features.'
-                  : `Used: ${usage.projectsCreated}/${freeLimits.projectsPerDay === Infinity ? '∞' : freeLimits.projectsPerDay} project, ${usage.aiGenerations}/${freeLimits.aiGenerationsPerDay} AI generations (one-time)`}
+                  : `Used: ${(usage.projectsCreated ?? 0)}/${freeLimits.projectsPerDay === Infinity ? '∞' : freeLimits.projectsPerDay} project, ${(usage.aiGenerations ?? 0)}/${freeLimits.aiGenerationsPerDay} AI generations (one-time)`}
               </p>
             </div>
             {!isPro && (
@@ -123,24 +123,24 @@ export default function PlansPage() {
               <div>
                 <div className="flex justify-between text-xs mb-1.5">
                   <span className="text-muted-foreground">Projects Used</span>
-                  <span className="font-medium">{usage.projectsCreated} / {freeLimits.projectsPerDay}</span>
+                  <span className="font-medium">{(usage.projectsCreated ?? 0)} / {freeLimits.projectsPerDay}</span>
                 </div>
                 <div className="h-2 rounded-full bg-muted overflow-hidden">
                   <div
                     className="h-full rounded-full bg-primary transition-all duration-500"
-                    style={{ width: `${Math.min(100, (usage.projectsCreated / freeLimits.projectsPerDay) * 100)}%` }}
+                    style={{ width: `${Math.min(100, ((usage.projectsCreated ?? 0) / freeLimits.projectsPerDay) * 100)}%` }}
                   />
                 </div>
               </div>
               <div>
                 <div className="flex justify-between text-xs mb-1.5">
                   <span className="text-muted-foreground">AI Generations Used</span>
-                  <span className="font-medium">{usage.aiGenerations} / {freeLimits.aiGenerationsPerDay}</span>
+                  <span className="font-medium">{(usage.aiGenerations ?? 0)} / {freeLimits.aiGenerationsPerDay}</span>
                 </div>
                 <div className="h-2 rounded-full bg-muted overflow-hidden">
                   <div
                     className="h-full rounded-full bg-primary transition-all duration-500"
-                    style={{ width: `${Math.min(100, (usage.aiGenerations / freeLimits.aiGenerationsPerDay) * 100)}%` }}
+                    style={{ width: `${Math.min(100, ((usage.aiGenerations ?? 0) / freeLimits.aiGenerationsPerDay) * 100)}%` }}
                   />
                 </div>
               </div>
