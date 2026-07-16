@@ -2,7 +2,7 @@
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || '';
+
 
 // ── Token Refresh ────────────────────────────────────────
 
@@ -170,6 +170,194 @@ export async function fetchRecentVideos(accessToken: string, maxResults = 10): P
   });
 }
 
+// ── Video Details ───────────────────────────────────
+
+export interface YouTubeVideoDetails extends YouTubeVideo {
+  description: string;
+  tags: string[];
+  categoryId: string;
+  duration: string;
+  defaultLanguage: string;
+}
+
+export async function fetchVideoDetails(accessToken: string, videoId: string): Promise<YouTubeVideoDetails> {
+  const res = await fetch(
+    `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${videoId}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  if (!res.ok) {
+    const status = res.status;
+    if (status === 401 || status === 403) {
+      const err: Error & { status?: number } = new Error('YouTube auth expired');
+      err.status = 401;
+      throw err;
+    }
+    throw new Error(`YouTube video API error: ${status}`);
+  }
+
+  const data = await res.json();
+  if (!data.items?.length) throw new Error('Video not found');
+
+  const v = data.items[0];
+  const s = v.snippet;
+  const stats = v.statistics;
+  const thumbs = s.thumbnails || {};
+
+  return {
+    id: v.id,
+    title: s.title || 'Untitled',
+    thumbnail: thumbs.maxres?.url || thumbs.high?.url || thumbs.medium?.url || thumbs.default?.url || '',
+    publishedAt: s.publishedAt || '',
+    views: parseInt(stats.viewCount) || 0,
+    likes: parseInt(stats.likeCount) || 0,
+    comments: parseInt(stats.commentCount) || 0,
+    description: s.description || '',
+    tags: s.tags || [],
+    categoryId: s.categoryId || '',
+    duration: (v.contentDetails?.duration as string) || '',
+    defaultLanguage: s.defaultLanguage || s.defaultAudioLanguage || '',
+  };
+}
+
+// ── Video Comments ─────────────────────────────────────
+
+export interface YouTubeComment {
+  id: string;
+  threadId: string;
+  authorName: string;
+  authorAvatar: string;
+  text: string;
+  likeCount: number;
+  publishedAt: string;
+  updatedAt: string;
+  totalReplyCount: number;
+}
+
+export async function fetchVideoComments(accessToken: string, videoId: string, maxResults = 50): Promise<YouTubeComment[]> {
+  const res = await fetch(
+    `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&maxResults=${maxResults}&order=relevance&textFormat=plainText`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  if (!res.ok) {
+    const status = res.status;
+    if (status === 401 || status === 403) {
+      const err: Error & { status?: number } = new Error('YouTube auth expired');
+      err.status = 401;
+      throw err;
+    }
+    // Comments may be disabled — return empty
+    if (status === 403) return [];
+    throw new Error(`YouTube comments API error: ${status}`);
+  }
+
+  const data = await res.json();
+  if (!data.items?.length) return [];
+
+  return data.items.map((item: Record<string, unknown>) => {
+    const snippet = item.snippet as Record<string, Record<string, unknown>>;
+    const topComment = snippet.topLevelComment as Record<string, Record<string, unknown>>;
+    const cs = topComment.snippet as Record<string, unknown>;
+    const authorThumbs = (cs.authorProfileImageUrl as string) || '';
+
+    return {
+      id: topComment.id as string,
+      threadId: item.id as string,
+      authorName: (cs.authorDisplayName as string) || 'Unknown',
+      authorAvatar: authorThumbs,
+      text: (cs.textDisplay as string) || '',
+      likeCount: parseInt(cs.likeCount as string) || 0,
+      publishedAt: (cs.publishedAt as string) || '',
+      updatedAt: (cs.updatedAt as string) || '',
+      totalReplyCount: parseInt(snippet.totalReplyCount as string) || 0,
+    };
+  });
+}
+
+// ── Post Comment Reply ─────────────────────────────────
+
+export async function postCommentReply(accessToken: string, parentId: string, text: string): Promise<string> {
+  const res = await fetch('https://www.googleapis.com/youtube/v3/comments?part=snippet', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      snippet: {
+        parentId,
+        textOriginal: text,
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const status = res.status;
+    if (status === 401 || status === 403) {
+      const err: Error & { status?: number } = new Error('YouTube auth expired');
+      err.status = 401;
+      throw err;
+    }
+    const errData = await res.json().catch(() => ({ error: { message: `YouTube API error: ${status}` } }));
+    throw new Error((errData as Record<string, Record<string, string>>)?.error?.message || `Failed to post reply (${status})`);
+  }
+
+  const data = await res.json();
+  return data.id;
+}
+
+// ── Update Video Metadata (description, tags, title) ────
+
+export async function updateVideoMetadata(
+  accessToken: string,
+  videoId: string,
+  updates: { title?: string; description?: string; tags?: string[]; categoryId?: string }
+): Promise<void> {
+  // First get current snippet to preserve fields we're not updating
+  const currentRes = await fetch(
+    `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  if (!currentRes.ok) {
+    throw new Error('Failed to fetch current video data for update');
+  }
+
+  const currentData = await currentRes.json();
+  if (!currentData.items?.length) throw new Error('Video not found for update');
+
+  const currentSnippet = currentData.items[0].snippet;
+
+  const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      id: videoId,
+      snippet: {
+        title: updates.title || currentSnippet.title,
+        description: updates.description !== undefined ? updates.description : currentSnippet.description,
+        tags: updates.tags !== undefined ? updates.tags : currentSnippet.tags || [],
+        categoryId: updates.categoryId || currentSnippet.categoryId || '22',
+        defaultLanguage: currentSnippet.defaultLanguage || undefined,
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const status = res.status;
+    if (status === 401 || status === 403) {
+      const err: Error & { status?: number } = new Error('YouTube auth expired');
+      err.status = 401;
+      throw err;
+    }
+    throw new Error(`Failed to update video (${status})`);
+  }
+}
+
 // ── Revoke Token (on disconnect) ─────────────────────────
 
 export async function revokeToken(accessToken: string): Promise<void> {
@@ -188,7 +376,7 @@ export function buildYouTubeAuthUrl(redirectUri: string): string {
     redirect_uri: redirectUri,
     response_type: 'code',
     scope: [
-      'https://www.googleapis.com/auth/youtube.readonly',
+      'https://www.googleapis.com/auth/youtube',
       'https://www.googleapis.com/auth/userinfo.profile',
       'openid',
       'email',

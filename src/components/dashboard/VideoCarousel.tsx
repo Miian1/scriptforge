@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Eye, ThumbsUp, MessageCircle, Clock, Play, Search, ArrowUpDown, RefreshCw } from 'lucide-react';
+import { Eye, ThumbsUp, MessageCircle, Clock, Play, Search, ArrowUpDown, RefreshCw, ExternalLink } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { useRouter } from 'next/navigation';
 import type { YouTubeVideo } from '@/lib/youtube';
 
 function formatCount(n: number): string {
@@ -42,6 +43,7 @@ interface VideoCarouselProps {
 }
 
 export default function VideoCarousel({ videos, onRefresh, isRefreshing }: VideoCarouselProps) {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
 
@@ -188,6 +190,17 @@ export default function VideoCarousel({ videos, onRefresh, isRefreshing }: Video
                           <span>comments</span>
                         </span>
                       </div>
+
+                      {/* See Details button */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); router.push(`/video/${video.id}`); }}
+                        className="mt-2.5 h-7 text-xs gap-1.5"
+                      >
+                        <ExternalLink className="size-3" />
+                        See Details
+                      </Button>
                     </div>
                   </div>
                 </CardContent>
