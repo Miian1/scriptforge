@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Film, ArrowLeft, Sparkles, Check } from 'lucide-react';
+import { Film, ArrowLeft, Sparkles, Check, AlertCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
@@ -18,13 +18,13 @@ import {
   AUDIENCE_LABELS,
   LANGUAGE_LABELS,
 } from '@/lib/types';
+import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Progress } from '@/components/ui/progress';
 import {
   Form,
   FormControl,
@@ -61,29 +61,33 @@ type FormValues = z.infer<typeof formSchema>;
 const GENERATION_STAGES = [
   { active: 'Researching topic...', completed: 'Research complete' },
   { active: 'Building story structure...', completed: 'Story structured' },
-  { active: 'Generating scenes...', completed: 'Scenes generated' },
-  { active: 'Creating production assets...', completed: 'Assets ready' },
+  { active: 'Generating scenes with AI...', completed: 'Scenes generated' },
+  { active: 'Finalizing...', completed: 'Finalized' },
 ] as const;
 
-const STAGE_INTERVAL_MS = 4000;
+const STAGE_INTERVAL_MS = 5000;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CreateProject() {
+  const router = useRouter();
   const {
-    setCurrentView,
     addProject,
     setActiveProjectId,
-    setGeneratingProjectId,
     addScenes,
     updateProject,
+    loadScenes,
   } = useAppStore();
 
-  const [isGenerating, setIsGenerating] = useState(false);
+  // Phase: 'form' | 'generating' | 'error'
+  const [phase, setPhase] = useState<'form' | 'generating' | 'error'>('form');
   const [currentStage, setCurrentStage] = useState(-1);
-  const generationStartRef = useRef<number | null>(null);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [elapsed, setElapsed] = useState(0);
   const stageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const projectIdRef = useRef<string | null>(null);
+  const formValuesRef = useRef<FormValues | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -103,6 +107,7 @@ export default function CreateProject() {
   useEffect(() => {
     return () => {
       if (stageTimerRef.current) clearInterval(stageTimerRef.current);
+      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
     };
   }, []);
 
@@ -113,11 +118,11 @@ export default function CreateProject() {
     });
   }, []);
 
-  const onSubmit = async (values: FormValues) => {
+  const startGeneration = useCallback(async (values: FormValues) => {
     const now = Date.now();
 
     const project: Project = {
-      id: '', // will be replaced by MongoDB _id
+      id: '',
       title: values.title,
       topic: values.topic,
       description: values.description ?? '',
@@ -135,44 +140,236 @@ export default function CreateProject() {
 
     // Save project to MongoDB and get the real ID back
     const mongoId = await addProject(project);
-    setGeneratingProjectId(mongoId);
     setActiveProjectId(mongoId);
-    setCurrentView('editor');
     projectIdRef.current = mongoId;
 
-    // Start simulated stage progression
-    setIsGenerating(true);
+    // Switch to generating phase (stays on this page)
+    setPhase('generating');
     setCurrentStage(0);
-    generationStartRef.current = Date.now();
+    setElapsed(0);
     stageTimerRef.current = setInterval(advanceStage, STAGE_INTERVAL_MS);
+    elapsedTimerRef.current = setInterval(() => setElapsed((t) => t + 1), 1000);
 
     try {
       // Use the real MongoDB project from store for generation
-      const realProject = useAppStore.getState().projects.find(p => p.id === mongoId);
+      const realProject = useAppStore.getState().projects.find((p) => p.id === mongoId);
       const projectToGenerate = realProject || { ...project, id: mongoId };
       const scenes = await generateScript(projectToGenerate);
-      // Update projectId on each scene to match the MongoDB ID
-      const scenesWithCorrectId = scenes.map(s => ({ ...s, projectId: mongoId }));
+      const scenesWithCorrectId = scenes.map((s) => ({ ...s, projectId: mongoId }));
+
+      // Advance to "saving" stage
+      setCurrentStage(GENERATION_STAGES.length - 1);
+
+      // Save scenes to DB
       await addScenes(scenesWithCorrectId);
       await updateProject(mongoId, { status: 'completed' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'An unexpected error occurred';
-      toast.error('Script generation failed', {
-        description: message,
-      });
-      await updateProject(mongoId, { status: 'error' });
-    } finally {
+
+      // Brief pause to show "Finalized" stage
+      await new Promise((r) => setTimeout(r, 800));
+
+      // Clean up timers
       if (stageTimerRef.current) clearInterval(stageTimerRef.current);
-      setGeneratingProjectId(null);
-      setIsGenerating(false);
-      setCurrentStage(-1);
-      generationStartRef.current = null;
-      projectIdRef.current = null;
+      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+
+      // Pre-load scenes into store, then auto-redirect to editor
+      await loadScenes(mongoId);
+      router.push(`/project/${mongoId}`);
+    } catch (error) {
+      if (stageTimerRef.current) clearInterval(stageTimerRef.current);
+      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+
+      const message = error instanceof Error ? error.message : 'An unexpected error occurred';
+      setErrorMessage(message);
+      await updateProject(mongoId, { status: 'error' });
+      setPhase('error');
     }
-  };
+  }, [addProject, setActiveProjectId, advanceStage, addScenes, updateProject, loadScenes, router]);
+
+  const onRetry = useCallback(() => {
+    if (formValuesRef.current) {
+      setPhase('form');
+      setCurrentStage(-1);
+      setElapsed(0);
+      setErrorMessage('');
+    }
+  }, []);
+
+  const onSubmit = useCallback((values: FormValues) => {
+    formValuesRef.current = values;
+    startGeneration(values);
+  }, [startGeneration]);
+
+  const onBackToDashboard = useCallback(() => {
+    router.push('/dashboard');
+  }, [router]);
 
   const descriptionValue = form.watch('description') ?? '';
 
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  // ─── ERROR VIEW ──────────────────────────────────────────────────────────
+  if (phase === 'error') {
+    return (
+      <div className="flex min-h-full items-center justify-center px-4 py-8 md:py-12">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4 }}
+          className="w-full max-w-md text-center space-y-6"
+        >
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.1 }}
+            className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10"
+          >
+            <AlertCircle className="h-8 w-8 text-destructive" />
+          </motion.div>
+
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold tracking-tight">Generation Failed</h2>
+            <p className="text-sm text-muted-foreground">
+              {errorMessage || 'Something went wrong. Please try again.'}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <Button
+              size="lg"
+              onClick={onRetry}
+              className="w-full text-base font-semibold gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Try Again
+            </Button>
+            <Button
+              variant="outline"
+              onClick={onBackToDashboard}
+              className="w-full"
+            >
+              Back to Dashboard
+            </Button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // ─── GENERATING VIEW ─────────────────────────────────────────────────────
+  if (phase === 'generating') {
+    return (
+      <div className="flex min-h-full items-center justify-center px-4 py-8 md:py-12">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+          className="w-full max-w-lg space-y-8"
+        >
+          {/* Header */}
+          <div className="text-center space-y-2">
+            <motion.div
+              animate={{ scale: [1, 1.08, 1] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+              className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10"
+            >
+              <Sparkles className="h-7 w-7 text-primary" />
+            </motion.div>
+            <h2 className="text-2xl font-bold tracking-tight">Generating Your Script</h2>
+            <p className="text-sm text-muted-foreground">
+              {formValuesRef.current?.title && `Crafting scenes for "${formValuesRef.current.title}"`}
+            </p>
+          </div>
+
+          {/* Elapsed time */}
+          <div className="text-center">
+            <span className="text-xs text-muted-foreground font-mono">
+              Elapsed {formatTime(elapsed)}
+            </span>
+          </div>
+
+          {/* Progress bar */}
+          <div className="relative h-2 w-full overflow-hidden rounded-full bg-primary/20">
+            <div className="absolute inset-0 animate-indeterminate-progress rounded-full bg-primary" />
+          </div>
+
+          {/* Stages */}
+          <div className="space-y-3">
+            {GENERATION_STAGES.map((stage, index) => {
+              const isCompleted = index < currentStage;
+              const isActive = index === currentStage;
+
+              return (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="flex items-center gap-3 text-sm rounded-lg px-3 py-2 transition-colors"
+                  style={{
+                    backgroundColor: isActive ? 'hsl(var(--primary) / 0.06)' : 'transparent',
+                  }}
+                >
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center">
+                    {isCompleted ? (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                      >
+                        <Check className="h-4 w-4 text-emerald-500" />
+                      </motion.div>
+                    ) : isActive ? (
+                      <motion.div
+                        className="h-2.5 w-2.5 rounded-full bg-primary"
+                        animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }}
+                        transition={{ repeat: Infinity, duration: 1.2 }}
+                      />
+                    ) : (
+                      <div className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30" />
+                    )}
+                  </div>
+                  <span
+                    className={
+                      isCompleted
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : isActive
+                          ? 'font-medium text-foreground'
+                          : 'text-muted-foreground'
+                    }
+                  >
+                    {isCompleted ? stage.completed : stage.active}
+                  </span>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {/* Tip */}
+          <p className="text-center text-xs text-muted-foreground/60">
+            AI is generating narration, image prompts, and animation prompts for each scene. This may take a moment for complex topics.
+          </p>
+        </motion.div>
+
+        {/* Indeterminate progress bar animation */}
+        <style jsx global>{`
+          @keyframes indeterminate-progress {
+            0% { transform: translateX(-100%); width: 40%; }
+            50% { transform: translateX(100%); width: 60%; }
+            100% { transform: translateX(200%); width: 40%; }
+          }
+          .animate-indeterminate-progress {
+            animation: indeterminate-progress 1.8s ease-in-out infinite;
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // ─── FORM VIEW (default) ─────────────────────────────────────────────────
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -186,7 +383,7 @@ export default function CreateProject() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setCurrentView('dashboard')}
+              onClick={() => router.push('/dashboard')}
               className="shrink-0"
               aria-label="Back to dashboard"
             >
@@ -443,102 +640,20 @@ export default function CreateProject() {
               </section>
 
               {/* ── Generate Button ──────────────────────────────────── */}
-              <div className="space-y-4 pt-2">
+              <div className="pt-2">
                 <Button
                   type="submit"
                   size="lg"
                   className="w-full text-base font-semibold"
-                  disabled={isGenerating}
                 >
                   <Sparkles className="mr-2 h-5 w-5" />
-                  {isGenerating ? 'Generating...' : 'Generate Script'}
+                  Generate Script
                 </Button>
-
-                {/* ── Progress Indicator ─────────────────────────── */}
-                {isGenerating && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="space-y-3 overflow-hidden"
-                  >
-                    <div className="relative h-2 w-full overflow-hidden rounded-full bg-primary/20">
-                      <div className="absolute inset-0 animate-indeterminate-progress rounded-full bg-primary" />
-                    </div>
-
-                    <div className="space-y-2 pt-1">
-                      {GENERATION_STAGES.map((stage, index) => {
-                        const isCompleted = index < currentStage;
-                        const isActive = index === currentStage;
-                        const isPending = index > currentStage;
-
-                        return (
-                          <div
-                            key={index}
-                            className="flex items-center gap-2 text-sm"
-                          >
-                            <div className="flex h-5 w-5 shrink-0 items-center justify-center">
-                              {isCompleted ? (
-                                <motion.div
-                                  initial={{ scale: 0 }}
-                                  animate={{ scale: 1 }}
-                                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                                >
-                                  <Check className="h-4 w-4 text-emerald-500" />
-                                </motion.div>
-                              ) : isActive ? (
-                                <motion.div
-                                  className="h-2.5 w-2.5 rounded-full bg-primary"
-                                  animate={{ scale: [1, 1.4, 1], opacity: [0.6, 1, 0.6] }}
-                                  transition={{ repeat: Infinity, duration: 1.2 }}
-                                />
-                              ) : (
-                                <div className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30" />
-                              )}
-                            </div>
-                            <span
-                              className={
-                                isCompleted
-                                  ? 'text-emerald-600 dark:text-emerald-400'
-                                  : isActive
-                                    ? 'font-medium text-foreground'
-                                    : 'text-muted-foreground'
-                              }
-                            >
-                              {isCompleted ? stage.completed : isActive ? stage.active : stage.active}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                )}
               </div>
             </form>
           </Form>
         </CardContent>
       </Card>
-
-      {/* Indeterminate progress bar animation */}
-      <style jsx global>{`
-        @keyframes indeterminate-progress {
-          0% {
-            transform: translateX(-100%);
-            width: 40%;
-          }
-          50% {
-            transform: translateX(100%);
-            width: 60%;
-          }
-          100% {
-            transform: translateX(200%);
-            width: 40%;
-          }
-        }
-        .animate-indeterminate-progress {
-          animation: indeterminate-progress 1.8s ease-in-out infinite;
-        }
-      `}</style>
     </motion.div>
   );
 }

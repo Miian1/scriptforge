@@ -1,11 +1,7 @@
 import { create } from 'zustand';
-import type { AppView, Project, Scene } from './types';
+import type { Project, Scene } from './types';
 
 interface AppState {
-  // Navigation
-  currentView: AppView;
-  setCurrentView: (view: AppView) => void;
-
   // Editor state
   activeProjectId: string | null;
   setActiveProjectId: (id: string | null) => void;
@@ -72,10 +68,6 @@ function mapScene(s: Record<string, unknown>): Scene {
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
-  // Navigation
-  currentView: 'dashboard',
-  setCurrentView: (view) => set({ currentView: view }),
-
   // Editor
   activeProjectId: null,
   setActiveProjectId: (id) => set({ activeProjectId: id }),

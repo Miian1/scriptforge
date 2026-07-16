@@ -26,6 +26,7 @@ import { useAppStore } from '@/lib/store';
 import { STATUS_LABELS, THEME_LABELS, DURATION_LABELS } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import type { Project, GenerationStatus } from '@/lib/types';
+import { useRouter } from 'next/navigation';
 
 const statusBadge: Record<
   GenerationStatus,
@@ -44,8 +45,8 @@ interface ProjectCardProps {
 export default function ProjectCard({ project }: ProjectCardProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
 
+  const router = useRouter();
   const setActiveProjectId = useAppStore((s) => s.setActiveProjectId);
-  const setCurrentView = useAppStore((s) => s.setCurrentView);
   const removeProject = useAppStore((s) => s.removeProject);
   const updateProject = useAppStore((s) => s.updateProject);
   const addProject = useAppStore((s) => s.addProject);
@@ -54,7 +55,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
 
   function handleOpen() {
     setActiveProjectId(project.id);
-    setCurrentView('editor');
+    router.push(`/project/${project.id}`);
   }
 
   function handleRename() {

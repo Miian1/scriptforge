@@ -38,6 +38,7 @@ import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
 
 import { useAppStore } from '@/lib/store';
+import { useRouter } from 'next/navigation';
 import { generateScript } from '@/lib/gemini';
 import type { Scene, Project } from '@/lib/types';
 import { STATUS_LABELS } from '@/lib/types';
@@ -331,10 +332,10 @@ export default function ScriptEditor() {
   const addScene = useAppStore((s) => s.addScene);
   const reorderScenes = useAppStore((s) => s.reorderScenes);
   const updateProject = useAppStore((s) => s.updateProject);
-  const setCurrentView = useAppStore((s) => s.setCurrentView);
   const setActiveProjectId = useAppStore((s) => s.setActiveProjectId);
   const generatingProjectId = useAppStore((s) => s.generatingProjectId);
   const setGeneratingProjectId = useAppStore((s) => s.setGeneratingProjectId);
+  const router = useRouter();
 
   const listEndRef = useRef<HTMLDivElement>(null);
 
@@ -471,8 +472,8 @@ export default function ScriptEditor() {
   // Back to dashboard
   const handleBack = useCallback(() => {
     setActiveProjectId(null);
-    setCurrentView('dashboard');
-  }, [setActiveProjectId, setCurrentView]);
+    router.push('/dashboard');
+  }, [setActiveProjectId, router]);
 
   // ---- Render ----
   if (!project) {

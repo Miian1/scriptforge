@@ -12,9 +12,9 @@ import {
   X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/lib/store';
-import type { AppView } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -24,7 +24,6 @@ import {
 } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuthStore } from '@/lib/auth-store';
-import { useRouter } from 'next/navigation';
 
 // ── Constants ──────────────────────────────────────────
 
@@ -33,21 +32,21 @@ const SIDEBAR_COLLAPSED = 68;
 const TABLET_BREAKPOINT = 1024;
 
 const NAV_ITEMS = [
-  { view: 'dashboard' as AppView, label: 'Dashboard', icon: LayoutDashboard, primary: true },
-  { view: 'create-project' as AppView, label: 'New Project', icon: PlusCircle, primary: true },
-  { view: 'settings' as AppView, label: 'Settings', icon: Settings, primary: false },
-  { view: 'about' as AppView, label: 'About', icon: Info, primary: false },
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, primary: true },
+  { path: '/create-project', label: 'New Project', icon: PlusCircle, primary: true },
+  { path: '/settings', label: 'Settings', icon: Settings, primary: false },
+  { path: '/about', label: 'About', icon: Info, primary: false },
 ];
 
-// ── Sidebar Dark Palette ───────────────────────────────
+// ── Sidebar Palette (theme-aware) ─────────────────────
 
 const sidebar = {
-  bg: 'bg-[#0a0a0a]',
-  active: 'bg-[#1a1a1a]',
-  text: 'text-white',
-  muted: 'text-white/50',
-  border: 'border-white/10',
-  hover: 'hover:bg-white/5',
+  bg: 'bg-background',
+  active: 'bg-accent',
+  text: 'text-foreground',
+  muted: 'text-muted-foreground',
+  border: 'border-border',
+  hover: 'hover:bg-accent/50',
 };
 
 // ── Icon Slot (fixed, left-aligned, never moves) ──────
@@ -178,7 +177,7 @@ function LogoutButton({ collapsed }: { collapsed: boolean }) {
       variant="ghost"
       onClick={handleLogout}
       className={cn(
-        'h-10 w-full rounded-lg justify-start pl-0 text-red-400 hover:text-red-300 hover:bg-red-500/10',
+        'h-10 w-full rounded-lg justify-start pl-0 text-destructive hover:text-destructive hover:bg-destructive/10',
       )}
       aria-label="Log out"
     >
@@ -227,7 +226,7 @@ function MobileLogoutButton({ onClose }: { onClose: () => void }) {
     <Button
       variant="ghost"
       onClick={handleLogout}
-      className="h-11 w-full justify-start gap-3 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10"
+      className="h-11 w-full justify-start gap-3 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10"
     >
       <LogOut className="size-5 shrink-0" />
       Log Out
@@ -239,7 +238,8 @@ function MobileLogoutButton({ onClose }: { onClose: () => void }) {
 
 function DesktopSidebar() {
   const { sidebarCollapsed } = useAppStore();
-  const currentView = useAppStore((s) => s.currentView);
+  const pathname = usePathname();
+  const router = useRouter();
   const userName = useAuthStore((s) => s.user?.name);
   const userRole = useAuthStore((s) => s.user?.role);
 
@@ -248,8 +248,8 @@ function DesktopSidebar() {
       animate={{ width: sidebarCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       className={cn(
-        'hidden md:fixed md:inset-y-0 md:z-40 md:flex md:flex-col overflow-hidden',
-        sidebar.bg, sidebar.border, 'border-r'
+        'hidden md:fixed md:inset-y-0 md:z-40 md:flex md:flex-col overflow-hidden border-r shadow-sm',
+        sidebar.bg, sidebar.border
       )}
     >
       {/* Brand — hidden when collapsed on tablet */}
@@ -267,10 +267,10 @@ function DesktopSidebar() {
                 <Film className="size-4 text-primary-foreground" />
               </div>
               <div className="overflow-hidden whitespace-nowrap">
-                <h1 className="text-sm font-bold tracking-tight text-white leading-tight">
+                <h1 className="text-sm font-bold tracking-tight text-foreground leading-tight">
                   ScriptForge
                 </h1>
-                <p className="text-[10px] text-white/40 leading-none">
+                <p className="text-[10px] text-muted-foreground leading-none">
                   AI Script Agent
                 </p>
               </div>
@@ -283,11 +283,11 @@ function DesktopSidebar() {
       <nav className="flex-1 flex flex-col gap-1 px-2.5 py-2 sidebar-scroll overflow-y-auto">
         {NAV_ITEMS.map((item) => (
           <SidebarNavItem
-            key={item.view}
+            key={item.path}
             item={item}
-            isActive={currentView === item.view}
+            isActive={pathname === item.path}
             collapsed={sidebarCollapsed}
-            onClick={() => useAppStore.getState().setCurrentView(item.view)}
+            onClick={() => router.push(item.path)}
           />
         ))}
       </nav>
@@ -305,7 +305,7 @@ function DesktopSidebar() {
               className="overflow-hidden"
             >
               <div className="flex items-center h-7 px-3 gap-2">
-                <p className="text-[11px] text-white/40 truncate">
+                <p className="text-[11px] text-muted-foreground truncate">
                   {userName ?? ''}
                 </p>
                 {userRole === 'admin' && (
@@ -325,7 +325,8 @@ function DesktopSidebar() {
 // ── Mobile Hamburger Overlay Drawer ────────────────────
 
 function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const currentView = useAppStore((s) => s.currentView);
+  const pathname = usePathname();
+  const router = useRouter();
 
   return (
     <AnimatePresence>
@@ -358,10 +359,10 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
                   <Film className="size-4 text-primary-foreground" />
                 </div>
                 <div>
-                  <h1 className="text-sm font-bold tracking-tight text-white leading-tight">
+                  <h1 className="text-sm font-bold tracking-tight text-foreground leading-tight">
                     ScriptForge
                   </h1>
-                  <p className="text-[10px] text-white/40 leading-none">
+                  <p className="text-[10px] text-muted-foreground leading-none">
                     AI Script Agent
                   </p>
                 </div>
@@ -370,7 +371,7 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                className="text-white/60 hover:text-white hover:bg-white/10 h-9 w-9"
+                className="text-muted-foreground hover:text-foreground hover:bg-accent/50 h-9 w-9"
                 aria-label="Close menu"
               >
                 <X className="size-5" />
@@ -383,10 +384,10 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
             <nav className="flex-1 flex flex-col gap-1 px-3 py-4">
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
-                const isActive = currentView === item.view;
+                const isActive = pathname === item.path;
                 return (
                   <Button
-                    key={item.view}
+                    key={item.path}
                     variant="ghost"
                     className={cn(
                       'h-12 w-full justify-start gap-3 rounded-lg font-normal text-base',
@@ -394,7 +395,7 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
                       isActive && `${sidebar.active} font-medium`
                     )}
                     onClick={() => {
-                      useAppStore.getState().setCurrentView(item.view);
+                      router.push(item.path);
                       onClose();
                     }}
                   >
@@ -419,29 +420,29 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
 // ── Mobile Bottom Navigation Bar ───────────────────────
 
 function BottomNavBar() {
-  const currentView = useAppStore((s) => s.currentView);
-  const setCurrentView = useAppStore((s) => s.setCurrentView);
+  const pathname = usePathname();
+  const router = useRouter();
 
   // Only show Dashboard, Settings, About in bottom bar (New Project is the FAB)
-  const bottomItems = NAV_ITEMS.filter((i) => i.view !== 'create-project');
+  const bottomItems = NAV_ITEMS.filter((i) => i.path !== '/create-project');
 
   return (
     <div
       className={cn(
         'fixed bottom-0 left-0 right-0 z-30 flex md:hidden h-16 items-center justify-around px-2',
-        'bg-[#0a0a0a] border-t border-white/10'
+        'bg-background border-t border-border shadow-[0_-1px_3px_rgba(0,0,0,0.05)]'
       )}
     >
       {bottomItems.map((item) => {
         const Icon = item.icon;
-        const isActive = currentView === item.view;
+        const isActive = pathname === item.path;
         return (
           <button
-            key={item.view}
-            onClick={() => setCurrentView(item.view)}
+            key={item.path}
+            onClick={() => router.push(item.path)}
             className={cn(
               'flex flex-col items-center justify-center gap-0.5 w-16 h-full rounded-lg transition-colors',
-              isActive ? 'text-white' : 'text-white/40 hover:text-white/70'
+              isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             <Icon className="size-5" />
@@ -463,11 +464,11 @@ function BottomNavBar() {
 // ── Floating Action Button (FAB) ───────────────────────
 
 function FAB() {
-  const setCurrentView = useAppStore((s) => s.setCurrentView);
+  const router = useRouter();
 
   return (
     <motion.button
-      onClick={() => setCurrentView('create-project')}
+      onClick={() => router.push('/create-project')}
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
       className={cn(
@@ -514,8 +515,8 @@ function useAutoCollapse() {
 
 export default function AppSidebar() {
   const isMobile = useIsMobile();
-  const { sidebarOpen, setSidebarOpen, sidebarCollapsed } = useAppStore();
-  const isTablet = useAutoCollapse();
+  const { sidebarOpen, setSidebarOpen } = useAppStore();
+  useAutoCollapse();
 
   return (
     <>

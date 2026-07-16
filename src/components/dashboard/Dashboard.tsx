@@ -13,6 +13,7 @@ import {
   SelectItem,
 } from '@/components/ui/select';
 import EmptyState from '@/components/shared/EmptyState';
+import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/lib/store';
 import StatsCards from '@/components/dashboard/StatsCards';
 import ProjectCard from '@/components/dashboard/ProjectCard';
@@ -38,7 +39,7 @@ function sortProjects(projects: Project[], sort: SortOption): Project[] {
 
 export default function Dashboard() {
   const projects = useAppStore((s) => s.projects);
-  const setCurrentView = useAppStore((s) => s.setCurrentView);
+  const router = useRouter();
   const [sort, setSort] = useState<SortOption>('recent');
 
   const sortedProjects = useMemo(
@@ -57,7 +58,7 @@ export default function Dashboard() {
           </p>
         </div>
         <Button
-          onClick={() => setCurrentView('create-project')}
+          onClick={() => router.push('/create-project')}
           className="shrink-0"
         >
           <Plus className="size-4 mr-2" />
@@ -105,7 +106,7 @@ export default function Dashboard() {
             title="No projects yet"
             description="Create your first video script project"
             action={
-              <Button onClick={() => setCurrentView('create-project')}>
+              <Button onClick={() => router.push('/create-project')}>
                 <Plus className="size-4 mr-2" />
                 Create Project
               </Button>

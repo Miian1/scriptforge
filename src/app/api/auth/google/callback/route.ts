@@ -154,7 +154,7 @@ export async function GET(req: NextRequest) {
 
     const sessionCookie = cookieString(createSessionCookie(token));
 
-    return NextResponse.redirect(BASE_URL, {
+    return NextResponse.redirect(`${BASE_URL}/dashboard`, {
       headers: {
         'Set-Cookie': [clearStateCookie, sessionCookie].join(', '),
       },

@@ -1,22 +1,24 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/auth-store';
 import LandingPage from '@/components/auth/LandingPage';
 import VerifyEmailPending from '@/components/auth/VerifyEmailPending';
-import dynamic from 'next/dynamic';
-
-const AppShellLazy = dynamic(() => import('@/components/layout/AppShell'), {
-  ssr: false,
-  loading: () => <div style={{ padding: 40, fontFamily: 'sans-serif' }}>Loading workspace...</div>,
-});
 
 export default function Home() {
+  const router = useRouter();
   const { user, checked, pendingVerificationEmail, checkSession } = useAuthStore();
 
   useEffect(() => {
     checkSession();
   }, [checkSession]);
+
+  useEffect(() => {
+    if (checked && user) {
+      router.push('/dashboard');
+    }
+  }, [checked, user, router]);
 
   // Still checking session
   if (!checked) {
@@ -33,6 +35,6 @@ export default function Home() {
     return <LandingPage />;
   }
 
-  // Authenticated — show the app
-  return <AppShellLazy />;
+  // Authenticated — redirecting to /dashboard (handled by useEffect above)
+  return <div style={{ padding: 40, fontFamily: 'sans-serif' }}>Loading...</div>;
 }
