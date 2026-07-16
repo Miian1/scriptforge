@@ -1,23 +1,18 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { Youtube, Unplug, Loader2, Sparkles, RefreshCw } from 'lucide-react';
+import { Youtube, Unplug, Loader2, Video } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuthStore } from '@/lib/auth-store';
-import { useAppStore } from '@/lib/store';
-import { PLAN_LIMITS } from '@/lib/usage';
+
 import StatsCards from '@/components/dashboard/StatsCards';
 import ChannelCard from '@/components/dashboard/ChannelCard';
 import VideoCarousel from '@/components/dashboard/VideoCarousel';
-import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { YouTubeChannel, YouTubeVideo } from '@/lib/youtube';
-import { cn } from '@/lib/utils';
 
 export default function Dashboard() {
-  const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const [ytConnected, setYtConnected] = useState(false);
   const [loadingConnect, setLoadingConnect] = useState(false);
@@ -142,11 +137,7 @@ export default function Dashboard() {
         <ChannelCard channel={channel} />
       ) : (
         /* Not connected CTA */
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <Card className="border-dashed border-2">
+        <Card className="border-dashed border-2">
             <CardContent className="flex flex-col items-center justify-center py-12 px-6 text-center gap-4">
               <div className="size-16 rounded-full bg-red-500/10 flex items-center justify-center">
                 <Youtube className="size-8 text-red-500" />
@@ -168,7 +159,6 @@ export default function Dashboard() {
               </Button>
             </CardContent>
           </Card>
-        </motion.div>
       )}
 
       {/* Usage Stats */}
@@ -185,18 +175,13 @@ export default function Dashboard() {
         ) : videos.length > 0 ? (
           <VideoCarousel videos={videos} />
         ) : (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-          >
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-8 text-center">
-                <Sparkles className="size-8 text-muted-foreground/30 mb-2" />
-                <p className="text-sm text-muted-foreground">No videos found on your channel yet.</p>
-              </CardContent>
-            </Card>
-          </motion.div>
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-8 text-center">
+              <Video className="size-8 text-muted-foreground/30 mb-2" />
+              <p className="text-sm text-muted-foreground">No videos found on your channel yet.</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">Videos will appear here once you upload them to YouTube.</p>
+            </CardContent>
+          </Card>
         )
       )}
     </div>

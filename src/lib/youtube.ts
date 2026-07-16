@@ -85,48 +85,83 @@ export interface YouTubeVideo {
 }
 
 export async function fetchRecentVideos(accessToken: string, maxResults = 10): Promise<YouTubeVideo[]> {
-  // Step 1: Search for user's recent videos
-  const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=date&maxResults=${maxResults}&mine=true`;
-  const searchRes = await fetch(searchUrl, {
+  // Step 1: Get the channel's uploads playlist ID
+  const channelUrl = 'https://www.googleapis.com/youtube/v3/channels?part=contentDetails&mine=true';
+  const channelRes = await fetch(channelUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
-  if (!searchRes.ok) {
-    const status = searchRes.status;
+  if (!channelRes.ok) {
+    const status = channelRes.status;
     if (status === 401 || status === 403) {
       const err: Error & { status?: number } = new Error('YouTube auth expired');
       err.status = 401;
       throw err;
     }
-    throw new Error(`YouTube search API error: ${status}`);
+    throw new Error(`YouTube channel API error: ${status}`);
   }
 
-  const searchData = await searchRes.json();
-  if (!searchData.items?.length) return [];
+  const channelData = await channelRes.json();
+  if (!channelData.items?.length) return [];
 
-  const videoIds = searchData.items.map((v: Record<string, unknown>) => (v.id as Record<string, string>).videoId).join(',');
+  const uploadsPlaylistId = channelData.items[0].contentDetails?.relatedPlaylists?.uploads;
+  if (!uploadsPlaylistId) return [];
 
-  // Step 2: Get video details with statistics
-  const videosUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${videoIds}`;
-  const videosRes = await fetch(videosUrl, {
+  // Step 2: Fetch videos from the uploads playlist
+  const playlistUrl = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,status&playlistId=${uploadsPlaylistId}&maxResults=${maxResults}`;
+  const playlistRes = await fetch(playlistUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
-  if (!videosRes.ok) {
-    throw new Error(`YouTube videos API error: ${videosRes.status}`);
+  if (!playlistRes.ok) {
+    const status = playlistRes.status;
+    if (status === 401 || status === 403) {
+      const err: Error & { status?: number } = new Error('YouTube auth expired');
+      err.status = 401;
+      throw err;
+    }
+    throw new Error(`YouTube playlist API error: ${status}`);
   }
 
-  const videosData = await videosRes.json();
+  const playlistData = await playlistRes.json();
+  const playlistItems = (playlistData.items || []).filter(
+    (item: Record<string, unknown>) => (item.status as Record<string, string>)?.privacyStatus !== 'private'
+  );
 
-  return (videosData.items || []).map((v: Record<string, unknown>) => {
-    const snippet = v.snippet as Record<string, unknown>;
-    const stats = v.statistics as Record<string, string>;
+  if (!playlistItems.length) return [];
+
+  // Step 3: Get video IDs and fetch statistics in batch
+  const videoIds = playlistItems
+    .map((item: Record<string, unknown>) => (item.snippet as Record<string, Record<string, string>>)?.resourceId?.videoId)
+    .filter(Boolean)
+    .join(',');
+
+  if (!videoIds) return [];
+
+  const statsUrl = `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoIds}`;
+  const statsRes = await fetch(statsUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  let statsMap: Record<string, Record<string, string>> = {};
+  if (statsRes.ok) {
+    const statsData = await statsRes.json();
+    (statsData.items || []).forEach((v: Record<string, unknown>) => {
+      statsMap[v.id as string] = v.statistics as Record<string, string>;
+    });
+  }
+
+  // Step 4: Merge playlist data with stats
+  return playlistItems.map((item: Record<string, unknown>) => {
+    const snippet = item.snippet as Record<string, unknown>;
     const thumbs = (snippet.thumbnails as Record<string, Record<string, string>>) || {};
+    const videoId = (snippet as Record<string, Record<string, string>>)?.resourceId?.videoId || '';
+    const stats = statsMap[videoId] || {};
 
     return {
-      id: v.id as string,
+      id: videoId,
       title: (snippet.title as string) || 'Untitled',
-      thumbnail: thumbs.high?.url || thumbs.medium?.url || thumbs.default?.url || '',
+      thumbnail: thumbs.high?.url || thumbs.medium?.url || (thumbs.default?.url || '') || thumbs.standard?.url || '',
       publishedAt: (snippet.publishedAt as string) || '',
       views: parseInt(stats.viewCount) || 0,
       likes: parseInt(stats.likeCount) || 0,
