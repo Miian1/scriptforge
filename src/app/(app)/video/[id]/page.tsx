@@ -188,7 +188,12 @@ export default function VideoDetailsPage() {
         fetchVideo(); // refresh
       } else {
         const data = await res.json().catch(() => ({}));
-        toast.error(data.error || 'Failed to update description');
+        const errMsg = data.error || 'Failed to update description';
+        if (errMsg.includes('permission') || errMsg.includes('reconnect')) {
+          toast.error(errMsg + ' Go to Settings to reconnect your YouTube account.', { duration: 6000 });
+        } else {
+          toast.error(errMsg);
+        }
       }
     } catch {
       toast.error('Failed to update description');
@@ -213,7 +218,12 @@ export default function VideoDetailsPage() {
         fetchVideo();
       } else {
         const data = await res.json().catch(() => ({}));
-        toast.error(data.error || 'Failed to update tags');
+        const errMsg = data.error || 'Failed to update tags';
+        if (errMsg.includes('permission') || errMsg.includes('reconnect')) {
+          toast.error(errMsg + ' Go to Settings to reconnect your YouTube account.', { duration: 6000 });
+        } else {
+          toast.error(errMsg);
+        }
       }
     } catch {
       toast.error('Failed to update tags');

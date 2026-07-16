@@ -46,7 +46,7 @@ export async function fetchChannel(accessToken: string): Promise<YouTubeChannel>
 
   if (!res.ok) {
     const status = res.status;
-    if (status === 401 || status === 403) {
+    if (status === 401) {
       const err: Error & { status?: number } = new Error('YouTube auth expired');
       err.status = 401;
       throw err;
@@ -93,7 +93,7 @@ export async function fetchRecentVideos(accessToken: string, maxResults = 10): P
 
   if (!channelRes.ok) {
     const status = channelRes.status;
-    if (status === 401 || status === 403) {
+    if (status === 401) {
       const err: Error & { status?: number } = new Error('YouTube auth expired');
       err.status = 401;
       throw err;
@@ -115,7 +115,7 @@ export async function fetchRecentVideos(accessToken: string, maxResults = 10): P
 
   if (!playlistRes.ok) {
     const status = playlistRes.status;
-    if (status === 401 || status === 403) {
+    if (status === 401) {
       const err: Error & { status?: number } = new Error('YouTube auth expired');
       err.status = 401;
       throw err;
@@ -188,9 +188,14 @@ export async function fetchVideoDetails(accessToken: string, videoId: string): P
 
   if (!res.ok) {
     const status = res.status;
-    if (status === 401 || status === 403) {
+    if (status === 401) {
       const err: Error & { status?: number } = new Error('YouTube auth expired');
       err.status = 401;
+      throw err;
+    }
+    if (status === 403) {
+      const err: Error & { status?: number } = new Error('YouTube permission denied. Please reconnect your YouTube account to update permissions.');
+      err.status = 403;
       throw err;
     }
     throw new Error(`YouTube video API error: ${status}`);
@@ -294,9 +299,14 @@ export async function postCommentReply(accessToken: string, parentId: string, te
 
   if (!res.ok) {
     const status = res.status;
-    if (status === 401 || status === 403) {
+    if (status === 401) {
       const err: Error & { status?: number } = new Error('YouTube auth expired');
       err.status = 401;
+      throw err;
+    }
+    if (status === 403) {
+      const err: Error & { status?: number } = new Error('YouTube permission denied. Your token may lack write access. Please reconnect your YouTube account.');
+      err.status = 403;
       throw err;
     }
     const errData = await res.json().catch(() => ({ error: { message: `YouTube API error: ${status}` } }));
@@ -321,6 +331,12 @@ export async function updateVideoMetadata(
   );
 
   if (!currentRes.ok) {
+    const status = currentRes.status;
+    if (status === 401) {
+      const err: Error & { status?: number } = new Error('YouTube auth expired');
+      err.status = 401;
+      throw err;
+    }
     throw new Error('Failed to fetch current video data for update');
   }
 
@@ -349,12 +365,19 @@ export async function updateVideoMetadata(
 
   if (!res.ok) {
     const status = res.status;
-    if (status === 401 || status === 403) {
+    if (status === 401) {
       const err: Error & { status?: number } = new Error('YouTube auth expired');
       err.status = 401;
       throw err;
     }
-    throw new Error(`Failed to update video (${status})`);
+    if (status === 403) {
+      const err: Error & { status?: number } = new Error('YouTube permission denied. Your token may lack write access. Please reconnect your YouTube account.');
+      err.status = 403;
+      throw err;
+    }
+    const errBody = await res.json().catch(() => ({ error: { message: `HTTP ${status}` } }));
+    const msg = (errBody as Record<string, Record<string, string>>)?.error?.message || `Failed to update video (${status})`;
+    throw new Error(msg);
   }
 }
 

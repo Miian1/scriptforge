@@ -31,8 +31,20 @@ export async function POST(
 
     let accessToken = user.youtube.accessToken;
 
-    // Fetch video context
-    const videoDetails = await fetchVideoDetails(accessToken, videoId);
+    // Fetch video context (with token refresh retry)
+    let videoDetails;
+    try {
+      videoDetails = await fetchVideoDetails(accessToken, videoId);
+    } catch (err: unknown) {
+      const e = err as Error & { status?: number };
+      if (e.status === 401 && user.youtube?.refreshToken) {
+        accessToken = await refreshYouTubeToken(user.youtube.refreshToken);
+        await User.findByIdAndUpdate(session.userId, { 'youtube.accessToken': accessToken });
+        videoDetails = await fetchVideoDetails(accessToken, videoId);
+      } else {
+        throw err;
+      }
+    }
 
     // Build prompt based on type
     let prompt = '';
@@ -131,15 +143,20 @@ export async function PUT(
 
     let accessToken = user.youtube.accessToken;
 
+    // Helper to call with retry
+    const doUpdate = async (token: string) => {
+      await updateVideoMetadata(token, videoId, { description, tags });
+    };
+
     try {
-      await updateVideoMetadata(accessToken, videoId, { description, tags });
+      await doUpdate(accessToken);
       return NextResponse.json({ success: true });
     } catch (err: unknown) {
       const e = err as Error & { status?: number };
       if (e.status === 401 && user.youtube?.refreshToken) {
         accessToken = await refreshYouTubeToken(user.youtube.refreshToken);
         await User.findByIdAndUpdate(session.userId, { 'youtube.accessToken': accessToken });
-        await updateVideoMetadata(accessToken, videoId, { description, tags });
+        await doUpdate(accessToken);
         return NextResponse.json({ success: true });
       }
       throw err;

@@ -31,8 +31,20 @@ export async function POST(
 
     let accessToken = user.youtube.accessToken;
 
-    // Fetch video context for Gemini
-    const videoDetails = await fetchVideoDetails(accessToken, videoId);
+    // Fetch video context for Gemini (with token refresh retry)
+    let videoDetails;
+    try {
+      videoDetails = await fetchVideoDetails(accessToken, videoId);
+    } catch (err: unknown) {
+      const e = err as Error & { status?: number };
+      if (e.status === 401 && user.youtube?.refreshToken) {
+        accessToken = await refreshYouTubeToken(user.youtube.refreshToken);
+        await User.findByIdAndUpdate(session.userId, { 'youtube.accessToken': accessToken });
+        videoDetails = await fetchVideoDetails(accessToken, videoId);
+      } else {
+        throw err;
+      }
+    }
 
     // Build Gemini prompt
     const prompt = `You are a YouTube channel owner replying to a comment on your video. Generate a professional, engaging, and authentic reply.
