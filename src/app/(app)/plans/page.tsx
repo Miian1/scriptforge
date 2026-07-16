@@ -3,18 +3,18 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Check, Zap, Crown, ArrowLeft, Loader2, CreditCard, MessageSquare } from 'lucide-react';
+import { Check, Zap, Crown, ArrowLeft, Loader2, CreditCard, MessageCircle, Banknote, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { useAuthStore } from '@/lib/auth-store';
 import { PLAN_LIMITS } from '@/lib/usage';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+
+const ADMIN_WHATSAPP = '9203177730490';
+const WHATSAPP_LINK = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent('Hi! I want to upgrade to ScriptForge Pro plan via Easypaisa/JazzCash. Please share the payment details.')}`;
 
 const FREE_FEATURES = [
   'Up to 3 projects per day',
@@ -36,10 +36,7 @@ export default function PlansPage() {
   const user = useAuthStore((s) => s.user);
   const checkSession = useAuthStore((s) => s.checkSession);
   const [loadingStripe, setLoadingStripe] = useState(false);
-  const [loadingManual, setLoadingManual] = useState(false);
-  const [showManual, setShowManual] = useState(false);
-  const [manualTxId, setManualTxId] = useState('');
-  const [manualNote, setManualNote] = useState('');
+  const [showLocalPayment, setShowLocalPayment] = useState(false);
 
   // Handle Stripe success/cancel redirects
   useEffect(() => {
@@ -59,7 +56,6 @@ export default function PlansPage() {
 
   const isPro = user.plan === 'pro';
   const freeLimits = PLAN_LIMITS.free;
-  const proLimits = PLAN_LIMITS.pro;
   const usage = user.dailyUsage;
 
   const handleUpgradeStripe = async () => {
@@ -76,34 +72,6 @@ export default function PlansPage() {
       toast.error('Network error. Please try again.');
     } finally {
       setLoadingStripe(false);
-    }
-  };
-
-  const handleManualSubmit = async () => {
-    if (!manualTxId.trim()) {
-      toast.error('Please enter your transaction ID');
-      return;
-    }
-    setLoadingManual(true);
-    try {
-      const res = await fetch('/api/plans/upgrade-manual', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactionId: manualTxId.trim(), note: manualNote.trim() }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success('Payment submitted! Admin will verify and upgrade your account shortly.');
-        setShowManual(false);
-        setManualTxId('');
-        setManualNote('');
-      } else {
-        toast.error(data.error || 'Failed to submit payment');
-      }
-    } catch {
-      toast.error('Network error. Please try again.');
-    } finally {
-      setLoadingManual(false);
     }
   };
 
@@ -255,9 +223,13 @@ export default function PlansPage() {
                       {loadingStripe ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
                       Upgrade with Card
                     </Button>
-                    <Button variant="outline" className="w-full gap-2" onClick={() => setShowManual(!showManual)}>
-                      <MessageSquare className="size-4" />
-                      Pay Direct to Admin
+                    <Button
+                      variant="outline"
+                      className="w-full gap-2"
+                      onClick={() => setShowLocalPayment(!showLocalPayment)}
+                    >
+                      <Banknote className="size-4" />
+                      Local Payment (Easypaisa / JazzCash)
                     </Button>
                   </>
                 ) : (
@@ -267,8 +239,8 @@ export default function PlansPage() {
                 )}
               </div>
 
-              {/* Manual Payment Form */}
-              {showManual && !isPro && (
+              {/* Local Payment Section — Pakistani users */}
+              {showLocalPayment && !isPro && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
@@ -276,39 +248,38 @@ export default function PlansPage() {
                 >
                   <Separator className="mb-4" />
                   <div className="space-y-3">
-                    <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
-                      <p className="font-medium text-foreground">Send payment to admin:</p>
-                      <p>1. Send $9 to the admin&apos;s payment method</p>
-                      <p>2. Enter your Transaction ID below</p>
-                      <p>3. Admin will verify and upgrade your account</p>
+                    <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground space-y-2">
+                      <p className="font-medium text-foreground text-sm flex items-center gap-1.5">
+                        <Phone className="size-3.5" />
+                        Pakistani Users — Local Payment
+                      </p>
+                      <p>
+                        Pay via <span className="font-medium text-foreground">Easypaisa</span> or{' '}
+                        <span className="font-medium text-foreground">JazzCash</span> to subscribe
+                        to the Pro plan. The payment transaction will be processed through Easypaisa
+                        or JazzCash directly.
+                      </p>
+                      <p>
+                        Contact the admin on WhatsApp for payment details, account number, and
+                        to get your account upgraded after payment.
+                      </p>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="txId" className="text-sm">Transaction ID *</Label>
-                      <Input
-                        id="txId"
-                        placeholder="e.g. TXN-123456789"
-                        value={manualTxId}
-                        onChange={(e) => setManualTxId(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="note" className="text-sm">Note (optional)</Label>
-                      <Textarea
-                        id="note"
-                        placeholder="Any message for the admin..."
-                        value={manualNote}
-                        onChange={(e) => setManualNote(e.target.value)}
-                        rows={2}
-                      />
-                    </div>
-                    <Button
-                      className="w-full"
-                      onClick={handleManualSubmit}
-                      disabled={loadingManual || !manualTxId.trim()}
+
+                    <a
+                      href={WHATSAPP_LINK}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block"
                     >
-                      {loadingManual ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
-                      Submit Payment Proof
-                    </Button>
+                      <Button className="w-full gap-2" style={{ backgroundColor: '#25D366', color: '#fff', borderColor: '#25D366' }}>
+                        <MessageCircle className="size-4" />
+                        Contact Admin on WhatsApp
+                      </Button>
+                    </a>
+
+                    <p className="text-[11px] text-muted-foreground text-center">
+                      You&apos;ll be redirected to WhatsApp to chat with the admin directly.
+                    </p>
                   </div>
                 </motion.div>
               )}
