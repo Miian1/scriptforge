@@ -11,20 +11,36 @@ import AppSidebar from '@/components/layout/AppSidebar';
 import AppHeader from '@/components/layout/AppHeader';
 import { Toaster } from '@/components/ui/sonner';
 
-// Sync saved theme from localStorage to next-themes on mount
+// Sync saved theme from localStorage to next-themes on mount,
+// and keep localStorage in sync when theme changes externally (e.g. header toggle)
 function ThemeSync() {
-  const { setTheme } = useTheme();
+  const { setTheme, theme } = useTheme();
   useEffect(() => {
+    // On mount: read from localStorage → apply to next-themes
     try {
       const raw = localStorage.getItem('scriptforge_settings');
       if (raw) {
-        const { theme } = JSON.parse(raw);
-        if (theme && ['light', 'dark', 'system'].includes(theme)) {
-          setTheme(theme);
+        const { theme: savedTheme } = JSON.parse(raw);
+        if (savedTheme && ['light', 'dark', 'system'].includes(savedTheme)) {
+          setTheme(savedTheme);
         }
       }
     } catch {}
   }, [setTheme]);
+
+  // Keep localStorage in sync whenever next-themes changes
+  useEffect(() => {
+    if (!theme) return;
+    try {
+      const raw = localStorage.getItem('scriptforge_settings');
+      const parsed = raw ? JSON.parse(raw) : {};
+      if (parsed.theme !== theme) {
+        parsed.theme = theme;
+        localStorage.setItem('scriptforge_settings', JSON.stringify(parsed));
+      }
+    } catch {}
+  }, [theme]);
+
   return null;
 }
 

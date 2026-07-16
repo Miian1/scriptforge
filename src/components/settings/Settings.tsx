@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { Settings, Shield, ShieldCheck, Youtube, Unplug, Loader2, ExternalLink, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import type { AppSettings } from '@/lib/types';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -19,13 +20,13 @@ const DEFAULT_SETTINGS: AppSettings = {
   autoSave: true,
 };
 
+const SETTINGS_KEY = 'scriptforge_settings';
+
 const THEME_OPTIONS = [
   { value: 'light' as const, label: 'Light', icon: Sun },
   { value: 'dark' as const, label: 'Dark', icon: Moon },
   { value: 'system' as const, label: 'System', icon: Monitor },
 ];
-
-const SETTINGS_KEY = 'scriptforge_settings';
 
 function loadSettings(): AppSettings {
   if (typeof window === 'undefined') return DEFAULT_SETTINGS;
@@ -70,8 +71,12 @@ function Monitor(props: React.SVGProps<SVGSVGElement>) {
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [mounted, setMounted] = useState(false);
   const { user } = useAuthStore();
-  const { setTheme: applyTheme, resolvedTheme } = useTheme();
+  const { setTheme: applyTheme, theme: nextTheme } = useTheme();
+
+  // Active theme selection = next-themes value (single source of truth)
+  const activeTheme = nextTheme ?? 'system';
 
   const isAdmin = user?.role === 'admin';
   const ytConnected = user?.youtubeConnected === true;
@@ -82,6 +87,7 @@ export default function SettingsPage() {
 
   // Load settings & fetch YouTube channel name
   useEffect(() => {
+    setMounted(true);
     setSettings(loadSettings());
     if (ytConnected) {
       fetch('/api/youtube/channel')
@@ -113,10 +119,13 @@ export default function SettingsPage() {
     [autoPersist]
   );
 
-  // Theme: sync with next-themes
-  const handleThemeChange = (theme: 'light' | 'dark' | 'system') => {
-    updateSettings({ theme });
-    applyTheme(theme);
+  // Theme: update both next-themes and localStorage immediately
+  const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
+    applyTheme(newTheme);
+    // Persist immediately (no debounce for theme)
+    const next = { ...settings, theme: newTheme };
+    setSettings(next);
+    persistSettings(next);
   };
 
   // YouTube connect
@@ -282,7 +291,7 @@ export default function SettingsPage() {
             <div className="grid grid-cols-3 gap-2">
               {THEME_OPTIONS.map((option) => {
                 const Icon = option.icon;
-                const isActive = settings.theme === option.value;
+                const isActive = mounted && activeTheme === option.value;
                 return (
                   <button
                     key={option.value}

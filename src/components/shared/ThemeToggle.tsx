@@ -1,9 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { Sun, Moon } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -11,14 +10,39 @@ import {
   TooltipContent,
 } from '@/components/ui/tooltip';
 
-export default function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+const SETTINGS_KEY = 'scriptforge_settings';
 
-  const isDark = theme === 'dark';
+export default function ThemeToggle() {
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  // Use resolvedTheme to determine actual visual state (handles 'system' correctly)
+  const isDark = resolvedTheme === 'dark';
 
   const toggle = () => {
-    setTheme(isDark ? 'light' : 'dark');
+    // Determine the next explicit theme (light or dark)
+    const next = isDark ? 'light' : 'dark';
+    setTheme(next);
+
+    // Sync to our localStorage so Settings page stays in sync
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      parsed.theme = next;
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(parsed));
+    } catch {}
   };
+
+  // Avoid hydration mismatch — don't render icon until mounted
+  if (!mounted) {
+    return (
+      <Button variant="ghost" size="icon" className="relative" aria-label="Toggle theme">
+        <div className="size-4" />
+      </Button>
+    );
+  }
 
   return (
     <Tooltip>
@@ -30,18 +54,11 @@ export default function ThemeToggle() {
           aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
           className="relative"
         >
-          <motion.div
-            key={theme}
-            initial={{ rotate: -90, opacity: 0, scale: 0.5 }}
-            animate={{ rotate: 0, opacity: 1, scale: 1 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
-          >
-            {isDark ? (
-              <Sun className="size-4" />
-            ) : (
-              <Moon className="size-4" />
-            )}
-          </motion.div>
+          {isDark ? (
+            <Sun className="size-4" />
+          ) : (
+            <Moon className="size-4" />
+          )}
         </Button>
       </TooltipTrigger>
       <TooltipContent sideOffset={4}>
