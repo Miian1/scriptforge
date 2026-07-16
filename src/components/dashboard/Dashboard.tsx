@@ -1,51 +1,100 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Film, ArrowUpDown } from 'lucide-react';
+import { Youtube, Unplug, Loader2, Sparkles, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from '@/components/ui/select';
-import EmptyState from '@/components/shared/EmptyState';
-import { useRouter } from 'next/navigation';
+import { Card, CardContent } from '@/components/ui/card';
+import { useAuthStore } from '@/lib/auth-store';
 import { useAppStore } from '@/lib/store';
+import { PLAN_LIMITS } from '@/lib/usage';
 import StatsCards from '@/components/dashboard/StatsCards';
-import ProjectCard from '@/components/dashboard/ProjectCard';
-import type { Project } from '@/lib/types';
-
-type SortOption = 'recent' | 'oldest' | 'az' | 'za';
-
-function sortProjects(projects: Project[], sort: SortOption): Project[] {
-  const sorted = [...projects];
-  switch (sort) {
-    case 'recent':
-      return sorted.sort((a, b) => b.updatedAt - a.updatedAt);
-    case 'oldest':
-      return sorted.sort((a, b) => a.updatedAt - b.updatedAt);
-    case 'az':
-      return sorted.sort((a, b) => a.title.localeCompare(b.title));
-    case 'za':
-      return sorted.sort((a, b) => b.title.localeCompare(a.title));
-    default:
-      return sorted;
-  }
-}
+import ChannelCard from '@/components/dashboard/ChannelCard';
+import VideoCarousel from '@/components/dashboard/VideoCarousel';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import type { YouTubeChannel, YouTubeVideo } from '@/lib/youtube';
+import { cn } from '@/lib/utils';
 
 export default function Dashboard() {
-  const projects = useAppStore((s) => s.projects);
   const router = useRouter();
-  const [sort, setSort] = useState<SortOption>('recent');
+  const user = useAuthStore((s) => s.user);
+  const [ytConnected, setYtConnected] = useState(false);
+  const [loadingConnect, setLoadingConnect] = useState(false);
+  const [channel, setChannel] = useState<YouTubeChannel | null>(null);
+  const [videos, setVideos] = useState<YouTubeVideo[]>([]);
+  const [loadingChannel, setLoadingChannel] = useState(false);
+  const [loadingVideos, setLoadingVideos] = useState(false);
 
-  const sortedProjects = useMemo(
-    () => sortProjects(projects, sort),
-    [projects, sort]
-  );
+  // Check YouTube connection status from URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('youtube') === 'connected') {
+      toast.success('YouTube channel connected!');
+      setYtConnected(true);
+      window.history.replaceState({}, '', '/dashboard');
+    }
+    if (params.get('youtube') === 'error') {
+      toast.error('Failed to connect YouTube. Please try again.');
+      window.history.replaceState({}, '', '/dashboard');
+    }
+  }, []);
+
+  // Fetch YouTube data if connected
+  const fetchYouTubeData = useCallback(async () => {
+    setLoadingChannel(true);
+    setLoadingVideos(true);
+
+    try {
+      const channelRes = await fetch('/api/youtube/channel');
+      if (channelRes.ok) {
+        const data = await channelRes.json();
+        setChannel(data.channel);
+        setYtConnected(true);
+      }
+    } catch {
+      // Not connected
+    } finally {
+      setLoadingChannel(false);
+    }
+
+    try {
+      const videosRes = await fetch('/api/youtube/videos');
+      if (videosRes.ok) {
+        const data = await videosRes.json();
+        setVideos(data.videos || []);
+      }
+    } catch {
+      // Not connected
+    } finally {
+      setLoadingVideos(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchYouTubeData();
+  }, [fetchYouTubeData]);
+
+  // Connect YouTube
+  const handleConnect = () => {
+    setLoadingConnect(true);
+    window.location.href = '/api/youtube/auth';
+  };
+
+  // Disconnect YouTube
+  const handleDisconnect = async () => {
+    try {
+      const res = await fetch('/api/youtube/disconnect', { method: 'POST' });
+      if (res.ok) {
+        setYtConnected(false);
+        setChannel(null);
+        setVideos([]);
+        toast.success('YouTube channel disconnected');
+      }
+    } catch {
+      toast.error('Failed to disconnect');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -54,82 +103,102 @@ export default function Dashboard() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage your video script projects
+            {ytConnected ? 'Your YouTube channel overview' : 'Connect your YouTube channel to get started'}
           </p>
         </div>
-        <Button
-          onClick={() => router.push('/create-project')}
-          className="shrink-0"
-        >
-          <Plus className="size-4 mr-2" />
-          New Project
-        </Button>
+        {ytConnected ? (
+          <Button
+            variant="outline"
+            onClick={handleDisconnect}
+            className="shrink-0 gap-2 text-destructive hover:text-destructive"
+          >
+            <Unplug className="size-4" />
+            Disconnect Channel
+          </Button>
+        ) : (
+          <Button
+            onClick={handleConnect}
+            disabled={loadingConnect}
+            className="shrink-0 gap-2"
+          >
+            {loadingConnect ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Youtube className="size-4" />
+            )}
+            Connect YouTube Channel
+          </Button>
+        )}
       </div>
 
-      {/* Stats */}
+      {/* YouTube Channel Card */}
+      {loadingChannel ? (
+        <Card>
+          <CardContent className="flex items-center justify-center py-12">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </CardContent>
+        </Card>
+      ) : ytConnected && channel ? (
+        <ChannelCard channel={channel} />
+      ) : (
+        /* Not connected CTA */
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <Card className="border-dashed border-2">
+            <CardContent className="flex flex-col items-center justify-center py-12 px-6 text-center gap-4">
+              <div className="size-16 rounded-full bg-red-500/10 flex items-center justify-center">
+                <Youtube className="size-8 text-red-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg">Connect Your YouTube Channel</h3>
+                <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                  Link your YouTube account to see your channel stats, recent videos, and
+                  manage everything in one place.
+                </p>
+              </div>
+              <Button onClick={handleConnect} disabled={loadingConnect} className="gap-2">
+                {loadingConnect ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Youtube className="size-4" />
+                )}
+                Connect with Google
+              </Button>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Usage Stats */}
       <StatsCards />
 
-      <Separator />
-
-      {/* Projects section */}
-      <section>
-        <div className="flex items-center justify-between gap-4 mb-4">
-          <h2 className="text-lg font-semibold">
-            Projects
-            <span className="ml-2 text-sm font-normal text-muted-foreground">
-              ({projects.length})
-            </span>
-          </h2>
-
-          {projects.length > 0 && (
-            <Select
-              value={sort}
-              onValueChange={(v) => setSort(v as SortOption)}
-            >
-              <SelectTrigger className="w-[160px] h-9 text-xs">
-                <ArrowUpDown className="size-3.5 mr-1.5 text-muted-foreground" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="recent">Recently Edited</SelectItem>
-                <SelectItem value="oldest">Oldest First</SelectItem>
-                <SelectItem value="az">A-Z</SelectItem>
-                <SelectItem value="za">Z-A</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-
-        {projects.length === 0 ? (
-          <EmptyState
-            icon={Film}
-            title="No projects yet"
-            description="Create your first video script project"
-            action={
-              <Button onClick={() => router.push('/create-project')}>
-                <Plus className="size-4 mr-2" />
-                Create Project
-              </Button>
-            }
-          />
+      {/* Recent Videos */}
+      {ytConnected && (
+        loadingVideos ? (
+          <Card>
+            <CardContent className="flex items-center justify-center py-8">
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            </CardContent>
+          </Card>
+        ) : videos.length > 0 ? (
+          <VideoCarousel videos={videos} />
         ) : (
           <motion.div
-            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
-            initial="hidden"
-            animate="visible"
-            variants={{
-              hidden: {},
-              visible: {
-                transition: { staggerChildren: 0.06 },
-              },
-            }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
           >
-            {sortedProjects.map((project) => (
-              <ProjectCard key={project.id} project={project} />
-            ))}
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-8 text-center">
+                <Sparkles className="size-8 text-muted-foreground/30 mb-2" />
+                <p className="text-sm text-muted-foreground">No videos found on your channel yet.</p>
+              </CardContent>
+            </Card>
           </motion.div>
-        )}
-      </section>
+        )
+      )}
     </div>
   );
 }

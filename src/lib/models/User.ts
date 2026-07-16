@@ -11,6 +11,12 @@ export interface IDailyUsage {
   aiGenerations: number;
 }
 
+export interface IYouTubeConnection {
+  connected: boolean;
+  accessToken: string | null;
+  refreshToken: string | null;
+}
+
 export interface IUser extends Document {
   name: string;
   email: string;
@@ -23,6 +29,7 @@ export interface IUser extends Document {
   verificationToken: string | null;
   verificationTokenExpires: Date | null;
   dailyUsage: IDailyUsage;
+  youtube: IYouTubeConnection;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidate: string): Promise<boolean>;
@@ -32,6 +39,12 @@ const DailyUsageSchema = new Schema<IDailyUsage>({
   date: { type: String, required: true },
   projectsCreated: { type: Number, default: 0 },
   aiGenerations: { type: Number, default: 0 },
+});
+
+const YouTubeSchema = new Schema<IYouTubeConnection>({
+  connected: { type: Boolean, default: false },
+  accessToken: { type: String, default: null },
+  refreshToken: { type: String, default: null },
 });
 
 const UserSchema = new Schema<IUser>(
@@ -56,6 +69,10 @@ const UserSchema = new Schema<IUser>(
     dailyUsage: {
       type: DailyUsageSchema,
       default: () => ({ date: new Date().toISOString().split('T')[0], projectsCreated: 0, aiGenerations: 0 }),
+    },
+    youtube: {
+      type: YouTubeSchema,
+      default: () => ({ connected: false, accessToken: null, refreshToken: null }),
     },
   },
   { timestamps: true }

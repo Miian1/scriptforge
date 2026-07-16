@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   LayoutDashboard,
-  PlusCircle,
+  FolderKanban,
   Settings,
   Info,
   Film,
@@ -34,7 +34,7 @@ const TABLET_BREAKPOINT = 1024;
 
 const NAV_ITEMS = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, primary: true },
-  { path: '/create-project', label: 'New Project', icon: PlusCircle, primary: true },
+  { path: '/projects', label: 'Projects', icon: FolderKanban, primary: true },
   { path: '/plans', label: 'Plans', icon: Crown, primary: true },
   { path: '/settings', label: 'Settings', icon: Settings, primary: false },
   { path: '/about', label: 'About', icon: Info, primary: false },
