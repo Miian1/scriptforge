@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
+import { connectDB } from '@/lib/mongodb';
+import { User } from '@/lib/models/User';
+import { PLAN_LIMITS, resetIfNewDay } from '@/lib/usage';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = 'gemini-2.5-flash';
@@ -18,6 +21,28 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // ── Usage limit check ──
+    await connectDB();
+    const user = await User.findById(session.userId);
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const plan = user.plan || 'free';
+    const limits = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS];
+    const usage = resetIfNewDay(user.dailyUsage);
+
+    if (usage.aiGenerations >= limits.aiGenerationsPerDay) {
+      return NextResponse.json({
+        error: `You've reached your daily AI generation limit (${limits.aiGenerationsPerDay}). Upgrade to Pro for 10x more generations.`,
+        code: 'PLAN_LIMIT_REACHED',
+      }, { status: 429 });
+    }
+
+    // Increment AI usage
+    user.dailyUsage = { ...usage, aiGenerations: usage.aiGenerations + 1 };
+    await user.save();
 
     const body = await request.json();
     const { prompt, maxTokens } = body;

@@ -10,6 +10,7 @@ import {
   PanelLeftClose,
   LogOut,
   X,
+  Crown,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePathname, useRouter } from 'next/navigation';
@@ -34,6 +35,7 @@ const TABLET_BREAKPOINT = 1024;
 const NAV_ITEMS = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, primary: true },
   { path: '/create-project', label: 'New Project', icon: PlusCircle, primary: true },
+  { path: '/plans', label: 'Plans', icon: Crown, primary: true },
   { path: '/settings', label: 'Settings', icon: Settings, primary: false },
   { path: '/about', label: 'About', icon: Info, primary: false },
 ];

@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import { ProjectModel } from '@/lib/models/Project';
 import { SceneModel } from '@/lib/models/Scene';
+import { User } from '@/lib/models/User';
 import { getSession } from '@/lib/auth';
+import { PLAN_LIMITS, getTodayKey, resetIfNewDay } from '@/lib/usage';
 
 // GET /api/projects — list user's projects
 export async function GET() {
@@ -35,7 +37,7 @@ export async function GET() {
   }
 }
 
-// POST /api/projects — create project
+// POST /api/projects — create project (with usage limit check)
 export async function POST(req: NextRequest) {
   try {
     const session = await getSession();
@@ -45,6 +47,27 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     await connectDB();
+
+    // ── Usage limit check ──
+    const user = await User.findById(session.userId);
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const plan = user.plan || 'free';
+    const limits = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS];
+    const usage = resetIfNewDay(user.dailyUsage);
+
+    if (usage.projectsCreated >= limits.projectsPerDay) {
+      return NextResponse.json({
+        error: `You've reached your daily project limit (${limits.projectsPerDay}). Upgrade to Pro for unlimited projects.`,
+        code: 'PLAN_LIMIT_REACHED',
+      }, { status: 429 });
+    }
+
+    // Increment usage and save
+    user.dailyUsage = { ...usage, projectsCreated: usage.projectsCreated + 1 };
+    await user.save();
 
     const project = await ProjectModel.create({
       userId: session.userId,

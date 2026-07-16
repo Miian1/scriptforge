@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models/User';
 import { getSession } from '@/lib/auth';
+import { formatUserResponse } from '@/lib/usage';
 
 export async function GET() {
   try {
@@ -17,15 +18,7 @@ export async function GET() {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    return NextResponse.json({
-      user: {
-        id: (user._id as string).toString(),
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isVerified: user.isVerified,
-      },
-    });
+    return NextResponse.json({ user: formatUserResponse(user) });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to get user';
     return NextResponse.json({ error: message }, { status: 500 });

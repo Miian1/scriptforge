@@ -3,6 +3,13 @@ import bcrypt from 'bcryptjs';
 
 export type UserRole = 'user' | 'admin';
 export type AuthProvider = 'email' | 'google';
+export type UserPlan = 'free' | 'pro';
+
+export interface IDailyUsage {
+  date: string;           // 'YYYY-MM-DD'
+  projectsCreated: number;
+  aiGenerations: number;
+}
 
 export interface IUser extends Document {
   name: string;
@@ -11,13 +18,21 @@ export interface IUser extends Document {
   googleId?: string;
   provider: AuthProvider;
   role: UserRole;
+  plan: UserPlan;
   isVerified: boolean;
   verificationToken: string | null;
   verificationTokenExpires: Date | null;
+  dailyUsage: IDailyUsage;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidate: string): Promise<boolean>;
 }
+
+const DailyUsageSchema = new Schema<IDailyUsage>({
+  date: { type: String, required: true },
+  projectsCreated: { type: Number, default: 0 },
+  aiGenerations: { type: Number, default: 0 },
+});
 
 const UserSchema = new Schema<IUser>(
   {
@@ -34,9 +49,14 @@ const UserSchema = new Schema<IUser>(
     googleId: { type: String, unique: true, sparse: true, index: true },
     provider: { type: String, enum: ['email', 'google'], default: 'email' },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
+    plan: { type: String, enum: ['free', 'pro'], default: 'free' },
     isVerified: { type: Boolean, default: false },
     verificationToken: { type: String, default: null },
     verificationTokenExpires: { type: Date, default: null },
+    dailyUsage: {
+      type: DailyUsageSchema,
+      default: () => ({ date: new Date().toISOString().split('T')[0], projectsCreated: 0, aiGenerations: 0 }),
+    },
   },
   { timestamps: true }
 );

@@ -5,7 +5,13 @@ export interface AuthUser {
   name: string;
   email: string;
   role: 'user' | 'admin';
+  plan: 'free' | 'pro';
   isVerified: boolean;
+  dailyUsage: {
+    date: string;
+    projectsCreated: number;
+    aiGenerations: number;
+  };
 }
 
 interface AuthState {

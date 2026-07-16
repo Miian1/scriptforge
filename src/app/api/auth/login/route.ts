@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models/User';
 import { signToken, createSessionCookie } from '@/lib/auth';
+import { formatUserResponse } from '@/lib/usage';
 
 export async function POST(req: NextRequest) {
   try {
@@ -50,15 +51,7 @@ export async function POST(req: NextRequest) {
     const cookie = createSessionCookie(token);
 
     return NextResponse.json(
-      {
-        user: {
-          id: (user._id as string).toString(),
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          isVerified: user.isVerified,
-        },
-      },
+      { user: formatUserResponse(user) },
       { headers: { 'Set-Cookie': `${cookie.name}=${cookie.value}; Path=${cookie.path}; HttpOnly; SameSite=${cookie.sameSite}; Max-Age=${cookie.maxAge}` } }
     );
   } catch (error: unknown) {

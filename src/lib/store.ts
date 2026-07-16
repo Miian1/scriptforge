@@ -108,6 +108,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         set((s) => ({ projects: [created, ...s.projects] }));
         // Return the MongoDB-assigned ID so callers can use it
         return created.id;
+      } else {
+        const data = await res.json().catch(() => ({}));
+        if (data.code === 'PLAN_LIMIT_REACHED') {
+          throw new Error(data.error || 'Plan limit reached');
+        }
       }
     } catch {
       // fallback: add locally

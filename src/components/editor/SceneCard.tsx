@@ -22,7 +22,9 @@ import { CSS } from '@dnd-kit/utilities';
 import { toast } from 'sonner';
 
 import { useAppStore } from '@/lib/store';
+import { useAuthStore } from '@/lib/auth-store';
 import { regenerateScene } from '@/lib/gemini';
+import { PLAN_LIMITS } from '@/lib/usage';
 import { v4 as uuidv4 } from 'uuid';
 import type { Scene, Project } from '@/lib/types';
 
@@ -363,6 +365,15 @@ export default function SceneCard({ scene, project, totalScenes }: SceneCardProp
 
   const handleRegenerate = async (field?: 'narration' | 'imagePrompt' | 'animationPrompt') => {
     if (regenerating) return;
+
+    // Check plan — free users cannot regenerate
+    const user = useAuthStore.getState().user;
+    const plan = user?.plan || 'free';
+    if (!PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS].canRegenerate) {
+      toast.error('Regeneration is a Pro feature. Upgrade your plan to regenerate scenes.');
+      return;
+    }
+
     setRegenerating(true);
     try {
       const updates = await regenerateScene(project, scene, totalScenes, field);

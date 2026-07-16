@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models/User';
 import { signToken, createSessionCookie } from '@/lib/auth';
+import { formatUserResponse } from '@/lib/usage';
 
 export async function GET(req: NextRequest) {
   try {
@@ -57,13 +58,7 @@ export async function GET(req: NextRequest) {
       {
         success: true,
         message: 'Email verified successfully!',
-        user: {
-          id: (user._id as string).toString(),
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          isVerified: true,
-        },
+        user: formatUserResponse(user),
       },
       {
         headers: {
