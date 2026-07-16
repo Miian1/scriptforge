@@ -29,7 +29,9 @@ export async function GET(req: NextRequest) {
       if (cache?.videos?.length && cache.videosFetchedAt) {
         const age = Date.now() - new Date(cache.videosFetchedAt).getTime();
         if (age < VIDEOS_CACHE_TTL_MS) {
-          return NextResponse.json({ videos: cache.videos, cached: true });
+          // Deep-clone Mongoose subdocument array to plain objects
+          const plainVideos = JSON.parse(JSON.stringify(cache.videos));
+          return NextResponse.json({ videos: plainVideos, cached: true });
         }
       }
     }

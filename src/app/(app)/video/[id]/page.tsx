@@ -290,15 +290,15 @@ export default function VideoDetailsPage() {
               <div className="flex flex-wrap items-center gap-4 text-sm">
                 <span className="flex items-center gap-1.5 text-muted-foreground">
                   <Eye className="size-4" />
-                  <span className="font-medium text-foreground">{formatCount(video.views)}</span> views
+                  <span className="font-medium text-foreground">{formatCount(video.views ?? 0)}</span> views
                 </span>
                 <span className="flex items-center gap-1.5 text-muted-foreground">
                   <ThumbsUp className="size-4" />
-                  <span className="font-medium text-foreground">{formatCount(video.likes)}</span> likes
+                  <span className="font-medium text-foreground">{formatCount(video.likes ?? 0)}</span> likes
                 </span>
                 <span className="flex items-center gap-1.5 text-muted-foreground">
                   <MessageCircle className="size-4" />
-                  <span className="font-medium text-foreground">{formatCount(video.comments)}</span> comments
+                  <span className="font-medium text-foreground">{formatCount(video.comments ?? 0)}</span> comments
                 </span>
                 <span className="flex items-center gap-1.5 text-muted-foreground">
                   <Clock className="size-4" />

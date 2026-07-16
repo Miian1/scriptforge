@@ -45,6 +45,7 @@ export function formatUserResponse(user: {
   role: string;
   plan?: string;
   isVerified: boolean;
+  youtube?: { connected?: boolean } | null;
   dailyUsage?: IDailyUsage;
 }) {
   const plan = (user.plan || 'free') as UserPlan;
@@ -59,6 +60,7 @@ export function formatUserResponse(user: {
     role: user.role,
     plan,
     isVerified: user.isVerified,
+    youtubeConnected: user.youtube?.connected === true,
     dailyUsage: usage,
   };
 }

@@ -177,17 +177,17 @@ export default function VideoCarousel({ videos, onRefresh, isRefreshing }: Video
                       <div className="flex items-center gap-4 mt-2.5 flex-wrap">
                         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <Eye className="size-3.5" />
-                          <span className="font-medium text-foreground">{formatCount(video.views)}</span>
+                          <span className="font-medium text-foreground">{formatCount(video.views ?? 0)}</span>
                           <span>views</span>
                         </span>
                         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <ThumbsUp className="size-3.5" />
-                          <span className="font-medium text-foreground">{formatCount(video.likes)}</span>
+                          <span className="font-medium text-foreground">{formatCount(video.likes ?? 0)}</span>
                           <span>likes</span>
                         </span>
                         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <MessageCircle className="size-3.5" />
-                          <span className="font-medium text-foreground">{formatCount(video.comments)}</span>
+                          <span className="font-medium text-foreground">{formatCount(video.comments ?? 0)}</span>
                           <span>comments</span>
                         </span>
                       </div>

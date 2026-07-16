@@ -7,6 +7,7 @@ export interface AuthUser {
   role: 'user' | 'admin';
   plan: 'free' | 'pro';
   isVerified: boolean;
+  youtubeConnected: boolean;
   dailyUsage: {
     date: string;
     projectsCreated: number;

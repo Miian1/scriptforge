@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Youtube, Unplug, Loader2, Video } from 'lucide-react';
+import { Youtube, Unplug, Loader2, Video, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuthStore } from '@/lib/auth-store';
@@ -14,13 +14,14 @@ import type { YouTubeChannel, YouTubeVideo } from '@/lib/youtube';
 
 export default function Dashboard() {
   const user = useAuthStore((s) => s.user);
-  const [ytConnected, setYtConnected] = useState(false);
+  const [ytConnected, setYtConnected] = useState(!!user?.youtubeConnected);
   const [loadingConnect, setLoadingConnect] = useState(false);
   const [channel, setChannel] = useState<YouTubeChannel | null>(null);
   const [videos, setVideos] = useState<YouTubeVideo[]>([]);
   const [loadingChannel, setLoadingChannel] = useState(false);
   const [loadingVideos, setLoadingVideos] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [channelError, setChannelError] = useState(false);
 
   // Check YouTube connection status from URL params
   useEffect(() => {
@@ -40,6 +41,7 @@ export default function Dashboard() {
   const fetchYouTubeData = useCallback(async (forceRefresh = false) => {
     setLoadingChannel(true);
     setLoadingVideos(true);
+    setChannelError(false);
 
     const channelQuery = forceRefresh ? '?refresh=true' : '';
     const videosQuery = forceRefresh ? '?refresh=true' : '';
@@ -50,9 +52,16 @@ export default function Dashboard() {
         const data = await channelRes.json();
         setChannel(data.channel);
         setYtConnected(true);
+      } else if (channelRes.status === 404) {
+        // Not connected
+        setYtConnected(false);
+        setChannel(null);
+      } else {
+        // API error (expired token, etc.) but user IS connected
+        setChannelError(true);
       }
     } catch {
-      // Not connected
+      setChannelError(true);
     } finally {
       setLoadingChannel(false);
     }
@@ -104,7 +113,11 @@ export default function Dashboard() {
       if (res.ok) {
         setYtConnected(false);
         setChannel(null);
+        setChannelError(false);
         setVideos([]);
+        // Refresh auth store to update youtubeConnected
+        const { useAuthStore } = await import('@/lib/auth-store');
+        useAuthStore.getState().checkSession();
         toast.success('YouTube channel disconnected');
       }
     } catch {
@@ -156,6 +169,32 @@ export default function Dashboard() {
         </Card>
       ) : ytConnected && channel ? (
         <ChannelCard channel={channel} />
+      ) : ytConnected && channelError ? (
+        /* Connected but failed to load channel data */
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="flex flex-col items-center justify-center py-12 px-6 text-center gap-4">
+            <div className="size-16 rounded-full bg-amber-500/10 flex items-center justify-center">
+              <AlertTriangle className="size-8 text-amber-500" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg">Could not load channel data</h3>
+              <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                Your YouTube channel is connected but we couldn't fetch your channel info.
+                Your access token may have expired — try reconnecting.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button variant="outline" onClick={() => fetchYouTubeData(true)} className="gap-2">
+                <RefreshCw className="size-4" />
+                Retry
+              </Button>
+              <Button onClick={handleConnect} disabled={loadingConnect} className="gap-2">
+                {loadingConnect ? <Loader2 className="size-4 animate-spin" /> : <Youtube className="size-4" />}
+                Reconnect YouTube
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       ) : (
         /* Not connected CTA */
         <Card className="border-dashed border-2">
@@ -204,7 +243,7 @@ export default function Dashboard() {
             <CardContent className="flex flex-col items-center justify-center py-8 text-center">
               <Video className="size-8 text-muted-foreground/30 mb-2" />
               <p className="text-sm text-muted-foreground">No videos found on your channel yet.</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">Videos will appear here once you upload them to YouTube.</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">Videos will appear once you upload them to YouTube.</p>
             </CardContent>
           </Card>
         )

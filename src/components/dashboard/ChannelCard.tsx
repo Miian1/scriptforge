@@ -83,17 +83,17 @@ export default function ChannelCard({ channel }: { channel: YouTubeChannel }) {
             <div className="flex items-center gap-5 mt-4">
               <div className="flex items-center gap-1.5 text-sm">
                 <Users className="size-4 text-muted-foreground" />
-                <span className="font-semibold">{formatCount(channel.subscriberCount)}</span>
+                <span className="font-semibold">{formatCount(channel.subscriberCount ?? 0)}</span>
                 <span className="text-muted-foreground text-xs">subscribers</span>
               </div>
               <div className="flex items-center gap-1.5 text-sm">
                 <Video className="size-4 text-muted-foreground" />
-                <span className="font-semibold">{formatCount(channel.videoCount)}</span>
+                <span className="font-semibold">{formatCount(channel.videoCount ?? 0)}</span>
                 <span className="text-muted-foreground text-xs">videos</span>
               </div>
               <div className="flex items-center gap-1.5 text-sm">
                 <Eye className="size-4 text-muted-foreground" />
-                <span className="font-semibold">{formatCount(channel.viewCount)}</span>
+                <span className="font-semibold">{formatCount(channel.viewCount ?? 0)}</span>
                 <span className="text-muted-foreground text-xs">total views</span>
               </div>
             </div>

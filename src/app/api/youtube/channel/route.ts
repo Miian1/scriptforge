@@ -28,11 +28,13 @@ export async function GET(req: NextRequest) {
       const cache = await YouTubeCache.findOne({ userId: session.userId });
       if (cache?.channel && cache.channelFetchedAt) {
         const age = Date.now() - new Date(cache.channelFetchedAt).getTime();
-        if (age < CHANNEL_CACHE_TTL_MS) {
-          // Ensure bannerUrl exists (may be missing from older cache entries)
+        // Treat as cache miss if missing bannerUrl (schema was updated)
+        const hasBanner = cache.channel.get ? cache.channel.get('bannerUrl') : cache.channel.bannerUrl;
+        if (age < CHANNEL_CACHE_TTL_MS && hasBanner) {
+          // Deep-clone Mongoose subdocument to plain object
           const ch = cache.channel;
-          const response: Record<string, unknown> = { ...ch, cached: true };
-          return NextResponse.json({ channel: response, cached: true });
+          const plain: Record<string, unknown> = ch ? JSON.parse(JSON.stringify(ch)) : {};
+          return NextResponse.json({ channel: { ...plain, cached: true }, cached: true });
         }
       }
     }
