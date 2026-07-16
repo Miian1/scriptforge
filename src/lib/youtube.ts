@@ -242,13 +242,13 @@ export async function fetchVideoComments(accessToken: string, videoId: string, m
 
   if (!res.ok) {
     const status = res.status;
-    if (status === 401 || status === 403) {
+    // 403 from comments API often means comments are disabled — return empty
+    if (status === 403) return [];
+    if (status === 401) {
       const err: Error & { status?: number } = new Error('YouTube auth expired');
       err.status = 401;
       throw err;
     }
-    // Comments may be disabled — return empty
-    if (status === 403) return [];
     throw new Error(`YouTube comments API error: ${status}`);
   }
 
