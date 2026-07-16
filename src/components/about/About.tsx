@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Film, Sparkles, Image, Pencil, HardDrive, Moon } from 'lucide-react';
+import { Youtube, Sparkles, MessageSquare, Pencil, Wand2, Shield, BarChart3, Layers, Globe } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -10,27 +10,42 @@ const FEATURES = [
   {
     icon: Sparkles,
     title: 'AI Script Generation',
-    description: 'Automatic scene-by-scene script creation with narration',
+    description: 'Generate complete scene-by-scene scripts with narration, image prompts, and animation directions using Google Gemini AI.',
   },
   {
-    icon: Image,
-    title: 'Production Prompts',
-    description: 'Image and animation prompts for every scene',
+    icon: Youtube,
+    title: 'YouTube Integration',
+    description: 'Connect your YouTube channel to view stats, browse recent videos, and manage your content — all from one dashboard.',
   },
   {
-    icon: Pencil,
-    title: 'Scene Editor',
-    description: 'Full editing, drag-and-drop reordering, and regeneration',
+    icon: MessageSquare,
+    title: 'AI Comment Replies',
+    description: 'Generate contextual AI replies to your video comments and post them directly to YouTube with one click.',
   },
   {
-    icon: HardDrive,
-    title: 'Local Storage',
-    description: 'All data stored locally, no account required',
+    icon: Wand2,
+    title: 'Video Metadata AI',
+    description: 'AI-powered description and tag improvement. Generate optimized metadata and apply it to your videos instantly.',
   },
   {
-    icon: Moon,
-    title: 'Dark Mode',
-    description: 'Beautiful light and dark themes',
+    icon: Layers,
+    title: 'Scene-by-Scene Editor',
+    description: 'Full editing with drag-and-drop reordering, scene regeneration, and production-ready script export.',
+  },
+  {
+    icon: BarChart3,
+    title: 'Channel Analytics',
+    description: 'View subscriber count, total views, video count, and per-video performance — right on your dashboard.',
+  },
+  {
+    icon: Globe,
+    title: 'Multi-Language Support',
+    description: 'Create scripts in 10 languages including English, Spanish, French, Japanese, Hindi, and Arabic.',
+  },
+  {
+    icon: Shield,
+    title: 'Secure & Private',
+    description: 'JWT authentication, email verification, and secure OAuth — your data stays safe and private.',
   },
 ];
 
@@ -39,7 +54,7 @@ const container = {
   show: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.08,
+      staggerChildren: 0.06,
     },
   },
 };
@@ -55,16 +70,18 @@ export default function AboutPage() {
       variants={container}
       initial="hidden"
       animate="show"
-      className="mx-auto max-w-2xl space-y-8 p-4 sm:p-6"
+      className="mx-auto max-w-3xl space-y-8 p-4 sm:p-6"
     >
       {/* App Identity */}
       <motion.div variants={item} className="flex flex-col items-center space-y-4 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-          <Film className="h-8 w-8 text-primary" />
-        </div>
+        <img
+          src="/logo.svg"
+          alt="ScriptForge"
+          className="h-14 w-14 rounded-2xl"
+        />
         <div className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">ScriptForge</h1>
-          <p className="text-lg text-muted-foreground">AI-Powered YouTube Script Studio</p>
+          <p className="text-lg text-muted-foreground">AI YouTube Scripting Agent</p>
         </div>
         <Badge variant="secondary" className="text-xs">
           Version 1.0.0
@@ -73,10 +90,10 @@ export default function AboutPage() {
 
       {/* Description */}
       <motion.div variants={item} className="text-center">
-        <p className="text-muted-foreground leading-relaxed">
-          Transform your video ideas into production-ready scripts with AI. ScriptForge uses Google
-          Gemini to research topics, build story structures, and generate complete scene-by-scene
-          production scripts with narration, image prompts, and animation prompts.
+        <p className="text-muted-foreground leading-relaxed max-w-2xl mx-auto">
+          ScriptForge is your all-in-one YouTube content creation toolkit. Connect your channel,
+          generate production-ready scripts with AI, improve your video metadata, reply to comments
+          intelligently, and manage your entire content workflow from a single dashboard.
         </p>
       </motion.div>
 
@@ -113,11 +130,16 @@ export default function AboutPage() {
 
       <Separator />
 
-      {/* Footer */}
-      <motion.div variants={item} className="text-center">
-        <p className="text-xs text-muted-foreground">
-          Built with Next.js, TypeScript, and Google Gemini
-        </p>
+      {/* Tech Stack */}
+      <motion.div variants={item} className="text-center space-y-2">
+        <h2 className="text-lg font-semibold">Built With</h2>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {['Next.js', 'TypeScript', 'Google Gemini', 'YouTube Data API', 'MongoDB Atlas', 'Tailwind CSS'].map((tech) => (
+            <Badge key={tech} variant="outline" className="text-xs">
+              {tech}
+            </Badge>
+          ))}
+        </div>
       </motion.div>
     </motion.div>
   );

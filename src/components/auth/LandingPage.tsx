@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Film, Sparkles, Layers, Zap, ArrowRight, Play } from 'lucide-react';
+import { Sparkles, Layers, Zap, Youtube, MessageSquare, Wand2, ArrowRight, Play, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useAuthStore } from '@/lib/auth-store';
@@ -9,26 +9,41 @@ import { useAuthStore } from '@/lib/auth-store';
 const features = [
   {
     icon: Sparkles,
-    title: 'AI-Powered Scripting',
+    title: 'AI Script Generation',
     description: 'Generate complete scene-by-scene scripts with narration, image prompts, and animation directions using Google Gemini AI.',
   },
   {
-    icon: Layers,
-    title: 'Scene-by-Scene Breakdown',
-    description: 'Each scene includes narration text, visual prompts for image generation, and detailed animation instructions.',
+    icon: Youtube,
+    title: 'YouTube Channel Connect',
+    description: 'Connect your YouTube channel to view real-time stats, browse recent videos, and manage everything from your dashboard.',
   },
   {
-    icon: Zap,
-    title: 'Instant Generation',
-    description: 'Transform a video idea into a production-ready script in seconds. Supports 10 languages and multiple writing styles.',
+    icon: MessageSquare,
+    title: 'AI Comment Replies',
+    description: 'Generate smart, contextual replies to your video comments and post them directly to YouTube with a single click.',
+  },
+  {
+    icon: Wand2,
+    title: 'Video Metadata AI',
+    description: 'AI-powered description and tag improvement. Get optimized SEO metadata and apply it to your videos instantly.',
+  },
+  {
+    icon: Layers,
+    title: 'Scene-by-Scene Editor',
+    description: 'Full editing with drag-and-drop reordering, individual scene regeneration, and production-ready script export.',
+  },
+  {
+    icon: BarChart3,
+    title: 'Channel Analytics',
+    description: 'View subscriber count, total views, video count, and per-video performance metrics right on your dashboard.',
   },
 ];
 
 const steps = [
+  'Connect your YouTube channel',
   'Describe your video idea and settings',
   'AI generates a full scene-by-scene script',
-  'Edit, reorder, and refine each scene',
-  'Export your production-ready script',
+  'Edit, refine, and export your production-ready script',
 ];
 
 export default function LandingPage() {
@@ -100,9 +115,7 @@ export default function LandingPage() {
       <nav className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="mx-auto max-w-6xl flex h-16 items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-primary">
-              <Film className="size-5 text-primary-foreground" />
-            </div>
+            <img src="/logo.svg" alt="ScriptForge" className="size-8 rounded-lg" />
             <span className="text-lg font-bold tracking-tight">ScriptForge</span>
           </div>
           <div className="flex items-center gap-2">
@@ -126,16 +139,16 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl px-4 sm:px-6 pt-16 sm:pt-24 pb-16 sm:pb-20">
           <div className="text-center max-w-3xl mx-auto">
             <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground mb-6">
-              <Sparkles className="size-3.5" />
-              Powered by Google Gemini AI
+              <Youtube className="size-3.5" />
+              AI-Powered YouTube Scripting Agent
             </div>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.1] mb-6">
-              Transform Ideas into{' '}
-              <span className="text-primary">Production Scripts</span>
+              Your AI YouTube{' '}
+              <span className="text-primary">Content Studio</span>
             </h1>
             <p className="text-lg sm:text-xl text-muted-foreground leading-relaxed mb-8 max-w-2xl mx-auto">
-              ScriptForge uses AI to generate complete scene-by-scene YouTube scripts with
-              narration, image prompts, and animation directions — ready for production.
+              Generate production-ready scripts, improve video metadata, reply to comments with AI,
+              and manage your entire YouTube channel from one dashboard.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <Button size="lg" className="w-full sm:w-auto gap-2" onClick={() => openAuth('register')}>
@@ -156,7 +169,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold tracking-tight mb-3">How It Works</h2>
-            <p className="text-muted-foreground text-lg">Four simple steps to your production-ready script</p>
+            <p className="text-muted-foreground text-lg">Four simple steps to production-ready content</p>
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -183,10 +196,10 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold tracking-tight mb-3">Everything You Need</h2>
-            <p className="text-muted-foreground text-lg">Powerful features to streamline your video production workflow</p>
+            <p className="text-muted-foreground text-lg">Powerful tools to streamline your entire YouTube workflow</p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {features.map((feature, i) => (
               <div
                 key={i}
@@ -206,9 +219,9 @@ export default function LandingPage() {
       {/* CTA */}
       <section className="border-t border-border bg-muted/30 py-16 sm:py-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 text-center">
-          <h2 className="text-3xl font-bold tracking-tight mb-3">Ready to Create Your Script?</h2>
+          <h2 className="text-3xl font-bold tracking-tight mb-3">Ready to Supercharge Your YouTube?</h2>
           <p className="text-muted-foreground text-lg mb-8">
-            Join ScriptForge and transform your video ideas into production-ready scripts.
+            Join ScriptForge and transform your video ideas into production-ready scripts with AI.
           </p>
           <Button size="lg" className="gap-2" onClick={() => openAuth('register')}>
             Get Started for Free
@@ -221,11 +234,11 @@ export default function LandingPage() {
       <footer className="border-t border-border py-8">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <Film className="size-4 text-muted-foreground" />
+            <img src="/logo.svg" alt="ScriptForge" className="size-4 rounded" />
             <span className="text-sm text-muted-foreground">ScriptForge v1.0</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            AI-powered YouTube script generation agent
+            AI-powered YouTube scripting agent
           </p>
         </div>
       </footer>
@@ -249,9 +262,7 @@ export default function LandingPage() {
             </button>
 
             <div className="flex items-center gap-2.5 mb-6">
-              <div className="flex size-9 items-center justify-center rounded-lg bg-primary">
-                <Film className="size-5 text-primary-foreground" />
-              </div>
+              <img src="/logo.svg" alt="ScriptForge" className="size-8 rounded-lg" />
               <span className="text-lg font-bold tracking-tight">ScriptForge</span>
             </div>
 

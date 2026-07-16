@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { ThemeProvider } from 'next-themes';
+import { ThemeProvider, useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/lib/store';
 import { useAuthStore } from '@/lib/auth-store';
@@ -10,6 +10,23 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import AppSidebar from '@/components/layout/AppSidebar';
 import AppHeader from '@/components/layout/AppHeader';
 import { Toaster } from '@/components/ui/sonner';
+
+// Sync saved theme from localStorage to next-themes on mount
+function ThemeSync() {
+  const { setTheme } = useTheme();
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('scriptforge_settings');
+      if (raw) {
+        const { theme } = JSON.parse(raw);
+        if (theme && ['light', 'dark', 'system'].includes(theme)) {
+          setTheme(theme);
+        }
+      }
+    } catch {}
+  }, [setTheme]);
+  return null;
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -54,6 +71,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       disableTransitionOnChange
     >
       <div className="relative min-h-screen">
+        <ThemeSync />
         <AppSidebar />
 
         <div

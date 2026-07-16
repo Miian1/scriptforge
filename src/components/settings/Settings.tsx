@@ -2,14 +2,17 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, Shield, ShieldCheck } from 'lucide-react';
+import { Settings, Shield, ShieldCheck, Youtube, Unplug, Loader2, ExternalLink, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import type { AppSettings } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useAuthStore } from '@/lib/auth-store';
+import { toast } from 'sonner';
 
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
@@ -68,12 +71,25 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { user } = useAuthStore();
+  const { setTheme: applyTheme, resolvedTheme } = useTheme();
 
   const isAdmin = user?.role === 'admin';
+  const ytConnected = user?.youtubeConnected === true;
 
+  // YouTube connection states
+  const [ytLoading, setYtLoading] = useState(false);
+  const [ytChannelName, setYtChannelName] = useState<string | null>(null);
+
+  // Load settings & fetch YouTube channel name
   useEffect(() => {
     setSettings(loadSettings());
-  }, []);
+    if (ytConnected) {
+      fetch('/api/youtube/channel')
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => data?.channel?.title && setYtChannelName(data.channel.title))
+        .catch(() => {});
+    }
+  }, [ytConnected]);
 
   const autoPersist = useCallback(
     (newSettings: AppSettings) => {
@@ -96,6 +112,37 @@ export default function SettingsPage() {
     },
     [autoPersist]
   );
+
+  // Theme: sync with next-themes
+  const handleThemeChange = (theme: 'light' | 'dark' | 'system') => {
+    updateSettings({ theme });
+    applyTheme(theme);
+  };
+
+  // YouTube connect
+  const handleConnectYouTube = () => {
+    setYtLoading(true);
+    window.location.href = '/api/youtube/auth';
+  };
+
+  // YouTube disconnect
+  const handleDisconnectYouTube = async () => {
+    setYtLoading(true);
+    try {
+      const res = await fetch('/api/youtube/disconnect', { method: 'POST' });
+      if (res.ok) {
+        setYtChannelName(null);
+        useAuthStore.getState().checkSession();
+        toast.success('YouTube channel disconnected');
+      } else {
+        toast.error('Failed to disconnect');
+      }
+    } catch {
+      toast.error('Failed to disconnect');
+    } finally {
+      setYtLoading(false);
+    }
+  };
 
   return (
     <motion.div
@@ -138,12 +185,90 @@ export default function SettingsPage() {
             <div className="pt-1">
               <Badge variant={isAdmin ? 'default' : 'secondary'} className="gap-1.5">
                 {isAdmin ? <ShieldCheck className="size-3.5" /> : <Shield className="size-3.5" />}
-                {isAdmin ? 'Admin' : 'User'}
+                {isAdmin ? 'Admin' : user.plan === 'pro' ? 'Pro' : 'Free'}
               </Badge>
             </div>
           </CardContent>
         </Card>
       )}
+
+      {/* YouTube Connection */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Youtube className="size-5 text-red-500" />
+            YouTube Channel
+          </CardTitle>
+          <CardDescription>Connect or disconnect your YouTube channel</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {ytConnected ? (
+            <>
+              <div className="flex items-center gap-3 rounded-lg border border-green-500/20 bg-green-500/5 p-4">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-green-500/10">
+                  <CheckCircle2 className="size-5 text-green-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">Channel Connected</p>
+                  {ytChannelName && (
+                    <p className="text-sm text-muted-foreground truncate">{ytChannelName}</p>
+                  )}
+                </div>
+                <a
+                  href="https://studio.youtube.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0"
+                >
+                  <Button variant="ghost" size="sm" className="gap-1.5 text-xs">
+                    <ExternalLink className="size-3.5" />
+                    YouTube Studio
+                  </Button>
+                </a>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleDisconnectYouTube}
+                disabled={ytLoading}
+                className="w-full gap-2 text-destructive hover:text-destructive"
+              >
+                {ytLoading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Unplug className="size-4" />
+                )}
+                Disconnect YouTube Channel
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-500/10">
+                  <AlertTriangle className="size-5 text-amber-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Not Connected</p>
+                  <p className="text-xs text-muted-foreground">
+                    Connect your YouTube channel to view stats, manage videos, and use AI features
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={handleConnectYouTube}
+                disabled={ytLoading}
+                className="w-full gap-2"
+              >
+                {ytLoading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Youtube className="size-4" />
+                )}
+                Connect YouTube Channel
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Appearance */}
       <Card>
@@ -162,7 +287,7 @@ export default function SettingsPage() {
                   <button
                     key={option.value}
                     type="button"
-                    onClick={() => updateSettings({ theme: option.value })}
+                    onClick={() => handleThemeChange(option.value)}
                     className={`flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 text-sm font-medium transition-colors ${
                       isActive
                         ? 'border-primary bg-primary/5 text-primary'
