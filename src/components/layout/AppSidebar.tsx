@@ -10,6 +10,7 @@ import {
   LogOut,
   X,
   Crown,
+  PlusCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePathname, useRouter } from 'next/navigation';
