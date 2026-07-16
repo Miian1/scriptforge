@@ -22,8 +22,18 @@ export default function ChannelCard({ channel }: { channel: YouTubeChannel }) {
     >
       <Card className="overflow-hidden">
         <CardContent className="p-0">
-          {/* Banner gradient */}
-          <div className="h-24 bg-gradient-to-r from-red-500 via-red-600 to-rose-500 relative">
+          {/* Banner */}
+          <div className="h-36 sm:h-44 relative bg-muted">
+            {channel.bannerUrl ? (
+              <img
+                src={channel.bannerUrl}
+                alt=""
+                className="w-full h-full object-cover object-center"
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-r from-red-500 via-red-600 to-rose-500" />
+            )}
+            {/* Avatar */}
             <div className="absolute -bottom-8 left-5">
               <div className="size-16 rounded-full border-4 border-background shadow-lg overflow-hidden bg-muted">
                 {channel.thumbnail ? (

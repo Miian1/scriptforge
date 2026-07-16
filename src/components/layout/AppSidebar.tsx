@@ -6,7 +6,6 @@ import {
   FolderKanban,
   Settings,
   Info,
-  Film,
   PanelLeftClose,
   LogOut,
   X,
@@ -265,9 +264,7 @@ function DesktopSidebar() {
             className="shrink-0 overflow-hidden"
           >
             <div className="flex items-center h-14 px-4 gap-2.5">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary">
-                <Film className="size-4 text-primary-foreground" />
-              </div>
+              <img src="/logo.svg" alt="ScriptForge" className="size-8 shrink-0 rounded-lg" />
               <div className="overflow-hidden whitespace-nowrap">
                 <h1 className="text-sm font-bold tracking-tight text-foreground leading-tight">
                   ScriptForge
@@ -357,9 +354,7 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
             {/* Drawer header */}
             <div className="flex items-center justify-between h-14 px-4 shrink-0">
               <div className="flex items-center gap-2.5">
-                <div className="flex size-8 items-center justify-center rounded-lg bg-primary">
-                  <Film className="size-4 text-primary-foreground" />
-                </div>
+                <img src="/logo.svg" alt="ScriptForge" className="size-8 shrink-0 rounded-lg" />
                 <div>
                   <h1 className="text-sm font-bold tracking-tight text-foreground leading-tight">
                     ScriptForge

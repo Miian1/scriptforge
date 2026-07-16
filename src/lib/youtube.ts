@@ -33,6 +33,7 @@ export interface YouTubeChannel {
   title: string;
   description: string;
   thumbnail: string;
+  bannerUrl: string;
   subscriberCount: number;
   videoCount: number;
   viewCount: number;
@@ -40,7 +41,7 @@ export interface YouTubeChannel {
 
 export async function fetchChannel(accessToken: string): Promise<YouTubeChannel> {
   const res = await fetch(
-    'https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true',
+    'https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings&mine=true',
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
 
@@ -61,11 +62,16 @@ export async function fetchChannel(accessToken: string): Promise<YouTubeChannel>
   }
 
   const ch = data.items[0];
+  const branding = ch.brandingSettings?.image || {};
+  const bannerUrl = branding.bannerExternalUrl
+    ? `${branding.bannerExternalUrl}=w1280-fcrop64=1,00005a57ffffa5a8-k=c0xff572200`  // tablet banner size
+    : '';
   return {
     id: ch.id,
     title: ch.snippet.title,
     description: ch.snippet.description || '',
     thumbnail: ch.snippet.thumbnails.high?.url || ch.snippet.thumbnails.medium?.url || ch.snippet.thumbnails.default?.url || '',
+    bannerUrl,
     subscriberCount: parseInt(ch.statistics.subscriberCount) || 0,
     videoCount: parseInt(ch.statistics.videoCount) || 0,
     viewCount: parseInt(ch.statistics.viewCount) || 0,

@@ -29,7 +29,10 @@ export async function GET(req: NextRequest) {
       if (cache?.channel && cache.channelFetchedAt) {
         const age = Date.now() - new Date(cache.channelFetchedAt).getTime();
         if (age < CHANNEL_CACHE_TTL_MS) {
-          return NextResponse.json({ channel: cache.channel, cached: true });
+          // Ensure bannerUrl exists (may be missing from older cache entries)
+          const ch = cache.channel;
+          const response: Record<string, unknown> = { ...ch, cached: true };
+          return NextResponse.json({ channel: response, cached: true });
         }
       }
     }

@@ -15,6 +15,7 @@ export interface ICachedChannel {
   title: string;
   description: string;
   thumbnail: string;
+  bannerUrl: string;
   subscriberCount: number;
   videoCount: number;
   viewCount: number;
@@ -45,6 +46,7 @@ const CachedChannelSchema = new Schema<ICachedChannel>({
   title: { type: String, required: true },
   description: { type: String, default: '' },
   thumbnail: { type: String, required: true },
+  bannerUrl: { type: String, default: '' },
   subscriberCount: { type: Number, default: 0 },
   videoCount: { type: Number, default: 0 },
   viewCount: { type: Number, default: 0 },
