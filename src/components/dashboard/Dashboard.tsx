@@ -20,6 +20,7 @@ export default function Dashboard() {
   const [videos, setVideos] = useState<YouTubeVideo[]>([]);
   const [loadingChannel, setLoadingChannel] = useState(false);
   const [loadingVideos, setLoadingVideos] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Check YouTube connection status from URL params
   useEffect(() => {
@@ -36,12 +37,15 @@ export default function Dashboard() {
   }, []);
 
   // Fetch YouTube data if connected
-  const fetchYouTubeData = useCallback(async () => {
+  const fetchYouTubeData = useCallback(async (forceRefresh = false) => {
     setLoadingChannel(true);
     setLoadingVideos(true);
 
+    const channelQuery = forceRefresh ? '?refresh=true' : '';
+    const videosQuery = forceRefresh ? '?refresh=true' : '';
+
     try {
-      const channelRes = await fetch('/api/youtube/channel');
+      const channelRes = await fetch(`/api/youtube/channel${channelQuery}`);
       if (channelRes.ok) {
         const data = await channelRes.json();
         setChannel(data.channel);
@@ -54,7 +58,7 @@ export default function Dashboard() {
     }
 
     try {
-      const videosRes = await fetch('/api/youtube/videos');
+      const videosRes = await fetch(`/api/youtube/videos${videosQuery}`);
       if (videosRes.ok) {
         const data = await videosRes.json();
         setVideos(data.videos || []);
@@ -69,6 +73,23 @@ export default function Dashboard() {
   useEffect(() => {
     fetchYouTubeData();
   }, [fetchYouTubeData]);
+
+  // Handle refresh — force bypass cache
+  const handleRefreshVideos = async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch('/api/youtube/videos?refresh=true');
+      if (res.ok) {
+        const data = await res.json();
+        setVideos(data.videos || []);
+        toast.success('Videos refreshed');
+      }
+    } catch {
+      toast.error('Failed to refresh videos');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Connect YouTube
   const handleConnect = () => {
@@ -173,7 +194,11 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         ) : videos.length > 0 ? (
-          <VideoCarousel videos={videos} />
+          <VideoCarousel
+            videos={videos}
+            onRefresh={handleRefreshVideos}
+            isRefreshing={refreshing}
+          />
         ) : (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-8 text-center">

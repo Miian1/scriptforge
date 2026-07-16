@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models/User';
+import { YouTubeCache } from '@/lib/models/YouTubeCache';
 import { getSession } from '@/lib/auth';
 import { revokeToken } from '@/lib/youtube';
 
@@ -25,6 +26,9 @@ export async function POST() {
       'youtube.accessToken': null,
       'youtube.refreshToken': null,
     });
+
+    // Clear cached YouTube data
+    await YouTubeCache.deleteOne({ userId: session.userId });
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
