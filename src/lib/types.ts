@@ -41,6 +41,8 @@ export interface Project {
   title: string;
   topic: string;
   description: string;
+  thumbnailPrompt: string;
+  tags: string[];
   settings: ProjectSettings;
   status: GenerationStatus;
   createdAt: number;

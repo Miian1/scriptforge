@@ -42,6 +42,8 @@ function mapProject(p: Record<string, unknown>): Project {
     title: p.title as string,
     topic: p.topic as string,
     description: (p.description as string) || '',
+    thumbnailPrompt: (p.thumbnailPrompt as string) || '',
+    tags: (Array.isArray(p.tags) ? p.tags : []) as string[],
     settings: (p.settings as Project['settings']) || {},
     status: (p.status as Project['status']) || 'draft',
     createdAt: p.createdAt as number,

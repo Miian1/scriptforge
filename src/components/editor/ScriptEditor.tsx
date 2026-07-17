@@ -48,6 +48,8 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import SceneCard from '@/components/editor/SceneCard';
+import ProjectMetaCard from '@/components/editor/ProjectMetaCard';
+import ProjectScoreCard from '@/components/editor/ProjectScoreCard';
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -590,29 +592,37 @@ export default function ScriptEditor() {
             {scenes.length === 0 ? (
               <EmptyState />
             ) : (
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext
-                  items={scenes.map((s) => s.id)}
-                  strategy={verticalListSortingStrategy}
+              <>
+                {/* Fixed metadata & score cards — not part of DnD */}
+                <div className="space-y-4 mb-6">
+                  <ProjectMetaCard project={project} />
+                  <ProjectScoreCard project={project} />
+                </div>
+
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
                 >
-                  <div className="space-y-4">
-                    <AnimatePresence mode="popLayout">
-                      {scenes.map((scene) => (
-                        <SceneCard
-                          key={scene.id}
-                          scene={scene}
-                          project={project}
-                          totalScenes={scenes.length}
-                        />
-                      ))}
-                    </AnimatePresence>
-                  </div>
-                </SortableContext>
-              </DndContext>
+                  <SortableContext
+                    items={scenes.map((s) => s.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="space-y-4">
+                      <AnimatePresence mode="popLayout">
+                        {scenes.map((scene) => (
+                          <SceneCard
+                            key={scene.id}
+                            scene={scene}
+                            project={project}
+                            totalScenes={scenes.length}
+                          />
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              </>
             )}
 
             {/* Add scene button at bottom */}

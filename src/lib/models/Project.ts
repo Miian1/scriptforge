@@ -5,6 +5,8 @@ export interface IProject extends Document {
   title: string;
   topic: string;
   description: string;
+  thumbnailPrompt: string;
+  tags: string[];
   settings: {
     duration: string;
     theme: string;
@@ -23,6 +25,8 @@ const ProjectSchema = new Schema<IProject>(
     title: { type: String, required: true, trim: true, maxlength: 200 },
     topic: { type: String, required: true, trim: true, maxlength: 500 },
     description: { type: String, default: '', trim: true, maxlength: 2000 },
+    thumbnailPrompt: { type: String, default: '', trim: true, maxlength: 2000 },
+    tags: { type: [String], default: [] },
     settings: {
       duration: { type: String, default: 'medium' },
       theme: { type: String, default: 'cinematic' },
