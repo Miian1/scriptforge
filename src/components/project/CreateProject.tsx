@@ -154,8 +154,15 @@ export default function CreateProject() {
       // Use the real MongoDB project from store for generation
       const realProject = useAppStore.getState().projects.find((p) => p.id === mongoId);
       const projectToGenerate = realProject || { ...project, id: mongoId };
-      const scenes = await generateScript(projectToGenerate);
+      const { scenes, metadata } = await generateScript(projectToGenerate);
       const scenesWithCorrectId = scenes.map((s) => ({ ...s, projectId: mongoId }));
+
+      // Save AI-generated metadata (description, tags, thumbnail prompt)
+      await updateProject(mongoId, {
+        description: metadata.videoDescription || projectToGenerate.description || '',
+        thumbnailPrompt: metadata.thumbnailPrompt || '',
+        tags: metadata.tags || [],
+      });
 
       // Advance to "saving" stage
       setCurrentStage(GENERATION_STAGES.length - 1);

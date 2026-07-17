@@ -454,11 +454,17 @@ export default function ScriptEditor() {
     await updateProject(project.id, { status: 'generating' });
 
     try {
-      const newScenes = await generateScript(project);
+      const { scenes: newScenes, metadata } = await generateScript(project);
       // Replace scenes
       for (const scene of newScenes) {
         await addScene(scene);
       }
+      // Save AI-generated metadata
+      await updateProject(project.id, {
+        description: metadata.videoDescription || project.description || '',
+        thumbnailPrompt: metadata.thumbnailPrompt || '',
+        tags: metadata.tags || [],
+      });
       await updateProject(project.id, { status: 'completed' });
       toast.success('Script generated successfully!');
       // Reload scenes

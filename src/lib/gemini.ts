@@ -30,9 +30,14 @@ Research this topic mentally, then produce a complete production script broken i
    - "transitionSuggestion": How to transition to the next scene
    - "importantDetails": Any critical production notes
 
+## ALSO generate these metadata fields at the top level of the JSON (alongside "scenes"):
+1. **videoDescription**: A compelling 3-5 sentence YouTube video description optimized for SEO. Include the main keyword in the first line. Add relevant hashtags at the end. Make it engaging and include a call-to-action.
+2. **tags**: An array of 8-12 relevant YouTube SEO tags (lowercase strings). Mix broad and long-tail keywords related to the topic.
+3. **thumbnailPrompt**: A detailed AI image generation prompt for the video thumbnail. Eye-catching, bold colors, clear text overlay space, conveys the video's main idea at a glance. Style: ${settings.theme}. Max 150 words.
+
 ## CRITICAL RULES
 - Return ONLY valid JSON — no markdown, no code fences, no explanation.
-- The JSON must have a top-level "scenes" array.
+- The JSON must have a top-level "scenes" array AND top-level "videoDescription", "tags", and "thumbnailPrompt" fields.
 - Narration must be in ${settings.language}.
 - All prompts must be in English regardless of video language.
 - Make the narration compelling and natural — avoid robotic phrasing.
@@ -120,7 +125,13 @@ async function callServer(prompt: string, maxTokens: number = 65536): Promise<st
 
 // ---------- JSON parsing ----------
 
-function parseGeminiJSON(text: string): { scenes: Array<Record<string, unknown>> } {
+export interface GeneratedMetadata {
+  videoDescription: string;
+  tags: string[];
+  thumbnailPrompt: string;
+}
+
+export function parseGeminiJSON(text: string): { scenes: Array<Record<string, unknown>> } & Partial<GeneratedMetadata> {
   try {
     const parsed = JSON.parse(text);
     if (parsed.scenes && Array.isArray(parsed.scenes)) return parsed;
@@ -172,7 +183,7 @@ function mapToScene(raw: Record<string, unknown>, index: number, projectId: stri
 
 // ---------- Public API ----------
 
-export async function generateScript(project: Project): Promise<Scene[]> {
+export async function generateScript(project: Project): Promise<{ scenes: Scene[]; metadata: GeneratedMetadata }> {
   const systemPrompt = buildSystemPrompt(project);
 
   const maxRetries = 3;
@@ -182,7 +193,13 @@ export async function generateScript(project: Project): Promise<Scene[]> {
     try {
       const text = await callServer(systemPrompt, 65536);
       const parsed = parseGeminiJSON(text);
-      return parsed.scenes.map((s, i) => mapToScene(s, i, project.id));
+      const scenes = parsed.scenes.map((s, i) => mapToScene(s, i, project.id));
+      const metadata: GeneratedMetadata = {
+        videoDescription: String(parsed.videoDescription || ''),
+        tags: Array.isArray(parsed.tags) ? parsed.tags.map((t: unknown) => String(t).toLowerCase()).slice(0, 15) : [],
+        thumbnailPrompt: String(parsed.thumbnailPrompt || ''),
+      };
+      return { scenes, metadata };
     } catch (err) {
       lastError = err as Error;
       if (attempt < maxRetries - 1) {

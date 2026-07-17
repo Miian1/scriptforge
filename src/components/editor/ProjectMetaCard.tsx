@@ -10,9 +10,10 @@ import {
   Check,
   Copy,
   Sparkles,
+  Wand2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Project } from '@/lib/types';
+import type { Project, Scene } from '@/lib/types';
 import { useAppStore } from '@/lib/store';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +31,7 @@ interface ProjectMetaCardProps {
 
 export default function ProjectMetaCard({ project }: ProjectMetaCardProps) {
   const updateProject = useAppStore((s) => s.updateProject);
+  const scenes = useAppStore((s) => s.scenes);
 
   // Local state for fields
   const [thumbnailPrompt, setThumbnailPrompt] = useState(project.thumbnailPrompt || '');
@@ -107,8 +109,13 @@ export default function ProjectMetaCard({ project }: ProjectMetaCardProps) {
     toast.success(`${label} copied`);
   };
 
-  // AI generate thumbnail prompt
+  // ── AI Generation Functions ──
+
   const [generatingThumb, setGeneratingThumb] = useState(false);
+  const [generatingDesc, setGeneratingDesc] = useState(false);
+  const [generatingTags, setGeneratingTags] = useState(false);
+
+  // AI generate thumbnail prompt
   const handleGenerateThumbnail = async () => {
     if (generatingThumb) return;
     setGeneratingThumb(true);
@@ -150,6 +157,142 @@ Return ONLY the image prompt text, nothing else. No quotes, no explanation. Max 
     }
   };
 
+  // AI generate description
+  const handleGenerateDescription = async () => {
+    if (generatingDesc) return;
+    setGeneratingDesc(true);
+    try {
+      // Build scene summaries for context
+      const sceneSummaries = scenes.slice(0, 5).map((s: Scene) =>
+        `- Scene ${s.sceneNumber}: ${s.title} — ${s.goal || s.narration.slice(0, 80)}...`
+      ).join('\n');
+      const sceneContext = scenes.length > 0
+        ? `\n\nThe video has ${scenes.length} scenes:\n${sceneSummaries}`
+        : '';
+
+      const res = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `You are a YouTube SEO expert. Write a compelling, SEO-optimized YouTube video description for this video:
+
+Title: ${project.title}
+Topic: ${project.topic}
+Current Description: ${project.description || 'None yet'}
+Target Audience: ${project.settings.targetAudience}
+Writing Style: ${project.settings.writingStyle}
+Language: ${project.settings.language}
+${sceneContext}
+
+Requirements:
+- First line: compelling hook with the main keyword
+- 3-5 sentences total, engaging and informative
+- Include a call-to-action (subscribe, like, comment)
+- End with 3-5 relevant hashtags
+- Optimize for YouTube search discovery
+- Write in ${project.settings.language}
+
+Return ONLY the description text. No quotes, no explanation, no markdown.`,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const desc = data.text || data.response || '';
+        if (desc) {
+          setDescription(desc);
+          await updateProject(project.id, { description: desc });
+          showSaved('description');
+          toast.success('Description generated');
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Failed to generate');
+      }
+    } catch {
+      toast.error('Failed to generate description');
+    } finally {
+      setGeneratingDesc(false);
+    }
+  };
+
+  // AI generate tags
+  const handleGenerateTags = async () => {
+    if (generatingTags) return;
+    setGeneratingTags(true);
+    try {
+      const existingTags = currentTags.join(', ');
+      const sceneTitles = scenes.map((s: Scene) => s.title).join(', ');
+
+      const res = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `You are a YouTube SEO tag expert. Generate 10-12 highly relevant YouTube tags for this video:
+
+Title: ${project.title}
+Topic: ${project.topic}
+Description: ${project.description || 'N/A'}
+Scene Titles: ${sceneTitles || 'N/A'}
+Target Audience: ${project.settings.targetAudience}
+${existingTags ? `Existing Tags (avoid duplicates): ${existingTags}` : ''}
+
+Requirements:
+- Mix of broad tags and specific long-tail keywords
+- All lowercase
+- Include the main topic keyword
+- Include trending/related niche tags
+- No duplicates with existing tags
+
+Return ONLY a JSON array of tag strings. Example: ["tag1", "tag2", "tag3"]
+No markdown fences, no explanation, just the JSON array.`,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        let text = data.text || data.response || '';
+        // Parse array from response
+        let tags: string[] = [];
+        try {
+          tags = JSON.parse(text);
+        } catch {
+          const arrMatch = text.match(/\[[\s\S]*?\]/);
+          if (arrMatch) {
+            try { tags = JSON.parse(arrMatch[0]); } catch { /* empty */ }
+          }
+        }
+        if (Array.isArray(tags) && tags.length > 0) {
+          const cleanTags = tags
+            .map((t) => String(t).toLowerCase().trim())
+            .filter((t) => t.length > 0 && t.length <= 30 && !currentTags.includes(t))
+            .slice(0, 15 - currentTags.length);
+
+          if (cleanTags.length > 0) {
+            const newTags = [...currentTags, ...cleanTags];
+            await updateProject(project.id, { tags: newTags });
+            toast.success(`${cleanTags.length} tags generated`);
+          } else {
+            toast.info('No new unique tags to add');
+          }
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Failed to generate tags');
+      }
+    } catch {
+      toast.error('Failed to generate tags');
+    } finally {
+      setGeneratingTags(false);
+    }
+  };
+
+  // Reusable AI button spinner
+  const AiSpinner = ({ active }: { active: boolean }) =>
+    active ? (
+      <span className="size-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+    ) : (
+      <Sparkles className="size-3.5" />
+    );
+
   return (
     <Card className="border-2 border-dashed border-primary/20 bg-primary/[0.02]">
       <CardHeader className="pb-3">
@@ -181,11 +324,7 @@ Return ONLY the image prompt text, nothing else. No quotes, no explanation. Max 
                     onClick={handleGenerateThumbnail}
                     disabled={generatingThumb}
                   >
-                    {generatingThumb ? (
-                      <span className="size-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <Sparkles className="size-3.5" />
-                    )}
+                    <AiSpinner active={generatingThumb} />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>AI generate thumbnail prompt</TooltipContent>
@@ -210,7 +349,7 @@ Return ONLY the image prompt text, nothing else. No quotes, no explanation. Max 
             value={thumbnailPrompt}
             onChange={(e) => handleThumbnailChange(e.target.value)}
             className="min-h-[80px] resize-y text-sm leading-relaxed"
-            placeholder="Describe the ideal thumbnail for this video... or click the sparkle icon to AI-generate one"
+            placeholder="Describe the ideal thumbnail for this video... or click sparkle to AI-generate"
           />
         </div>
 
@@ -228,26 +367,42 @@ Return ONLY the image prompt text, nothing else. No quotes, no explanation. Max 
                 </span>
               )}
             </Label>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-7"
-                  onClick={() => handleCopy(description, 'Description')}
-                  disabled={!description.trim()}
-                >
-                  <Copy className="size-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Copy</TooltipContent>
-            </Tooltip>
+            <div className="flex items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={handleGenerateDescription}
+                    disabled={generatingDesc}
+                  >
+                    <AiSpinner active={generatingDesc} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>AI generate SEO description</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={() => handleCopy(description, 'Description')}
+                    disabled={!description.trim()}
+                  >
+                    <Copy className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Copy</TooltipContent>
+              </Tooltip>
+            </div>
           </div>
           <Textarea
             value={description}
             onChange={(e) => handleDescChange(e.target.value)}
             className="min-h-[80px] resize-y text-sm leading-relaxed"
-            placeholder="Write the YouTube video description — include keywords for SEO..."
+            placeholder="Write the YouTube video description... or click sparkle to AI-generate"
           />
         </div>
 
@@ -255,11 +410,27 @@ Return ONLY the image prompt text, nothing else. No quotes, no explanation. Max 
 
         {/* Tags */}
         <div className="space-y-2">
-          <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-            <Tag className="size-3.5" />
-            Tags
-            <span className="text-muted-foreground/60">({currentTags.length}/15)</span>
-          </Label>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Tag className="size-3.5" />
+              Tags
+              <span className="text-muted-foreground/60">({currentTags.length}/15)</span>
+            </Label>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  onClick={handleGenerateTags}
+                  disabled={generatingTags || currentTags.length >= 15}
+                >
+                  <AiSpinner active={generatingTags} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>AI generate SEO tags</TooltipContent>
+            </Tooltip>
+          </div>
 
           {/* Tag display */}
           {currentTags.length > 0 && (
