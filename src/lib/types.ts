@@ -36,6 +36,19 @@ export interface Scene {
   updatedAt: number;
 }
 
+export interface ScoreEntry {
+  titleScore: number;
+  descriptionScore: number;
+  tagsScore: number;
+  nicheFit: number;
+  trendScore: number;
+  engagementScore: number;
+  seoScore: number;
+  overallScore: number;
+  tip: string;
+  scoredAt: number;
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -45,6 +58,7 @@ export interface Project {
   tags: string[];
   settings: ProjectSettings;
   status: GenerationStatus;
+  scoreHistory: ScoreEntry[];
   createdAt: number;
   updatedAt: number;
 }

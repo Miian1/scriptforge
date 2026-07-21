@@ -46,6 +46,7 @@ function mapProject(p: Record<string, unknown>): Project {
     tags: (Array.isArray(p.tags) ? p.tags : []) as string[],
     settings: (p.settings as Project['settings']) || {},
     status: (p.status as Project['status']) || 'draft',
+    scoreHistory: Array.isArray(p.scoreHistory) ? p.scoreHistory : [],
     createdAt: p.createdAt as number,
     updatedAt: p.updatedAt as number,
   };

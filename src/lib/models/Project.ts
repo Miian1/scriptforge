@@ -1,5 +1,18 @@
 import mongoose, { Schema, type Document } from 'mongoose';
 
+export interface IScoreEntry {
+  titleScore: number;
+  descriptionScore: number;
+  tagsScore: number;
+  nicheFit: number;
+  trendScore: number;
+  engagementScore: number;
+  seoScore: number;
+  overallScore: number;
+  tip: string;
+  scoredAt: number;
+}
+
 export interface IProject extends Document {
   userId: mongoose.Types.ObjectId;
   title: string;
@@ -15,6 +28,7 @@ export interface IProject extends Document {
     targetAudience: string;
   };
   status: 'draft' | 'generating' | 'completed' | 'error';
+  scoreHistory: IScoreEntry[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,6 +49,18 @@ const ProjectSchema = new Schema<IProject>(
       targetAudience: { type: String, default: 'general' },
     },
     status: { type: String, enum: ['draft', 'generating', 'completed', 'error'], default: 'draft' },
+    scoreHistory: [{
+      titleScore: Number,
+      descriptionScore: Number,
+      tagsScore: Number,
+      nicheFit: Number,
+      trendScore: Number,
+      engagementScore: Number,
+      seoScore: Number,
+      overallScore: Number,
+      tip: String,
+      scoredAt: Number,
+    }],
   },
   { timestamps: true }
 );

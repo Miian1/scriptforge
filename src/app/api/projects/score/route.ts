@@ -172,11 +172,43 @@ Return JSON in this exact format:
       scores[key] = Math.max(0, Math.min(100, Math.round(scores[key])));
     }
 
+    // Build score entry with timestamp
+    const scoreEntry = {
+      titleScore: scores.titleScore,
+      descriptionScore: scores.descriptionScore,
+      tagsScore: scores.tagsScore,
+      nicheFit: scores.nicheFit,
+      trendScore: scores.trendScore,
+      engagementScore: scores.engagementScore,
+      seoScore: scores.seoScore,
+      overallScore: scores.overallScore,
+      tip: scores.tip || '',
+      scoredAt: Date.now(),
+    };
+
+    // Push to project's scoreHistory (keep last 20)
+    await ProjectModel.updateOne(
+      { _id: projectId, userId: session.userId },
+      {
+        $push: { scoreHistory: { $each: [scoreEntry], $slice: -20 } },
+      }
+    );
+
     // Increment usage
     user.dailyUsage = { ...usage, aiGenerations: usage.aiGenerations + 1 };
     await user.save();
 
-    return NextResponse.json({ scores });
+    // Re-fetch project to get updated history
+    const updatedProject = await ProjectModel.findOne({
+      _id: projectId,
+      userId: session.userId,
+    }).lean();
+
+    const history = Array.isArray(updatedProject?.scoreHistory)
+      ? updatedProject.scoreHistory
+      : [scoreEntry];
+
+    return NextResponse.json({ scores: scoreEntry, scoreHistory: history });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     return NextResponse.json({ error: message }, { status: 500 });
