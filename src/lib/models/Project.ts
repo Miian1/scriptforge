@@ -47,6 +47,9 @@ const ProjectSchema = new Schema<IProject>(
       language: { type: String, default: 'english' },
       writingStyle: { type: String, default: 'conversational' },
       targetAudience: { type: String, default: 'general' },
+      sceneLength: { type: Number, default: 8 },
+      totalScenes: { type: Number, default: 60 },
+      scenesPerPhase: { type: Number, default: 10 },
     },
     status: { type: String, enum: ['draft', 'generating', 'completed', 'error'], default: 'draft' },
     scoreHistory: [{

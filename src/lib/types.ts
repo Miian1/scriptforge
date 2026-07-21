@@ -12,6 +12,9 @@ export interface ProjectSettings {
   language: VideoLanguage;
   writingStyle: WritingStyle;
   targetAudience: TargetAudience;
+  sceneLength: number;
+  totalScenes: number;
+  scenesPerPhase: number;
 }
 
 export interface SceneNotes {
@@ -69,10 +72,18 @@ export interface AppSettings {
 }
 
 export const DURATION_LABELS: Record<VideoDuration, string> = {
-  short: 'Short (1-3 min)',
-  medium: 'Medium (5-10 min)',
-  long: 'Long (15-30 min)',
+  short: 'Short (2 min)',
+  medium: 'Medium (8 min)',
+  long: 'Long (25 min)',
 };
+
+export const DURATION_SECONDS: Record<VideoDuration, number> = {
+  short: 120,
+  medium: 480,
+  long: 1500,
+};
+
+export const SCENES_PER_PHASE = 10;
 
 export const THEME_LABELS: Record<VideoTheme, string> = {
   realistic: 'Realistic',

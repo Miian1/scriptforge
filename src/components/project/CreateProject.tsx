@@ -1,18 +1,20 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Film, ArrowLeft, Sparkles, Check, AlertCircle, RefreshCw } from 'lucide-react';
+import { Film, ArrowLeft, Sparkles, Check, AlertCircle, RefreshCw, Layers, Clock, Calculator } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
 import { useAppStore } from '@/lib/store';
-import { generateScript } from '@/lib/gemini';
+import { generatePhase } from '@/lib/gemini';
 import type { Project, VideoTheme, WritingStyle, TargetAudience, VideoLanguage, VideoDuration } from '@/lib/types';
 import {
   DURATION_LABELS,
+  DURATION_SECONDS,
+  SCENES_PER_PHASE,
   THEME_LABELS,
   STYLE_LABELS,
   AUDIENCE_LABELS,
@@ -25,6 +27,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 import {
   Form,
   FormControl,
@@ -48,6 +51,8 @@ const formSchema = z.object({
   topic: z.string().min(1, 'Topic is required').max(200),
   description: z.string().max(1000).optional().default(''),
   duration: z.enum(['short', 'medium', 'long']),
+  sceneLengthMode: z.enum(['default', 'custom']),
+  customSceneLength: z.number().min(3).max(60).optional().default(undefined),
   theme: z.enum(['realistic', 'anime', 'cinematic', 'cartoon', '3d-render', 'watercolor', 'pixel-art']),
   language: z.enum(['english', 'spanish', 'french', 'german', 'portuguese', 'japanese', 'korean', 'chinese', 'hindi', 'arabic']),
   writingStyle: z.enum(['conversational', 'professional', 'dramatic', 'educational', 'storytelling', 'humorous']),
@@ -61,7 +66,7 @@ type FormValues = z.infer<typeof formSchema>;
 const GENERATION_STAGES = [
   { active: 'Researching topic...', completed: 'Research complete' },
   { active: 'Building story structure...', completed: 'Story structured' },
-  { active: 'Generating scenes with AI...', completed: 'Scenes generated' },
+  { active: 'Generating Phase 1 scenes...', completed: 'Phase 1 generated' },
   { active: 'Finalizing...', completed: 'Finalized' },
 ] as const;
 
@@ -96,12 +101,30 @@ export default function CreateProject() {
       topic: '',
       description: '',
       duration: 'medium',
+      sceneLengthMode: 'default',
+      customSceneLength: undefined,
       theme: 'cinematic',
       language: 'english',
       writingStyle: 'conversational',
       targetAudience: 'general',
     },
   });
+
+  // Watch duration and scene length for calculations
+  const watchDuration = form.watch('duration');
+  const watchSceneLengthMode = form.watch('sceneLengthMode');
+  const watchCustomSceneLength = form.watch('customSceneLength');
+
+  // Computed scene length
+  const sceneLength = watchSceneLengthMode === 'custom' && watchCustomSceneLength
+    ? watchCustomSceneLength
+    : 8;
+
+  // Computed totals
+  const totalSeconds = DURATION_SECONDS[watchDuration as VideoDuration];
+  const totalScenes = Math.ceil(totalSeconds / sceneLength);
+  const totalPhases = Math.ceil(totalScenes / SCENES_PER_PHASE);
+  const firstPhaseScenes = Math.min(SCENES_PER_PHASE, totalScenes);
 
   // Cleanup timers on unmount
   useEffect(() => {
@@ -120,20 +143,32 @@ export default function CreateProject() {
 
   const startGeneration = useCallback(async (values: FormValues) => {
     const now = Date.now();
+    const sLen = values.sceneLengthMode === 'custom' && values.customSceneLength
+      ? values.customSceneLength
+      : 8;
+    const totalSec = DURATION_SECONDS[values.duration as VideoDuration];
+    const tScenes = Math.ceil(totalSec / sLen);
+    const tPhases = Math.ceil(tScenes / SCENES_PER_PHASE);
 
     const project: Project = {
       id: '',
       title: values.title,
       topic: values.topic,
       description: values.description ?? '',
+      thumbnailPrompt: '',
+      tags: [],
       settings: {
         duration: values.duration as VideoDuration,
         theme: values.theme as VideoTheme,
         language: values.language as VideoLanguage,
         writingStyle: values.writingStyle as WritingStyle,
         targetAudience: values.targetAudience as TargetAudience,
+        sceneLength: sLen,
+        totalScenes: tScenes,
+        scenesPerPhase: SCENES_PER_PHASE,
       },
       status: 'generating',
+      scoreHistory: [],
       createdAt: now,
       updatedAt: now,
     };
@@ -143,7 +178,7 @@ export default function CreateProject() {
     setActiveProjectId(mongoId);
     projectIdRef.current = mongoId;
 
-    // Switch to generating phase (stays on this page)
+    // Switch to generating phase
     setPhase('generating');
     setCurrentStage(0);
     setElapsed(0);
@@ -151,18 +186,29 @@ export default function CreateProject() {
     elapsedTimerRef.current = setInterval(() => setElapsed((t) => t + 1), 1000);
 
     try {
-      // Use the real MongoDB project from store for generation
       const realProject = useAppStore.getState().projects.find((p) => p.id === mongoId);
       const projectToGenerate = realProject || { ...project, id: mongoId };
-      const { scenes, metadata } = await generateScript(projectToGenerate);
-      const scenesWithCorrectId = scenes.map((s) => ({ ...s, projectId: mongoId }));
 
-      // Save AI-generated metadata (description, tags, thumbnail prompt)
-      await updateProject(mongoId, {
-        description: metadata.videoDescription || projectToGenerate.description || '',
-        thumbnailPrompt: metadata.thumbnailPrompt || '',
-        tags: metadata.tags || [],
+      // Generate Phase 1 only
+      const phase1ScenesCount = Math.min(SCENES_PER_PHASE, tScenes);
+      const result = await generatePhase(projectToGenerate, {
+        phaseNumber: 1,
+        totalPhases: tPhases,
+        sceneStart: 1,
+        sceneEnd: phase1ScenesCount,
+        previousPhaseTitles: [],
       });
+
+      const scenesWithCorrectId = result.scenes.map((s) => ({ ...s, projectId: mongoId }));
+
+      // Save AI-generated metadata
+      if (result.metadata) {
+        await updateProject(mongoId, {
+          description: result.metadata.videoDescription || projectToGenerate.description || '',
+          thumbnailPrompt: result.metadata.thumbnailPrompt || '',
+          tags: result.metadata.tags || [],
+        });
+      }
 
       // Advance to "saving" stage
       setCurrentStage(GENERATION_STAGES.length - 1);
@@ -171,14 +217,14 @@ export default function CreateProject() {
       await addScenes(scenesWithCorrectId);
       await updateProject(mongoId, { status: 'completed' });
 
-      // Brief pause to show "Finalized" stage
+      // Brief pause
       await new Promise((r) => setTimeout(r, 800));
 
       // Clean up timers
       if (stageTimerRef.current) clearInterval(stageTimerRef.current);
       if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
 
-      // Pre-load scenes into store, then auto-redirect to editor
+      // Pre-load scenes into store, then redirect to editor
       await loadScenes(mongoId);
       router.push(`/project/${mongoId}`);
     } catch (error) {
@@ -285,9 +331,9 @@ export default function CreateProject() {
             >
               <Sparkles className="h-7 w-7 text-primary" />
             </motion.div>
-            <h2 className="text-2xl font-bold tracking-tight">Generating Your Script</h2>
+            <h2 className="text-2xl font-bold tracking-tight">Generating Phase 1</h2>
             <p className="text-sm text-muted-foreground">
-              {formValuesRef.current?.title && `Crafting scenes for "${formValuesRef.current.title}"`}
+              {formValuesRef.current?.title && `Crafting first ${SCENES_PER_PHASE} scenes for "${formValuesRef.current.title}"`}
             </p>
           </div>
 
@@ -357,7 +403,7 @@ export default function CreateProject() {
 
           {/* Tip */}
           <p className="text-center text-xs text-muted-foreground/60">
-            AI is generating narration, image prompts, and animation prompts for each scene. This may take a moment for complex topics.
+            Generating Phase 1 of {totalPhases}. Remaining phases can be generated from the editor.
           </p>
         </motion.div>
 
@@ -485,13 +531,13 @@ export default function CreateProject() {
 
               <Separator />
 
-              {/* ── Production Settings ──────────────────────────────── */}
+              {/* ── Video Structure ──────────────────────────────────── */}
               <section>
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Production Settings
+                  Video Structure
                 </h2>
 
-                <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
                   <div className="grid gap-4 sm:grid-cols-2">
                     <FormField
                       control={form.control}
@@ -523,6 +569,111 @@ export default function CreateProject() {
                       )}
                     />
 
+                    <FormField
+                      control={form.control}
+                      name="sceneLengthMode"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Scene Length</FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            defaultValue={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select scene length" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="default">8 seconds (default)</SelectItem>
+                              <SelectItem value="custom">Custom length...</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {/* Custom scene length input */}
+                  {watchSceneLengthMode === 'custom' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                    >
+                      <FormField
+                        control={form.control}
+                        name="customSceneLength"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Custom Scene Length (seconds)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min={3}
+                                max={60}
+                                placeholder="e.g. 10"
+                                value={field.value ?? ''}
+                                onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                              />
+                            </FormControl>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Each scene&apos;s narration will be tailored to this length.
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </motion.div>
+                  )}
+
+                  {/* Calculation Preview */}
+                  <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Calculator className="size-4 text-primary" />
+                      Script Breakdown
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Scene Length</p>
+                        <p className="text-sm font-semibold">{sceneLength}s</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Total Scenes</p>
+                        <p className="text-sm font-semibold">{totalScenes}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Phases</p>
+                        <p className="text-sm font-semibold">{totalPhases}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Scenes/Phase</p>
+                        <p className="text-sm font-semibold">{SCENES_PER_PHASE}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Layers className="size-3.5" />
+                      <span>
+                        Phase 1 generates {firstPhaseScenes} scenes. Remaining {totalPhases - 1 > 0
+                          ? `${totalPhases - 1} phase${totalPhases - 1 > 1 ? 's' : ''} can be generated from the editor`
+                          : 'no additional phases needed'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <Separator />
+
+              {/* ── Production Settings ──────────────────────────────── */}
+              <section>
+                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Production Settings
+                </h2>
+
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <FormField
                       control={form.control}
                       name="theme"
@@ -617,7 +768,7 @@ export default function CreateProject() {
                       control={form.control}
                       name="targetAudience"
                       render={({ field }) => (
-                        <FormItem className="sm:col-span-2">
+                        <FormItem>
                           <FormLabel>Target Audience</FormLabel>
                           <Select
                             onValueChange={field.onChange}
@@ -654,8 +805,12 @@ export default function CreateProject() {
                   className="w-full text-base font-semibold"
                 >
                   <Sparkles className="mr-2 h-5 w-5" />
-                  Generate Script
+                  Generate Script (Phase 1 of {totalPhases})
                 </Button>
+                <p className="text-center text-xs text-muted-foreground mt-2">
+                  <Clock className="inline size-3 mr-1" />
+                  Only Phase 1 ({firstPhaseScenes} scenes) is generated now. You can generate remaining phases from the editor.
+                </p>
               </div>
             </form>
           </Form>
