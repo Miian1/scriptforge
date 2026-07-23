@@ -6,12 +6,20 @@ export interface AuthUser {
   email: string;
   role: 'user' | 'admin';
   plan: 'free' | 'pro';
+  planExpiresAt: number;
+  planDaysLeft: number;
   isVerified: boolean;
   youtubeConnected: boolean;
   dailyUsage: {
     date: string;
     projectsCreated: number;
     aiGenerations: number;
+  };
+  stripe: {
+    customerId: string;
+    subscriptionId: string;
+    currentPeriodEnd: number;
+    cancelAtPeriodEnd: boolean;
   };
 }
 
@@ -110,6 +118,19 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (res.ok) {
         const data = await res.json();
         set({ user: data.user, loading: false, checked: true });
+
+        // Notify user if they were auto-downgraded
+        if (data.planDowngraded && data.user?.plan === 'free') {
+          try {
+            const { toast } = await import('sonner');
+            toast.warning('Your Pro plan has expired and your account has been downgraded to Free.', {
+              description: 'Upgrade again anytime to regain full access.',
+              duration: 8000,
+            });
+          } catch {
+            // toast not available (e.g., SSR)
+          }
+        }
       } else {
         set({ user: null, loading: false, checked: true });
       }

@@ -17,6 +17,13 @@ export interface IYouTubeConnection {
   refreshToken: string | null;
 }
 
+export interface IStripeInfo {
+  customerId: string;
+  subscriptionId: string;
+  currentPeriodEnd: number;
+  cancelAtPeriodEnd: boolean;
+}
+
 export interface IUser extends Document {
   name: string;
   email: string;
@@ -25,11 +32,13 @@ export interface IUser extends Document {
   provider: AuthProvider;
   role: UserRole;
   plan: UserPlan;
+  planExpiresAt: number;       // ms timestamp — when the 30-day Pro period ends
   isVerified: boolean;
   verificationToken: string | null;
   verificationTokenExpires: Date | null;
   dailyUsage: IDailyUsage;
   youtube: IYouTubeConnection;
+  stripe: IStripeInfo;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidate: string): Promise<boolean>;
@@ -45,6 +54,13 @@ const YouTubeSchema = new Schema<IYouTubeConnection>({
   connected: { type: Boolean, default: false },
   accessToken: { type: String, default: null },
   refreshToken: { type: String, default: null },
+});
+
+const StripeSchema = new Schema<IStripeInfo>({
+  customerId: { type: String, default: '' },
+  subscriptionId: { type: String, default: '' },
+  currentPeriodEnd: { type: Number, default: 0 },
+  cancelAtPeriodEnd: { type: Boolean, default: false },
 });
 
 const UserSchema = new Schema<IUser>(
@@ -63,6 +79,7 @@ const UserSchema = new Schema<IUser>(
     provider: { type: String, enum: ['email', 'google'], default: 'email' },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
     plan: { type: String, enum: ['free', 'pro'], default: 'free' },
+    planExpiresAt: { type: Number, default: 0 },
     isVerified: { type: Boolean, default: false },
     verificationToken: { type: String, default: null },
     verificationTokenExpires: { type: Date, default: null },
@@ -73,6 +90,10 @@ const UserSchema = new Schema<IUser>(
     youtube: {
       type: YouTubeSchema,
       default: () => ({ connected: false, accessToken: null, refreshToken: null }),
+    },
+    stripe: {
+      type: StripeSchema,
+      default: () => ({ customerId: '', subscriptionId: '', currentPeriodEnd: 0, cancelAtPeriodEnd: false }),
     },
   },
   { timestamps: true }

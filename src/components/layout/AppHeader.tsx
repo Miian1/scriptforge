@@ -7,6 +7,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import ThemeToggle from '@/components/shared/ThemeToggle';
+import NotificationBell from '@/components/layout/NotificationBell';
 
 export default function AppHeader() {
   const { setSidebarOpen, searchAndSetProjects } = useAppStore();
@@ -60,6 +61,9 @@ export default function AppHeader() {
       )}
 
       <div className="flex-1" />
+
+      {/* Notification bell (Pro users) */}
+      <NotificationBell />
 
       {/* Theme toggle */}
       <ThemeToggle />

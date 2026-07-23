@@ -44,14 +44,24 @@ export function formatUserResponse(user: {
   email: string;
   role: string;
   plan?: string;
+  planExpiresAt?: number;
   isVerified: boolean;
   youtube?: { connected?: boolean } | null;
   dailyUsage?: IDailyUsage;
+  stripe?: { customerId?: string; subscriptionId?: string; currentPeriodEnd?: number; cancelAtPeriodEnd?: boolean } | null;
 }) {
   const plan = (user.plan || 'free') as UserPlan;
   const usage = user.dailyUsage
     ? resetIfNewDay(user.dailyUsage, plan)
     : { date: getTodayKey(), projectsCreated: 0, aiGenerations: 0 };
+
+  // Calculate plan days left
+  const planExpiresAt = (user.planExpiresAt as number) || 0;
+  let planDaysLeft = 0;
+  if (plan === 'pro' && planExpiresAt > 0) {
+    const diff = planExpiresAt - Date.now();
+    planDaysLeft = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  }
 
   return {
     id: (user._id as string).toString(),
@@ -59,8 +69,16 @@ export function formatUserResponse(user: {
     email: user.email,
     role: user.role,
     plan,
+    planExpiresAt,
+    planDaysLeft,
     isVerified: user.isVerified,
     youtubeConnected: user.youtube?.connected === true,
     dailyUsage: usage,
+    stripe: {
+      customerId: user.stripe?.customerId || '',
+      subscriptionId: user.stripe?.subscriptionId || '',
+      currentPeriodEnd: user.stripe?.currentPeriodEnd || 0,
+      cancelAtPeriodEnd: user.stripe?.cancelAtPeriodEnd || false,
+    },
   };
 }
