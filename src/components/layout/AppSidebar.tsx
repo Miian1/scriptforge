@@ -11,6 +11,7 @@ import {
   X,
   Crown,
   PlusCircle,
+  ShieldCheck,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePathname, useRouter } from 'next/navigation';
@@ -38,6 +39,10 @@ const NAV_ITEMS = [
   { path: '/plans', label: 'Plans', icon: Crown, primary: true },
   { path: '/settings', label: 'Settings', icon: Settings, primary: false },
   { path: '/about', label: 'About', icon: Info, primary: false },
+];
+
+const ADMIN_NAV_ITEMS = [
+  { path: '/admin', label: 'Admin Panel', icon: ShieldCheck, primary: false },
 ];
 
 // ── Sidebar Palette (theme-aware) ─────────────────────
@@ -245,6 +250,10 @@ function DesktopSidebar() {
   const userName = useAuthStore((s) => s.user?.name);
   const userRole = useAuthStore((s) => s.user?.role);
 
+  const allNavItems = userRole === 'admin'
+    ? [...NAV_ITEMS, ...ADMIN_NAV_ITEMS]
+    : NAV_ITEMS;
+
   return (
     <motion.aside
       animate={{ width: sidebarCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED }}
@@ -281,7 +290,7 @@ function DesktopSidebar() {
 
       {/* Nav */}
       <nav className="flex-1 flex flex-col gap-1 px-2.5 py-2 sidebar-scroll overflow-y-auto">
-        {NAV_ITEMS.map((item) => (
+        {allNavItems.map((item) => (
           <SidebarNavItem
             key={item.path}
             item={item}
@@ -327,6 +336,11 @@ function DesktopSidebar() {
 function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
+  const userRole = useAuthStore((s) => s.user?.role);
+
+  const allNavItems = userRole === 'admin'
+    ? [...NAV_ITEMS, ...ADMIN_NAV_ITEMS]
+    : NAV_ITEMS;
 
   return (
     <AnimatePresence>
@@ -380,7 +394,7 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
 
             {/* Drawer nav */}
             <nav className="flex-1 flex flex-col gap-1 px-3 py-4">
-              {NAV_ITEMS.map((item) => {
+              {allNavItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.path;
                 return (

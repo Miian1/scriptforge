@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 export type UserRole = 'user' | 'admin';
 export type AuthProvider = 'email' | 'google';
 export type UserPlan = 'free' | 'pro';
+export type CustomPlanType = boolean;
 
 export interface IDailyUsage {
   date: string;           // 'YYYY-MM-DD'
@@ -24,6 +25,12 @@ export interface IStripeInfo {
   cancelAtPeriodEnd: boolean;
 }
 
+export interface ICustomPlan {
+  isCustom: boolean;
+  customLabel: string;   // e.g. "Team Plan", "Agency Plan"
+  customDays: number;     // admin-set days for custom plans
+}
+
 export interface IUser extends Document {
   name: string;
   email: string;
@@ -33,6 +40,8 @@ export interface IUser extends Document {
   role: UserRole;
   plan: UserPlan;
   planExpiresAt: number;       // ms timestamp — when the 30-day Pro period ends
+  isCustomPlan: boolean;
+  customPlan: ICustomPlan;
   isVerified: boolean;
   verificationToken: string | null;
   verificationTokenExpires: Date | null;
@@ -63,6 +72,12 @@ const StripeSchema = new Schema<IStripeInfo>({
   cancelAtPeriodEnd: { type: Boolean, default: false },
 });
 
+const CustomPlanSchema = new Schema<ICustomPlan>({
+  isCustom: { type: Boolean, default: false },
+  customLabel: { type: String, default: '' },
+  customDays: { type: Number, default: 0 },
+});
+
 const UserSchema = new Schema<IUser>(
   {
     name: { type: String, required: true, trim: true, maxlength: 100 },
@@ -80,6 +95,7 @@ const UserSchema = new Schema<IUser>(
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
     plan: { type: String, enum: ['free', 'pro'], default: 'free' },
     planExpiresAt: { type: Number, default: 0 },
+    isCustomPlan: { type: Boolean, default: false },
     isVerified: { type: Boolean, default: false },
     verificationToken: { type: String, default: null },
     verificationTokenExpires: { type: Date, default: null },
@@ -94,6 +110,10 @@ const UserSchema = new Schema<IUser>(
     stripe: {
       type: StripeSchema,
       default: () => ({ customerId: '', subscriptionId: '', currentPeriodEnd: 0, cancelAtPeriodEnd: false }),
+    },
+    customPlan: {
+      type: CustomPlanSchema,
+      default: () => ({ isCustom: false, customLabel: '', customDays: 0 }),
     },
   },
   { timestamps: true }
