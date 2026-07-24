@@ -31,6 +31,18 @@ export interface ICustomPlan {
   customDays: number;     // admin-set days for custom plans
 }
 
+export interface IChannelNiche {
+  visualTheme: string;      // e.g. "Cinematic dark tones with neon accents"
+  writingStyle: string;     // e.g. "Casual, energetic, uses humor and pop culture refs"
+  audience: string;         // e.g. "Tech-savvy millennials interested in AI and productivity"
+  language: string;         // e.g. "English (US)"
+  description: string;     // Full paragraphs describing the channel niche
+  channelName: string;      // YouTube channel name
+  channelDescription: string; // YouTube channel about/description
+  channelCategory: string;   // e.g. "Technology", "Education", "Entertainment"
+  channelUrl: string;       // YouTube channel URL
+}
+
 export interface IUser extends Document {
   name: string;
   email: string;
@@ -47,6 +59,7 @@ export interface IUser extends Document {
   verificationTokenExpires: Date | null;
   dailyUsage: IDailyUsage;
   youtube: IYouTubeConnection;
+  channelNiche: IChannelNiche;
   stripe: IStripeInfo;
   createdAt: Date;
   updatedAt: Date;
@@ -70,6 +83,18 @@ const StripeSchema = new Schema<IStripeInfo>({
   subscriptionId: { type: String, default: '' },
   currentPeriodEnd: { type: Number, default: 0 },
   cancelAtPeriodEnd: { type: Boolean, default: false },
+});
+
+const ChannelNicheSchema = new Schema<IChannelNiche>({
+  visualTheme: { type: String, default: '' },
+  writingStyle: { type: String, default: '' },
+  audience: { type: String, default: '' },
+  language: { type: String, default: '' },
+  description: { type: String, default: '' },
+  channelName: { type: String, default: '' },
+  channelDescription: { type: String, default: '' },
+  channelCategory: { type: String, default: '' },
+  channelUrl: { type: String, default: '' },
 });
 
 const CustomPlanSchema = new Schema<ICustomPlan>({
@@ -106,6 +131,10 @@ const UserSchema = new Schema<IUser>(
     youtube: {
       type: YouTubeSchema,
       default: () => ({ connected: false, accessToken: null, refreshToken: null }),
+    },
+    channelNiche: {
+      type: ChannelNicheSchema,
+      default: () => ({ visualTheme: '', writingStyle: '', audience: '', language: '', description: '', channelName: '', channelDescription: '', channelCategory: '', channelUrl: '' }),
     },
     stripe: {
       type: StripeSchema,

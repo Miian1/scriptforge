@@ -23,7 +23,7 @@ import { toast } from 'sonner';
 
 import { useAppStore } from '@/lib/store';
 import { useAuthStore } from '@/lib/auth-store';
-import { regenerateScene } from '@/lib/gemini';
+import { regenerateScene, type ChannelNiche } from '@/lib/gemini';
 import { PLAN_LIMITS } from '@/lib/usage';
 import { v4 as uuidv4 } from 'uuid';
 import type { Scene, Project } from '@/lib/types';
@@ -376,7 +376,8 @@ export default function SceneCard({ scene, project, totalScenes }: SceneCardProp
 
     setRegenerating(true);
     try {
-      const updates = await regenerateScene(project, scene, totalScenes, field);
+      const channelNiche = useAuthStore.getState().user?.channelNiche as ChannelNiche | undefined;
+      const updates = await regenerateScene(project, scene, totalScenes, field, channelNiche || null);
       await updateScene(scene.id, updates);
       toast.success(
         field

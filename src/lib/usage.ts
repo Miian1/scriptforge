@@ -1,4 +1,4 @@
-import type { UserPlan, IDailyUsage } from './models/User';
+import type { UserPlan, IDailyUsage, IChannelNiche } from './models/User';
 
 // ── Plan Limits ────────────────────────────────────────
 
@@ -47,6 +47,7 @@ export function formatUserResponse(user: {
   planExpiresAt?: number;
   isVerified: boolean;
   youtube?: { connected?: boolean } | null;
+  channelNiche?: IChannelNiche | null;
   dailyUsage?: IDailyUsage;
   stripe?: { customerId?: string; subscriptionId?: string; currentPeriodEnd?: number; cancelAtPeriodEnd?: boolean } | null;
 }) {
@@ -63,6 +64,32 @@ export function formatUserResponse(user: {
     planDaysLeft = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   }
 
+  // Channel niche
+  const niche = user.channelNiche;
+  const channelNiche = niche
+    ? {
+        visualTheme: niche.visualTheme || '',
+        writingStyle: niche.writingStyle || '',
+        audience: niche.audience || '',
+        language: niche.language || '',
+        description: niche.description || '',
+        channelName: niche.channelName || '',
+        channelDescription: niche.channelDescription || '',
+        channelCategory: niche.channelCategory || '',
+        channelUrl: niche.channelUrl || '',
+      }
+    : {
+        visualTheme: '',
+        writingStyle: '',
+        audience: '',
+        language: '',
+        description: '',
+        channelName: '',
+        channelDescription: '',
+        channelCategory: '',
+        channelUrl: '',
+      };
+
   return {
     id: (user._id as string).toString(),
     name: user.name,
@@ -73,6 +100,7 @@ export function formatUserResponse(user: {
     planDaysLeft,
     isVerified: user.isVerified,
     youtubeConnected: user.youtube?.connected === true,
+    channelNiche,
     dailyUsage: usage,
     stripe: {
       customerId: user.stripe?.customerId || '',

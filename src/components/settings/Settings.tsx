@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { motion } from 'framer-motion';
-import { Settings, Shield, ShieldCheck, Youtube, Unplug, Loader2, ExternalLink, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Settings, Shield, ShieldCheck, Youtube, Unplug, Loader2, ExternalLink, CheckCircle2, AlertTriangle, Palette, Pen, Eye, Globe, Users, FileText, Radio, Edit3 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import type { AppSettings } from '@/lib/types';
 
@@ -10,10 +10,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { useAuthStore } from '@/lib/auth-store';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
@@ -68,22 +79,59 @@ function Monitor(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+interface NicheFormData {
+  visualTheme: string;
+  writingStyle: string;
+  audience: string;
+  language: string;
+  description: string;
+  channelName: string;
+  channelDescription: string;
+  channelCategory: string;
+  channelUrl: string;
+}
+
+const EMPTY_NICHE: NicheFormData = {
+  visualTheme: '',
+  writingStyle: '',
+  audience: '',
+  language: '',
+  description: '',
+  channelName: '',
+  channelDescription: '',
+  channelCategory: '',
+  channelUrl: '',
+};
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [mounted, setMounted] = useState(false);
-  const { user } = useAuthStore();
+  const { user, checkSession } = useAuthStore();
   const { setTheme: applyTheme, theme: nextTheme } = useTheme();
 
-  // Active theme selection = next-themes value (single source of truth)
   const activeTheme = nextTheme ?? 'system';
-
   const isAdmin = user?.role === 'admin';
   const ytConnected = user?.youtubeConnected === true;
 
   // YouTube connection states
   const [ytLoading, setYtLoading] = useState(false);
   const [ytChannelName, setYtChannelName] = useState<string | null>(null);
+
+  // Niche dialog
+  const [nicheOpen, setNicheOpen] = useState(false);
+  const [nicheSaving, setNicheSaving] = useState(false);
+  const [nicheForm, setNicheForm] = useState<NicheFormData>(EMPTY_NICHE);
+
+  // Current niche data (from user object)
+  const currentNiche = user?.channelNiche;
+
+  // Count filled niche fields
+  const filledFields = currentNiche
+    ? [currentNiche.visualTheme, currentNiche.writingStyle, currentNiche.audience, currentNiche.language, currentNiche.description, currentNiche.channelName, currentNiche.channelCategory].filter(Boolean).length
+    : 0;
+
+  const hasNiche = filledFields > 0;
 
   // Load settings & fetch YouTube channel name
   useEffect(() => {
@@ -119,22 +167,18 @@ export default function SettingsPage() {
     [autoPersist]
   );
 
-  // Theme: update both next-themes and localStorage immediately
   const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
     applyTheme(newTheme);
-    // Persist immediately (no debounce for theme)
     const next = { ...settings, theme: newTheme };
     setSettings(next);
     persistSettings(next);
   };
 
-  // YouTube connect
   const handleConnectYouTube = () => {
     setYtLoading(true);
     window.location.href = '/api/youtube/auth';
   };
 
-  // YouTube disconnect
   const handleDisconnectYouTube = async () => {
     setYtLoading(true);
     try {
@@ -151,6 +195,50 @@ export default function SettingsPage() {
     } finally {
       setYtLoading(false);
     }
+  };
+
+  // Open niche editor — pre-fill from current data
+  const openNicheEditor = () => {
+    setNicheForm({
+      visualTheme: currentNiche?.visualTheme || '',
+      writingStyle: currentNiche?.writingStyle || '',
+      audience: currentNiche?.audience || '',
+      language: currentNiche?.language || '',
+      description: currentNiche?.description || '',
+      channelName: currentNiche?.channelName || '',
+      channelDescription: currentNiche?.channelDescription || '',
+      channelCategory: currentNiche?.channelCategory || '',
+      channelUrl: currentNiche?.channelUrl || '',
+    });
+    setNicheOpen(true);
+  };
+
+  // Save niche
+  const handleSaveNiche = async () => {
+    setNicheSaving(true);
+    try {
+      const res = await fetch('/api/channel-niche', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nicheForm),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Channel niche saved');
+        setNicheOpen(false);
+        checkSession();
+      } else {
+        toast.error(data.error || 'Failed to save');
+      }
+    } catch {
+      toast.error('Network error');
+    } finally {
+      setNicheSaving(false);
+    }
+  };
+
+  const updateNicheField = (key: keyof NicheFormData, value: string) => {
+    setNicheForm((prev) => ({ ...prev, [key]: value }));
   };
 
   return (
@@ -201,16 +289,29 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      {/* YouTube Connection */}
+      {/* ══════════════════════════════════════════════════════ */}
+      {/* YouTube Channel Section */}
+      {/* ══════════════════════════════════════════════════════ */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Youtube className="size-5 text-red-500" />
-            YouTube Channel
-          </CardTitle>
-          <CardDescription>Connect or disconnect your YouTube channel</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Youtube className="size-5 text-red-500" />
+                YouTube Channel
+              </CardTitle>
+              <CardDescription>Connect your channel and configure niche settings</CardDescription>
+            </div>
+            {hasNiche && (
+              <Badge variant="outline" className="text-[10px] gap-1 text-primary border-primary/30">
+                <Palette className="size-2.5" />
+                {filledFields} niche fields set
+              </Badge>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Connection Status */}
           {ytConnected ? (
             <>
               <div className="flex items-center gap-3 rounded-lg border border-green-500/20 bg-green-500/5 p-4">
@@ -276,6 +377,105 @@ export default function SettingsPage() {
               </Button>
             </>
           )}
+
+          <Separator />
+
+          {/* Channel Niche Preview + Edit Button */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Palette className="size-4 text-primary" />
+                Channel Niche & Style
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={openNicheEditor}
+              >
+                <Edit3 className="size-3.5" />
+                {hasNiche ? 'Edit Niche' : 'Set Up Niche'}
+              </Button>
+            </div>
+
+            {hasNiche ? (
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {currentNiche?.channelName && (
+                    <div className="space-y-0.5">
+                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Radio className="size-3" /> Channel
+                      </p>
+                      <p className="text-sm font-medium">{currentNiche.channelName}</p>
+                    </div>
+                  )}
+                  {currentNiche?.channelCategory && (
+                    <div className="space-y-0.5">
+                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <FileText className="size-3" /> Category
+                      </p>
+                      <p className="text-sm font-medium">{currentNiche.channelCategory}</p>
+                    </div>
+                  )}
+                  {currentNiche?.visualTheme && (
+                    <div className="space-y-0.5">
+                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Eye className="size-3" /> Visual Theme
+                      </p>
+                      <p className="text-sm">{currentNiche.visualTheme}</p>
+                    </div>
+                  )}
+                  {currentNiche?.writingStyle && (
+                    <div className="space-y-0.5">
+                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Pen className="size-3" /> Writing Style
+                      </p>
+                      <p className="text-sm">{currentNiche.writingStyle}</p>
+                    </div>
+                  )}
+                  {currentNiche?.audience && (
+                    <div className="space-y-0.5">
+                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Users className="size-3" /> Audience
+                      </p>
+                      <p className="text-sm">{currentNiche.audience}</p>
+                    </div>
+                  )}
+                  {currentNiche?.language && (
+                    <div className="space-y-0.5">
+                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Globe className="size-3" /> Language
+                      </p>
+                      <p className="text-sm">{currentNiche.language}</p>
+                    </div>
+                  )}
+                </div>
+                {currentNiche?.description && (
+                  <div className="pt-1">
+                    <p className="text-[11px] text-muted-foreground mb-1">Niche Description</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">{currentNiche.description}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed bg-muted/20 p-6 text-center">
+                <Palette className="size-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm font-medium">No Channel Niche Set</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                  Define your channel&apos;s visual theme, writing style, audience, and language so AI generates scripts tailored to your brand.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 gap-1.5"
+                  onClick={openNicheEditor}
+                >
+                  <Edit3 className="size-3.5" />
+                  Set Up Your Niche
+                </Button>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -328,6 +528,154 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ══════════════════════════════════════════════════════ */}
+      {/* Edit Channel Niche Dialog */}
+      {/* ══════════════════════════════════════════════════════ */}
+      <Dialog open={nicheOpen} onOpenChange={setNicheOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Palette className="size-4" />
+              Channel Niche & Style
+            </DialogTitle>
+            <DialogDescription>
+              Define your channel&apos;s identity so AI creates content tailored to your brand.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Channel Details */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Radio className="size-3.5 text-red-500" />
+                Channel Details
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs">Channel Name</Label>
+                <Input
+                  placeholder="e.g. TechWithAli"
+                  value={nicheForm.channelName}
+                  onChange={(e) => updateNicheField('channelName', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs">Channel Category</Label>
+                <Input
+                  placeholder="e.g. Technology, Education, Gaming, Cooking"
+                  value={nicheForm.channelCategory}
+                  onChange={(e) => updateNicheField('channelCategory', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs">Channel URL</Label>
+                <Input
+                  placeholder="https://youtube.com/@yourchannel"
+                  value={nicheForm.channelUrl}
+                  onChange={(e) => updateNicheField('channelUrl', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs">Channel Description</Label>
+                <Textarea
+                  placeholder="Describe your YouTube channel, what kind of content you create, your upload schedule, and what makes your channel unique..."
+                  rows={3}
+                  value={nicheForm.channelDescription}
+                  onChange={(e) => updateNicheField('channelDescription', e.target.value)}
+                />
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Niche & Style */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Palette className="size-3.5 text-primary" />
+                Niche & Style
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs flex items-center gap-1">
+                  <Eye className="size-3" /> Visual Theme
+                </Label>
+                <Textarea
+                  placeholder="e.g. Cinematic dark tones with warm lighting, professional thumbnails with bold white text, minimal backgrounds with vibrant accent colors"
+                  rows={2}
+                  value={nicheForm.visualTheme}
+                  onChange={(e) => updateNicheField('visualTheme', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs flex items-center gap-1">
+                  <Pen className="size-3" /> Writing Style
+                </Label>
+                <Textarea
+                  placeholder="e.g. Casual and energetic, uses humor and relatable analogies, speaks directly to the viewer with 'you' language, includes pop culture references"
+                  rows={2}
+                  value={nicheForm.writingStyle}
+                  onChange={(e) => updateNicheField('writingStyle', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs flex items-center gap-1">
+                  <Users className="size-3" /> Target Audience
+                </Label>
+                <Textarea
+                  placeholder="e.g. Tech-savvy millennials and Gen Z viewers aged 18-35 interested in AI tools, productivity, and software development"
+                  rows={2}
+                  value={nicheForm.audience}
+                  onChange={(e) => updateNicheField('audience', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs flex items-center gap-1">
+                  <Globe className="size-3" /> Language
+                </Label>
+                <Input
+                  placeholder="e.g. English (US), Urdu, Hindi, Spanish"
+                  value={nicheForm.language}
+                  onChange={(e) => updateNicheField('language', e.target.value)}
+                />
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Niche Description (the big one) */}
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold flex items-center gap-1">
+                <FileText className="size-3" /> Detailed Niche Description
+              </Label>
+              <p className="text-[11px] text-muted-foreground">
+                Write as much detail as you want. Describe your niche, content pillars, tone, values, topics you cover, what makes you unique. The AI will use this to generate perfectly tailored scripts.
+              </p>
+              <Textarea
+                placeholder="e.g. My channel focuses on reviewing and demonstrating AI tools for content creators. I cover topics like ChatGPT prompts, AI video generation, automation workflows, and productivity hacks. My content pillars are: 1) Tool Reviews - hands-on testing of new AI tools 2) Tutorials - step-by-step guides 3) News & Trends - covering latest AI developments 4) Comparisons - pitting tools against each other. My tone is friendly yet authoritative. I value practical, actionable content over hype. Viewers come to my channel to learn real skills they can apply immediately..."
+                rows={8}
+                className="min-h-[160px]"
+                value={nicheForm.description}
+                onChange={(e) => updateNicheField('description', e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setNicheOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveNiche} disabled={nicheSaving}>
+              {nicheSaving ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+              Save Niche
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }

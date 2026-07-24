@@ -1,5 +1,34 @@
 import type { Project, Scene } from './types';
 
+export interface ChannelNiche {
+  visualTheme: string;
+  writingStyle: string;
+  audience: string;
+  language: string;
+  description: string;
+  channelName: string;
+  channelDescription: string;
+  channelCategory: string;
+  channelUrl: string;
+}
+
+function buildNicheContext(niche?: ChannelNiche | null): string {
+  if (!niche || (!niche.visualTheme && !niche.writingStyle && !niche.audience && !niche.language && !niche.description && !niche.channelName)) {
+    return '';
+  }
+  let ctx = '\n## Channel Niche & Brand Guidelines\nThe user has a YouTube channel with specific style preferences. Follow these guidelines closely:\n';
+  if (niche.channelName) ctx += `- Channel Name: ${niche.channelName}\n`;
+  if (niche.channelCategory) ctx += `- Channel Category: ${niche.channelCategory}\n`;
+  if (niche.channelDescription) ctx += `- About Channel: ${niche.channelDescription}\n`;
+  if (niche.visualTheme) ctx += `- Visual Theme: ${niche.visualTheme}\n`;
+  if (niche.writingStyle) ctx += `- Writing Style: ${niche.writingStyle}\n`;
+  if (niche.audience) ctx += `- Target Audience: ${niche.audience}\n`;
+  if (niche.language) ctx += `- Channel Language: ${niche.language}\n`;
+  if (niche.description) ctx += `\n### Detailed Niche Context:\n${niche.description}\n`;
+  ctx += '\nIMPORTANT: Generate content that matches this channel\'s brand identity. The narration, visual prompts, and overall tone should feel like it belongs on this channel.';
+  return ctx;
+}
+
 // ---------- Prompt templates ----------
 
 export interface PhaseInfo {
@@ -10,7 +39,7 @@ export interface PhaseInfo {
   previousPhaseTitles: string[];
 }
 
-function buildPhasePrompt(project: Project, phase: PhaseInfo): string {
+function buildPhasePrompt(project: Project, phase: PhaseInfo, niche?: ChannelNiche | null): string {
   const { settings, topic, description } = project;
   const sceneLength = settings.sceneLength || 8;
   const scenesInThisPhase = phase.sceneEnd - phase.sceneStart + 1;
@@ -49,7 +78,7 @@ IMPORTANT: Continue the narrative seamlessly from where the previous phase ended
 - Language: ${settings.language}
 - Writing Style: ${settings.writingStyle}
 - Target Audience: ${settings.targetAudience}
-
+${buildNicheContext(niche)}
 ${previousContext}
 
 ## Your Task
@@ -81,7 +110,7 @@ ${metadataSection}
 
 }
 
-function buildSystemPrompt(project: Project): string {
+function buildSystemPrompt(project: Project, niche?: ChannelNiche | null): string {
   const { settings, topic, description } = project;
   const sceneLength = settings.sceneLength || 8;
   const totalDurationSec = (settings.totalScenes || 60) * sceneLength;
@@ -99,6 +128,7 @@ function buildSystemPrompt(project: Project): string {
 - Language: ${settings.language}
 - Writing Style: ${settings.writingStyle}
 - Target Audience: ${settings.targetAudience}
+${buildNicheContext(niche)}
 
 ## Your Task
 Research this topic mentally, then produce a complete production script broken into individual scenes. Each scene's narration MUST be appropriate for a ${sceneLength}-second scene (approximately ${Math.round(sceneLength * 2.5)}-${Math.round(sceneLength * 3.5)} words of spoken text).
@@ -137,7 +167,8 @@ function buildRegenPrompt(
   project: Project,
   scene: Scene,
   totalScenes: number,
-  regenField?: 'narration' | 'imagePrompt' | 'animationPrompt'
+  regenField?: 'narration' | 'imagePrompt' | 'animationPrompt',
+  niche?: ChannelNiche | null
 ): string {
   const sceneLength = project.settings.sceneLength || 8;
 
@@ -150,7 +181,7 @@ Video language: ${project.settings.language}
 Writing style: ${project.settings.writingStyle}
 Target audience: ${project.settings.targetAudience}
 Scene length: ${sceneLength} seconds
-
+${buildNicheContext(niche)}
 This is scene ${scene.sceneNumber} of ${totalScenes} total scenes.
 Generate a compelling, natural narration for this ${sceneLength}-second scene (approximately ${Math.round(sceneLength * 2.5)}-${Math.round(sceneLength * 3.5)} words). Include pacing cues in brackets like [pause], [dramatic music], etc.
 Return ONLY valid JSON with a single key "narration" containing the narration text. No markdown fences.`;
@@ -273,8 +304,8 @@ function mapToScene(raw: Record<string, unknown>, index: number, projectId: stri
 
 // ---------- Public API ----------
 
-export async function generateScript(project: Project): Promise<{ scenes: Scene[]; metadata: GeneratedMetadata }> {
-  const systemPrompt = buildSystemPrompt(project);
+export async function generateScript(project: Project, niche?: ChannelNiche | null): Promise<{ scenes: Scene[]; metadata: GeneratedMetadata }> {
+  const systemPrompt = buildSystemPrompt(project, niche);
 
   const maxRetries = 3;
   let lastError: Error | null = null;
@@ -304,9 +335,10 @@ export async function generateScript(project: Project): Promise<{ scenes: Scene[
 
 export async function generatePhase(
   project: Project,
-  phase: PhaseInfo
+  phase: PhaseInfo,
+  niche?: ChannelNiche | null
 ): Promise<{ scenes: Scene[]; metadata?: GeneratedMetadata }> {
-  const prompt = buildPhasePrompt(project, phase);
+  const prompt = buildPhasePrompt(project, phase, niche);
 
   const maxRetries = 3;
   let lastError: Error | null = null;
@@ -343,9 +375,10 @@ export async function regenerateScene(
   project: Project,
   scene: Scene,
   totalScenes: number,
-  regenField?: 'narration' | 'imagePrompt' | 'animationPrompt'
+  regenField?: 'narration' | 'imagePrompt' | 'animationPrompt',
+  niche?: ChannelNiche | null
 ): Promise<Partial<Scene>> {
-  const prompt = buildRegenPrompt(project, scene, totalScenes, regenField);
+  const prompt = buildRegenPrompt(project, scene, totalScenes, regenField, niche);
 
   for (let attempt = 0; attempt < 3; attempt++) {
     try {

@@ -40,8 +40,9 @@ import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
 
 import { useAppStore } from '@/lib/store';
+import { useAuthStore } from '@/lib/auth-store';
 import { useRouter } from 'next/navigation';
-import { generatePhase, generateScript } from '@/lib/gemini';
+import { generatePhase, generateScript, type ChannelNiche } from '@/lib/gemini';
 import type { Scene, Project } from '@/lib/types';
 import { STATUS_LABELS, SCENES_PER_PHASE } from '@/lib/types';
 
@@ -484,13 +485,15 @@ export default function ScriptEditor() {
     await updateProject(project.id, { status: 'generating' });
 
     try {
+      const channelNiche = useAuthStore.getState().user?.channelNiche as ChannelNiche | undefined;
+
       const result = await generatePhase(project, {
         phaseNumber: phaseNum,
         totalPhases,
         sceneStart,
         sceneEnd,
         previousPhaseTitles: existingTitles,
-      });
+      }, channelNiche || null);
 
       const scenesWithId = result.scenes.map((s) => ({ ...s, projectId: project.id }));
 
@@ -571,7 +574,9 @@ export default function ScriptEditor() {
     await updateProject(project.id, { status: 'generating' });
 
     try {
-      const { scenes: newScenes, metadata } = await generateScript(project);
+      const channelNiche = useAuthStore.getState().user?.channelNiche as ChannelNiche | undefined;
+
+      const { scenes: newScenes, metadata } = await generateScript(project, channelNiche || null);
       for (const scene of newScenes) {
         await addScene(scene);
       }

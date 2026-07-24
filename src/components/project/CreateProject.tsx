@@ -9,8 +9,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
 import { useAppStore } from '@/lib/store';
-import { generatePhase } from '@/lib/gemini';
+import { generatePhase, type ChannelNiche } from '@/lib/gemini';
 import type { Project, VideoTheme, WritingStyle, TargetAudience, VideoLanguage, VideoDuration } from '@/lib/types';
+import { useAuthStore } from '@/lib/auth-store';
 import {
   DURATION_LABELS,
   DURATION_SECONDS,
@@ -189,6 +190,9 @@ export default function CreateProject() {
       const realProject = useAppStore.getState().projects.find((p) => p.id === mongoId);
       const projectToGenerate = realProject || { ...project, id: mongoId };
 
+      // Get channel niche from auth store
+      const channelNiche = useAuthStore.getState().user?.channelNiche as ChannelNiche | undefined;
+
       // Generate Phase 1 only
       const phase1ScenesCount = Math.min(SCENES_PER_PHASE, tScenes);
       const result = await generatePhase(projectToGenerate, {
@@ -197,7 +201,7 @@ export default function CreateProject() {
         sceneStart: 1,
         sceneEnd: phase1ScenesCount,
         previousPhaseTitles: [],
-      });
+      }, channelNiche || null);
 
       const scenesWithCorrectId = result.scenes.map((s) => ({ ...s, projectId: mongoId }));
 

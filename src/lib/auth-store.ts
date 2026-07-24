@@ -21,6 +21,17 @@ export interface AuthUser {
     currentPeriodEnd: number;
     cancelAtPeriodEnd: boolean;
   };
+  channelNiche: {
+    visualTheme: string;
+    writingStyle: string;
+    audience: string;
+    language: string;
+    description: string;
+    channelName: string;
+    channelDescription: string;
+    channelCategory: string;
+    channelUrl: string;
+  };
 }
 
 interface AuthState {
