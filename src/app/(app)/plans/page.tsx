@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 const ADMIN_WHATSAPP = '9203177730490';
-const ADMIN_EMAIL = 'mail@khiizar.com';
+const ADMIN_EMAIL = 'info@khiizar.com';
 const WHATSAPP_LINK = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent('Hi! I want to upgrade to ScriptForge Pro plan via Easypaisa/JazzCash. Please share the payment details.')}`;
 const WHATSAPP_CUSTOM_LINK = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent('Hi! I am interested in a custom plan for ScriptForge. Can we discuss the details?')}`;
 const EMAIL_LINK = `mailto:${ADMIN_EMAIL}?subject=${encodeURIComponent('ScriptForge Custom Plan Inquiry')}&body=${encodeURIComponent('Hi! I am interested in a custom plan for ScriptForge. Please share the available options and pricing.')}`;

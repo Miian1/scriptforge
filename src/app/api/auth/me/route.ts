@@ -49,6 +49,8 @@ export async function GET() {
             await User.findByIdAndUpdate(user._id, {
               plan: 'free',
               planExpiresAt: 0,
+              isCustomPlan: false,
+              customPlan: { isCustom: false, customLabel: '', customDays: 0 },
               stripe: {
                 customerId: '',
                 subscriptionId: '',
@@ -92,6 +94,8 @@ export async function GET() {
       await User.findByIdAndUpdate(user._id, {
         plan: 'free',
         planExpiresAt: 0,
+        isCustomPlan: false,
+        customPlan: { isCustom: false, customLabel: '', customDays: 0 },
         stripe: {
           customerId: '',
           subscriptionId: '',
@@ -100,6 +104,25 @@ export async function GET() {
         },
       });
       console.log(`[Auto-Downgrade] User ${user._id} downgraded to free (cancelAtPeriodEnd + period expired)`);
+      downgraded = true;
+    }
+
+    // ── Generic plan expiry check (admin-upgraded, custom plans, or any Pro without Stripe) ──
+    // If Pro with planExpiresAt set and it's past now, and no active Stripe sub, downgrade.
+    if (
+      !downgraded &&
+      user.plan === 'pro' &&
+      user.planExpiresAt > 0 &&
+      Date.now() > user.planExpiresAt &&
+      !user.stripe?.subscriptionId
+    ) {
+      await User.findByIdAndUpdate(user._id, {
+        plan: 'free',
+        planExpiresAt: 0,
+        isCustomPlan: false,
+        customPlan: { isCustom: false, customLabel: '', customDays: 0 },
+      });
+      console.log(`[Auto-Downgrade] User ${user._id} downgraded to free (planExpiresAt expired, no Stripe sub)`);
       downgraded = true;
     }
 

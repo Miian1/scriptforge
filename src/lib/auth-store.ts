@@ -27,6 +27,7 @@ interface AuthState {
   user: AuthUser | null;
   loading: boolean;
   checked: boolean;
+  _downgradeNotified: boolean; // tracks if we already showed the downgrade toast this session
   // Verification pending state (after register, before email verified)
   pendingVerificationEmail: string | null;
   setPendingVerificationEmail: (email: string | null) => void;
@@ -39,10 +40,11 @@ interface AuthState {
   checkSession: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   loading: true,
   checked: false,
+  _downgradeNotified: false,
   pendingVerificationEmail: null,
 
   setPendingVerificationEmail: (email) => set({ pendingVerificationEmail: email }),
@@ -105,7 +107,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {
       // even if fetch fails, clear local state
     }
-    set({ user: null, checked: true, pendingVerificationEmail: null });
+    set({ user: null, checked: true, pendingVerificationEmail: null, _downgradeNotified: false });
   },
 
   checkSession: async () => {
@@ -119,8 +121,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         const data = await res.json();
         set({ user: data.user, loading: false, checked: true });
 
-        // Notify user if they were auto-downgraded
-        if (data.planDowngraded && data.user?.plan === 'free') {
+        // Notify user if they were JUST auto-downgraded (only once per session)
+        if (data.planDowngraded && data.user?.plan === 'free' && !get()._downgradeNotified) {
+          set({ _downgradeNotified: true });
           try {
             const { toast } = await import('sonner');
             toast.warning('Your Pro plan has expired and your account has been downgraded to Free.', {

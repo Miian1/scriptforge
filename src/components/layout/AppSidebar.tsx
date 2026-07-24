@@ -38,10 +38,10 @@ const NAV_ITEMS = [
   { path: '/projects', label: 'Projects', icon: FolderKanban, primary: true },
   { path: '/plans', label: 'Plans', icon: Crown, primary: true },
   { path: '/settings', label: 'Settings', icon: Settings, primary: false },
-  { path: '/about', label: 'About', icon: Info, primary: false },
 ];
 
 const ADMIN_NAV_ITEMS = [
+  { path: '/about', label: 'About', icon: Info, primary: false },
   { path: '/admin', label: 'Admin Panel', icon: ShieldCheck, primary: false },
 ];
 
@@ -435,8 +435,8 @@ function BottomNavBar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  // Only show Dashboard, Settings, About in bottom bar (New Project is the FAB)
-  const bottomItems = NAV_ITEMS.filter((i) => i.path !== '/create-project');
+  // Only show main nav items in bottom bar (not admin-only items like About)
+  const bottomItems = NAV_ITEMS;
 
   return (
     <div
