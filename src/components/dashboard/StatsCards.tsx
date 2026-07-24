@@ -32,7 +32,7 @@ export default function StatsCards() {
   const aiPercent = Math.min(100, ((usage?.aiGenerations ?? 0) / limits.aiGenerationsPerDay) * 100);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div className="space-y-4">
       {/* ── Left: Project Stats ── */}
       <Card className="h-full">
         <CardContent className="flex items-center gap-4 p-4">

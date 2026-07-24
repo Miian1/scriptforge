@@ -160,69 +160,79 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* YouTube Channel Card */}
-      {loadingChannel ? (
-        <Card>
-          <CardContent className="flex items-center justify-center py-12">
-            <Loader2 className="size-6 animate-spin text-muted-foreground" />
-          </CardContent>
-        </Card>
-      ) : ytConnected && channel ? (
-        <ChannelCard channel={channel} />
-      ) : ytConnected && channelError ? (
-        /* Connected but failed to load channel data */
-        <Card className="border-amber-500/30 bg-amber-500/5">
-          <CardContent className="flex flex-col items-center justify-center py-12 px-6 text-center gap-4">
-            <div className="size-16 rounded-full bg-amber-500/10 flex items-center justify-center">
-              <AlertTriangle className="size-8 text-amber-500" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-lg">Could not load channel data</h3>
-              <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                Your YouTube channel is connected but we couldn't fetch your channel info.
-                Your access token may have expired — try reconnecting.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button variant="outline" onClick={() => fetchYouTubeData(true)} className="gap-2">
-                <RefreshCw className="size-4" />
-                Retry
-              </Button>
-              <Button onClick={handleConnect} disabled={loadingConnect} className="gap-2">
-                {loadingConnect ? <Loader2 className="size-4 animate-spin" /> : <Youtube className="size-4" />}
-                Reconnect YouTube
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Stats + YouTube Channel: side-by-side */}
+      {ytConnected && channel && !channelError ? (
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          {/* Left — Stats Cards */}
+          <div className="lg:col-span-2 space-y-4">
+            <StatsCards />
+          </div>
+          {/* Right — YouTube Channel Card */}
+          <div className="lg:col-span-3">
+            <ChannelCard channel={channel} />
+          </div>
+        </div>
       ) : (
-        /* Not connected CTA */
-        <Card className="border-dashed border-2">
-            <CardContent className="flex flex-col items-center justify-center py-12 px-6 text-center gap-4">
-              <div className="size-16 rounded-full bg-red-500/10 flex items-center justify-center">
-                <Youtube className="size-8 text-red-500" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-lg">Connect Your YouTube Channel</h3>
-                <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                  Link your YouTube account to see your channel stats, recent videos, and
-                  manage everything in one place.
-                </p>
-              </div>
-              <Button onClick={handleConnect} disabled={loadingConnect} className="gap-2">
-                {loadingConnect ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Youtube className="size-4" />
-                )}
-                Connect with Google
-              </Button>
-            </CardContent>
-          </Card>
+        /* Fallback: stats still show when channel not connected */
+        <>
+          {loadingChannel ? (
+            <Card>
+              <CardContent className="flex items-center justify-center py-12">
+                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+              </CardContent>
+            </Card>
+          ) : ytConnected && channelError ? (
+            <Card className="border-amber-500/30 bg-amber-500/5">
+              <CardContent className="flex flex-col items-center justify-center py-12 px-6 text-center gap-4">
+                <div className="size-16 rounded-full bg-amber-500/10 flex items-center justify-center">
+                  <AlertTriangle className="size-8 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">Could not load channel data</h3>
+                  <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                    Your YouTube channel is connected but we couldn&apos;t fetch your channel info.
+                    Your access token may have expired — try reconnecting.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button variant="outline" onClick={() => fetchYouTubeData(true)} className="gap-2">
+                    <RefreshCw className="size-4" />
+                    Retry
+                  </Button>
+                  <Button onClick={handleConnect} disabled={loadingConnect} className="gap-2">
+                    {loadingConnect ? <Loader2 className="size-4 animate-spin" /> : <Youtube className="size-4" />}
+                    Reconnect YouTube
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-dashed border-2">
+              <CardContent className="flex flex-col items-center justify-center py-12 px-6 text-center gap-4">
+                <div className="size-16 rounded-full bg-red-500/10 flex items-center justify-center">
+                  <Youtube className="size-8 text-red-500" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">Connect Your YouTube Channel</h3>
+                  <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                    Link your YouTube account to see your channel stats, recent videos, and
+                    manage everything in one place.
+                  </p>
+                </div>
+                <Button onClick={handleConnect} disabled={loadingConnect} className="gap-2">
+                  {loadingConnect ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Youtube className="size-4" />
+                  )}
+                  Connect with Google
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+          <StatsCards />
+        </>
       )}
-
-      {/* Usage Stats */}
-      <StatsCards />
 
       {/* Recent Videos */}
       {ytConnected && (
