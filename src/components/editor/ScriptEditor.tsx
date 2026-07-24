@@ -52,8 +52,9 @@ import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import SceneCard from '@/components/editor/SceneCard';
-import ProjectMetaCard from '@/components/editor/ProjectMetaCard';
 import ProjectScoreCard from '@/components/editor/ProjectScoreCard';
+import VideoConceptCard from '@/components/editor/VideoConceptCard';
+import ProjectMetaCard from '@/components/editor/ProjectMetaCard';
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -725,10 +726,11 @@ export default function ScriptEditor() {
                   />
                 </div>
 
-                {/* Fixed metadata & score cards */}
+                {/* Score, concept & metadata cards */}
                 <div className="space-y-4 mb-6">
-                  <ProjectMetaCard project={project} />
                   <ProjectScoreCard project={project} />
+                  <VideoConceptCard project={project} />
+                  <ProjectMetaCard project={project} />
                 </div>
 
                 {/* Scenes grouped by phase */}
