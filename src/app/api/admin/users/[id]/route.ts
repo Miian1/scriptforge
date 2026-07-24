@@ -4,7 +4,7 @@ import { User } from '@/lib/models/User';
 import { getSession } from '@/lib/auth';
 
 // PUT /api/admin/users/[id] — update user plan, days, custom flag
-// body: { plan?, planExpiresAt?, isCustomPlan?, customPlan? }
+// body: { plan?, planExpiresAt?, isCustomPlan?, customPlan?, role?, addDays?, setDays?, reduceDays? }
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -21,7 +21,7 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { plan, planExpiresAt, isCustomPlan, customPlan, role } = body;
+    const { plan, planExpiresAt, isCustomPlan, customPlan, role, setDays, reduceDays } = body;
 
     await connectDB();
 
@@ -33,53 +33,83 @@ export async function PUT(
     // Build update object
     const update: Record<string, unknown> = {};
 
-    // Update plan
+    // ── Plan change ──
     if (plan && ['free', 'pro'].includes(plan)) {
       update.plan = plan;
-      // If downgrading to free, clear expiry
+      // If downgrading to free, clear everything
       if (plan === 'free') {
         update.planExpiresAt = 0;
         update.isCustomPlan = false;
         update.customPlan = { isCustom: false, customLabel: '', customDays: 0 };
       }
-      // If upgrading to pro and no expiry set, default to 30 days
-      if (plan === 'pro' && !planExpiresAt && (!user.planExpiresAt || user.planExpiresAt <= Date.now())) {
-        update.planExpiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000;
-      }
     }
 
-    // Set plan expiry (days from now)
+    // ── Set exact expiry timestamp ──
     if (planExpiresAt !== undefined && planExpiresAt !== null) {
       update.planExpiresAt = planExpiresAt;
     }
 
-    // Add days to existing expiry
+    // ── Add days to existing expiry ──
     if (body.addDays && typeof body.addDays === 'number' && body.addDays > 0) {
-      const currentExpiry = user.planExpiresAt && user.planExpiresAt > Date.now()
+      const base = user.planExpiresAt && user.planExpiresAt > Date.now()
         ? user.planExpiresAt
         : Date.now();
-      update.planExpiresAt = currentExpiry + body.addDays * 24 * 60 * 60 * 1000;
-      // Ensure plan is pro when adding days
-      if (user.plan !== 'pro') {
-        update.plan = 'pro';
+      update.planExpiresAt = base + body.addDays * 24 * 60 * 60 * 1000;
+      if (user.plan !== 'pro') update.plan = 'pro';
+    }
+
+    // ── Reduce days from existing expiry ──
+    if (reduceDays && typeof reduceDays === 'number' && reduceDays > 0) {
+      if (user.planExpiresAt && user.planExpiresAt > Date.now()) {
+        const reduced = user.planExpiresAt - reduceDays * 24 * 60 * 60 * 1000;
+        // Don't go below now
+        update.planExpiresAt = Math.max(Date.now(), reduced);
+        // If reduced to 0 or below now, downgrade to free
+        if (update.planExpiresAt <= Date.now()) {
+          update.plan = 'free';
+          update.planExpiresAt = 0;
+          update.isCustomPlan = false;
+          update.customPlan = { isCustom: false, customLabel: '', customDays: 0 };
+        }
       }
     }
 
-    // Custom plan flag
+    // ── Set exact number of days from now ──
+    if (setDays !== undefined && setDays !== null && typeof setDays === 'number') {
+      if (setDays <= 0) {
+        update.plan = 'free';
+        update.planExpiresAt = 0;
+        update.isCustomPlan = false;
+        update.customPlan = { isCustom: false, customLabel: '', customDays: 0 };
+      } else {
+        update.planExpiresAt = Date.now() + setDays * 24 * 60 * 60 * 1000;
+        if (user.plan !== 'pro') update.plan = 'pro';
+      }
+    }
+
+    // ── Custom plan ──
     if (isCustomPlan !== undefined) {
       update.isCustomPlan = isCustomPlan;
     }
 
-    // Custom plan details
     if (customPlan && typeof customPlan === 'object') {
-      update.customPlan = {
+      const newCustomPlan = {
         isCustom: customPlan.isCustom ?? user.customPlan?.isCustom ?? false,
         customLabel: customPlan.customLabel || user.customPlan?.customLabel || '',
-        customDays: customPlan.customDays || user.customPlan?.customDays || 0,
+        customDays: customPlan.customDays ?? user.customPlan?.customDays ?? 0,
       };
+
+      update.customPlan = newCustomPlan;
+
+      // ── Custom plan priority: when custom is enabled, use customDays as the plan expiry ──
+      if (newCustomPlan.isCustom && newCustomPlan.customDays > 0) {
+        update.planExpiresAt = Date.now() + newCustomPlan.customDays * 24 * 60 * 60 * 1000;
+        update.plan = 'pro'; // custom plans always have pro access
+        update.isCustomPlan = true;
+      }
     }
 
-    // Update role (admin can promote/demote)
+    // ── Role ──
     if (role && ['user', 'admin'].includes(role)) {
       update.role = role;
     }

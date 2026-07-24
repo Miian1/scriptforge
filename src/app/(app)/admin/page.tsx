@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShieldCheck, Users, Crown, Zap, Search, Loader2, ChevronDown,
-  Edit3, Trash2, X, Check, Clock, Star, Eye, UserCog,
-  AlertTriangle, RefreshCw, Plus, Minus
+  Edit3, Trash2, X, Check, Clock, Star, UserCog,
+  AlertTriangle, RefreshCw, Plus, Minus, CalendarDays, Settings
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -50,6 +50,15 @@ function formatDate(timestamp: string | number): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function formatExpiryDate(timestamp: number): string {
+  if (!timestamp || timestamp <= 0) return '—';
+  const date = new Date(timestamp);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ── Days editing mode ──
+type DaysEditMode = 'add' | 'reduce' | 'set';
+
 export default function AdminPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -63,11 +72,12 @@ export default function AdminPage() {
 
   // Edit form state
   const [editPlan, setEditPlan] = useState('free');
-  const [editAddDays, setEditAddDays] = useState(0);
   const [editIsCustom, setEditIsCustom] = useState(false);
   const [editCustomLabel, setEditCustomLabel] = useState('');
   const [editCustomDays, setEditCustomDays] = useState(0);
   const [editRole, setEditRole] = useState('user');
+  const [daysEditMode, setDaysEditMode] = useState<DaysEditMode>('add');
+  const [daysValue, setDaysValue] = useState(0);
 
   // Redirect non-admin
   useEffect(() => {
@@ -117,11 +127,65 @@ export default function AdminPage() {
   const openEdit = (u: AdminUser) => {
     setEditUser(u);
     setEditPlan(u.plan);
-    setEditAddDays(0);
     setEditIsCustom(u.isCustomPlan);
     setEditCustomLabel(u.customPlan?.customLabel || '');
     setEditCustomDays(u.customPlan?.customDays || 0);
     setEditRole(u.role);
+    setDaysEditMode('add');
+    setDaysValue(0);
+  };
+
+  // ── Compute preview of what days will be after save ──
+  const previewDaysLeft = (): number => {
+    if (!editUser) return 0;
+    if (editPlan === 'free') return 0;
+
+    // If custom is ON and has custom days, those take priority
+    if (editIsCustom && editCustomDays > 0) {
+      return editCustomDays;
+    }
+
+    // Base expiry
+    let baseExpiry = editUser.planExpiresAt && editUser.planExpiresAt > Date.now()
+      ? editUser.planExpiresAt
+      : Date.now();
+
+    if (daysEditMode === 'add' && daysValue > 0) {
+      baseExpiry = baseExpiry + daysValue * 24 * 60 * 60 * 1000;
+    } else if (daysEditMode === 'reduce' && daysValue > 0) {
+      baseExpiry = Math.max(Date.now(), baseExpiry - daysValue * 24 * 60 * 60 * 1000);
+    } else if (daysEditMode === 'set') {
+      if (daysValue <= 0) return 0;
+      baseExpiry = Date.now() + daysValue * 24 * 60 * 60 * 1000;
+    }
+
+    const diff = baseExpiry - Date.now();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  };
+
+  const previewExpiryDate = (): string => {
+    if (!editUser) return '—';
+    if (editPlan === 'free') return 'N/A';
+
+    if (editIsCustom && editCustomDays > 0) {
+      const d = new Date(Date.now() + editCustomDays * 24 * 60 * 60 * 1000);
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    let baseExpiry = editUser.planExpiresAt && editUser.planExpiresAt > Date.now()
+      ? editUser.planExpiresAt
+      : Date.now();
+
+    if (daysEditMode === 'add' && daysValue > 0) {
+      baseExpiry = baseExpiry + daysValue * 24 * 60 * 60 * 1000;
+    } else if (daysEditMode === 'reduce' && daysValue > 0) {
+      baseExpiry = Math.max(Date.now(), baseExpiry - daysValue * 24 * 60 * 60 * 1000);
+    } else if (daysEditMode === 'set') {
+      if (daysValue <= 0) return 'N/A';
+      baseExpiry = Date.now() + daysValue * 24 * 60 * 60 * 1000;
+    }
+
+    return new Date(baseExpiry).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   // Save user
@@ -139,8 +203,16 @@ export default function AdminPage() {
           customDays: editCustomDays,
         },
       };
-      if (editAddDays > 0) {
-        body.addDays = editAddDays;
+
+      // Days operations (only when not custom, since custom takes priority)
+      if (!editIsCustom || editCustomDays <= 0) {
+        if (daysEditMode === 'add' && daysValue > 0) {
+          body.addDays = daysValue;
+        } else if (daysEditMode === 'reduce' && daysValue > 0) {
+          body.reduceDays = daysValue;
+        } else if (daysEditMode === 'set') {
+          body.setDays = daysValue;
+        }
       }
 
       const res = await fetch(`/api/admin/users/${editUser.id}`, {
@@ -276,7 +348,7 @@ export default function AdminPage() {
             All Users
             <Badge variant="secondary" className="text-[10px]">{filteredUsers.length}</Badge>
           </CardTitle>
-          <CardDescription>Click edit to change plans, add days, or set custom plans</CardDescription>
+          <CardDescription>Click edit to change plans, add/reduce days, or set custom plans</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
@@ -345,7 +417,7 @@ export default function AdminPage() {
                       </td>
                       <td className="px-4 py-3">
                         {u.plan === 'pro' ? (
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex flex-col gap-0.5">
                             <span className={cn(
                               'text-sm font-semibold',
                               u.planDaysLeft <= 3 ? 'text-red-500' : u.planDaysLeft <= 7 ? 'text-amber-500' : 'text-foreground'
@@ -354,7 +426,7 @@ export default function AdminPage() {
                             </span>
                             {u.planExpiresAt > 0 && (
                               <span className="text-[10px] text-muted-foreground">
-                                ({formatDate(u.planExpiresAt)})
+                                {formatExpiryDate(u.planExpiresAt)}
                               </span>
                             )}
                           </div>
@@ -364,10 +436,17 @@ export default function AdminPage() {
                       </td>
                       <td className="px-4 py-3">
                         {u.isCustomPlan ? (
-                          <Badge className="text-[10px] gap-1" variant="outline">
-                            <Star className="size-2.5" />
-                            {u.customPlan?.customLabel || 'Custom'}
-                          </Badge>
+                          <div className="flex flex-col gap-0.5">
+                            <Badge className="text-[10px] gap-1 w-fit" variant="outline">
+                              <Star className="size-2.5" />
+                              {u.customPlan?.customLabel || 'Custom'}
+                            </Badge>
+                            {u.customPlan?.customDays > 0 && (
+                              <span className="text-[10px] text-muted-foreground">
+                                {u.customPlan.customDays}d plan
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
@@ -426,23 +505,25 @@ export default function AdminPage() {
         </CardContent>
       </Card>
 
+      {/* ══════════════════════════════════════════════════════ */}
       {/* ── Edit User Dialog ── */}
+      {/* ══════════════════════════════════════════════════════ */}
       <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserCog className="size-4" />
               Edit User
             </DialogTitle>
             <DialogDescription>
-              Modify plan, add days, or set custom plan for {editUser?.name}
+              Modify plan, days, or set custom plan for {editUser?.name}
             </DialogDescription>
           </DialogHeader>
 
           {editUser && (
             <div className="space-y-4 py-2">
-              {/* Current info */}
-              <div className="rounded-lg bg-muted/50 p-3 space-y-1">
+              {/* ── Current Info ── */}
+              <div className="rounded-lg bg-muted/50 p-3 space-y-1.5">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Email</span>
                   <span className="font-medium text-xs">{editUser.email}</span>
@@ -457,11 +538,17 @@ export default function AdminPage() {
                     {editUser.plan === 'pro' ? `${editUser.planDaysLeft} days` : '—'}
                   </span>
                 </div>
+                {editUser.planExpiresAt > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Expires On</span>
+                    <span className="text-xs">{formatExpiryDate(editUser.planExpiresAt)}</span>
+                  </div>
+                )}
               </div>
 
               <Separator />
 
-              {/* Plan selector */}
+              {/* ── Plan Selector ── */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Plan</label>
                 <Select value={editPlan} onValueChange={setEditPlan}>
@@ -485,42 +572,88 @@ export default function AdminPage() {
                 </Select>
               </div>
 
-              {/* Add days */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Add Days</label>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="size-8"
-                    onClick={() => setEditAddDays(Math.max(0, editAddDays - 7))}
-                  >
-                    <Minus className="size-3" />
-                  </Button>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={365}
-                    value={editAddDays}
-                    onChange={(e) => setEditAddDays(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-24 text-center"
-                  />
-                  <span className="text-xs text-muted-foreground">days</span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="size-8"
-                    onClick={() => setEditAddDays(Math.min(365, editAddDays + 7))}
-                  >
-                    <Plus className="size-3" />
-                  </Button>
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Will add to current expiry. Setting to Pro if currently Free.
-                </p>
-              </div>
+              {/* ── Days Editing Section (hidden when plan is Free) ── */}
+              {editPlan === 'pro' && (
+                <div className="space-y-3 rounded-lg border p-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <CalendarDays className="size-4 text-primary" />
+                    Plan Duration
+                  </div>
 
-              {/* Custom plan toggle */}
+                  {/* Mode selector: Add / Reduce / Set */}
+                  <div className="flex items-center gap-1">
+                    {([
+                      { mode: 'add' as DaysEditMode, label: 'Add', icon: Plus, color: 'text-green-600' },
+                      { mode: 'reduce' as DaysEditMode, label: 'Reduce', icon: Minus, color: 'text-red-500' },
+                      { mode: 'set' as DaysEditMode, label: 'Set Exact', icon: Settings, color: 'text-blue-500' },
+                    ]).map(({ mode, label, icon: Icon, color }) => (
+                      <Button
+                        key={mode}
+                        variant={daysEditMode === mode ? 'default' : 'outline'}
+                        size="sm"
+                        className={cn('gap-1 text-xs', daysEditMode !== mode && 'text-muted-foreground')}
+                        onClick={() => { setDaysEditMode(mode); setDaysValue(0); }}
+                      >
+                        <Icon className={cn('size-3', daysEditMode === mode ? color : '')} />
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+
+                  {/* Days value input with +/- buttons */}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-8"
+                      onClick={() => setDaysValue(Math.max(0, daysValue - (daysEditMode === 'set' ? 1 : 7)))}
+                    >
+                      <Minus className="size-3" />
+                    </Button>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={daysEditMode === 'set' ? 365 : 365}
+                      value={daysValue}
+                      onChange={(e) => setDaysValue(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-24 text-center"
+                    />
+                    <span className="text-xs text-muted-foreground">days</span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-8"
+                      onClick={() => setDaysValue(Math.min(365, daysValue + (daysEditMode === 'set' ? 1 : 7)))}
+                    >
+                      <Plus className="size-3" />
+                    </Button>
+                  </div>
+
+                  {/* Description text per mode */}
+                  <p className="text-[11px] text-muted-foreground">
+                    {daysEditMode === 'add' && 'Add days to the current expiry. If expired, starts from today.'}
+                    {daysEditMode === 'reduce' && 'Reduce days from the current expiry. Will not go below today.'}
+                    {daysEditMode === 'set' && 'Set the exact number of days from today. Replaces current expiry.'}
+                  </p>
+
+                  {/* Quick preset buttons */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[7, 14, 30, 60, 90].map((d) => (
+                      <Button
+                        key={d}
+                        variant="ghost"
+                        size="sm"
+                        className="text-[11px] h-7 px-2"
+                        onClick={() => setDaysValue(d)}
+                      >
+                        {d}d
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Custom Plan Toggle ── */}
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-2">
                   <Star className="size-3.5 text-amber-500" />
@@ -530,7 +663,7 @@ export default function AdminPage() {
                   <Button
                     variant={editIsCustom ? 'default' : 'outline'}
                     size="sm"
-                    onClick={() => setEditIsCustom(true)}
+                    onClick={() => { setEditIsCustom(true); if (editPlan !== 'pro') setEditPlan('pro'); }}
                   >
                     <Check className="size-3 mr-1" />
                     Yes
@@ -544,9 +677,12 @@ export default function AdminPage() {
                     No
                   </Button>
                 </div>
+                <p className="text-[11px] text-muted-foreground">
+                  When enabled, custom plan days take priority over regular add/reduce/set days.
+                </p>
               </div>
 
-              {/* Custom plan details */}
+              {/* ── Custom Plan Details ── */}
               <AnimatePresence>
                 {editIsCustom && (
                   <motion.div
@@ -555,31 +691,98 @@ export default function AdminPage() {
                     exit={{ opacity: 0, height: 0 }}
                     className="space-y-3 overflow-hidden"
                   >
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium">Custom Plan Label</label>
-                      <Input
-                        placeholder="e.g. Team Plan, Agency Plan"
-                        value={editCustomLabel}
-                        onChange={(e) => setEditCustomLabel(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium">Custom Duration (days)</label>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={365}
-                        value={editCustomDays}
-                        onChange={(e) => setEditCustomDays(parseInt(e.target.value) || 0)}
-                      />
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-3">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                        <Star className="size-3.5" />
+                        Custom Plan Configuration
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Plan Label</label>
+                        <Input
+                          placeholder="e.g. Team Plan, Agency Plan, VIP"
+                          value={editCustomLabel}
+                          onChange={(e) => setEditCustomLabel(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Custom Duration (days)</label>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="size-8"
+                            onClick={() => setEditCustomDays(Math.max(0, editCustomDays - 1))}
+                          >
+                            <Minus className="size-3" />
+                          </Button>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={365}
+                            value={editCustomDays}
+                            onChange={(e) => setEditCustomDays(Math.max(0, parseInt(e.target.value) || 0))}
+                            className="w-24 text-center"
+                          />
+                          <span className="text-xs text-muted-foreground">days</span>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="size-8"
+                            onClick={() => setEditCustomDays(Math.min(365, editCustomDays + 1))}
+                          >
+                            <Plus className="size-3" />
+                          </Button>
+                        </div>
+                        <p className="text-[11px] text-amber-600/70 dark:text-amber-400/70">
+                          This will set the plan expiry to exactly this many days from now, overriding any other day changes.
+                        </p>
+                      </div>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
 
+              {/* ── Live Preview ── */}
+              {editPlan === 'pro' && (
+                <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 space-y-1.5">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+                    <Eye className="size-3.5" />
+                    Preview After Save
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Plan</span>
+                    <span className="font-medium text-primary">Pro</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Days Left</span>
+                    <span className={cn(
+                      'font-semibold',
+                      previewDaysLeft() <= 3 ? 'text-red-500' : previewDaysLeft() <= 7 ? 'text-amber-500' : 'text-foreground'
+                    )}>
+                      {previewDaysLeft()} days
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Expires On</span>
+                    <span className="text-xs font-medium">{previewExpiryDate()}</span>
+                  </div>
+                  {editIsCustom && editCustomDays > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Custom</span>
+                      <Badge variant="outline" className="text-[10px] gap-1">
+                        <Star className="size-2.5" />
+                        {editCustomLabel || 'Custom'} ({editCustomDays}d)
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <Separator />
 
-              {/* Role */}
+              {/* ── Role ── */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Role</label>
                 <Select value={editRole} onValueChange={setEditRole}>
@@ -595,7 +798,7 @@ export default function AdminPage() {
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
             <Button onClick={handleSave} disabled={saving}>
               {saving ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
@@ -605,7 +808,9 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ══════════════════════════════════════════════════════ */}
       {/* ── Delete Confirm Dialog ── */}
+      {/* ══════════════════════════════════════════════════════ */}
       <Dialog open={!!deleteUser} onOpenChange={() => setDeleteUser(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
