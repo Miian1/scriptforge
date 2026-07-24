@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
         narration: s.narration,
         imagePrompt: s.imagePrompt,
         animationPrompt: s.animationPrompt,
+        characterIds: s.characterIds || [],
         notes: s.notes,
         createdAt: new Date(s.createdAt).getTime(),
         updatedAt: new Date(s.updatedAt).getTime(),
@@ -78,6 +79,7 @@ export async function POST(req: NextRequest) {
       narration: body.narration || '',
       imagePrompt: body.imagePrompt || '',
       animationPrompt: body.animationPrompt || '',
+      characterIds: body.characterIds || [],
       notes: body.notes || {},
     });
 
@@ -92,6 +94,7 @@ export async function POST(req: NextRequest) {
         narration: scene.narration,
         imagePrompt: scene.imagePrompt,
         animationPrompt: scene.animationPrompt,
+        characterIds: scene.characterIds || [],
         notes: scene.notes,
         createdAt: new Date(scene.createdAt).getTime(),
         updatedAt: new Date(scene.updatedAt).getTime(),
@@ -142,6 +145,7 @@ export async function PUT(req: NextRequest) {
         narration: updated!.narration,
         imagePrompt: updated!.imagePrompt,
         animationPrompt: updated!.animationPrompt,
+        characterIds: updated!.characterIds || [],
         notes: updated!.notes,
         createdAt: new Date(updated!.createdAt).getTime(),
         updatedAt: new Date(updated!.updatedAt).getTime(),

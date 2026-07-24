@@ -17,6 +17,34 @@ export interface ProjectSettings {
   scenesPerPhase: number;
 }
 
+export interface CharacterDesign {
+  characterName: string;
+  characterType: string;
+  species: string;
+  personality: string;
+  artStyle: string;
+  primaryColor: string;
+  secondaryColor: string;
+  outlineColor: string;
+  headShape: string;
+  bodyShape: string;
+  eyeShape: string;
+  mouthStyle: string;
+  accessories: string;
+  theme: string;
+  animationStyle: string;
+}
+
+export interface Character {
+  id: string;
+  projectId: string;
+  name: string;
+  design: CharacterDesign;
+  imagePrompt: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface SceneNotes {
   emotion: string;
   visualFocus: string;
@@ -34,6 +62,7 @@ export interface Scene {
   narration: string;
   imagePrompt: string;
   animationPrompt: string;
+  characterIds: string[];
   notes: SceneNotes;
   createdAt: number;
   updatedAt: number;

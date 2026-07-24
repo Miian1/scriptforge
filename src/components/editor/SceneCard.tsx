@@ -16,6 +16,7 @@ import {
   Loader2,
   Check,
   StickyNote,
+  UserCircle,
 } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -297,6 +298,60 @@ function NotesSection({
   );
 }
 
+// ---- Character Selector ----
+function CharacterSelector({ scene }: { scene: Scene }) {
+  const characters = useAppStore((s) => s.characters);
+  const updateScene = useAppStore((s) => s.updateScene);
+  const sceneCharacterIds = scene.characterIds || [];
+
+  const handleToggle = (charId: string) => {
+    let newIds: string[];
+    if (sceneCharacterIds.includes(charId)) {
+      newIds = sceneCharacterIds.filter((id) => id !== charId);
+    } else {
+      newIds = [...sceneCharacterIds, charId];
+    }
+    updateScene(scene.id, { characterIds: newIds });
+  };
+
+  if (characters.length === 0) return null;
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+        <UserCircle className="size-3.5" />
+        Characters in Scene
+      </Label>
+      <div className="flex flex-wrap gap-1.5">
+        {characters.map((char) => {
+          const isSelected = sceneCharacterIds.includes(char.id);
+          return (
+            <button
+              key={char.id}
+              type="button"
+              onClick={() => handleToggle(char.id)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${
+                isSelected
+                  ? 'bg-primary/15 text-primary border-primary/30 ring-1 ring-primary/20'
+                  : 'bg-muted/50 text-muted-foreground border-border/50 hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              {isSelected && <Check className="size-3" />}
+              <UserCircle className="size-3" />
+              {char.name || 'Untitled'}
+            </button>
+          );
+        })}
+      </div>
+      {sceneCharacterIds.length > 0 && (
+        <p className="text-[10px] text-muted-foreground/60">
+          {sceneCharacterIds.length} character{sceneCharacterIds.length > 1 ? 's' : ''} assigned to this scene
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ---- Main SceneCard ----
 interface SceneCardProps {
   scene: Scene;
@@ -566,6 +621,9 @@ export default function SceneCard({ scene, project, totalScenes }: SceneCardProp
             <CollapsibleContent>
               <div className="px-3 pb-4 sm:px-4 space-y-4">
                 <Separator />
+
+                {/* Character Assignment */}
+                <CharacterSelector scene={scene} />
 
                 {/* Scene Goal */}
                 <div className="space-y-1.5">

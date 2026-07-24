@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Project, Scene } from './types';
+import type { Project, Scene, Character } from './types';
 
 interface AppState {
   // Editor state
@@ -26,6 +26,14 @@ interface AppState {
   updateScene: (id: string, changes: Partial<Scene>) => Promise<void>;
   removeScene: (id: string) => Promise<void>;
   reorderScenes: (scenes: Scene[]) => Promise<void>;
+
+  // Characters
+  characters: Character[];
+  charactersLoaded: boolean;
+  loadCharacters: (projectId: string) => Promise<void>;
+  addCharacter: (character: Character) => Promise<void>;
+  updateCharacter: (id: string, changes: Partial<Character>) => Promise<void>;
+  removeCharacter: (id: string) => Promise<void>;
 
   // Sidebar
   sidebarOpen: boolean;
@@ -73,9 +81,27 @@ function mapScene(s: Record<string, unknown>): Scene {
     narration: (s.narration as string) || '',
     imagePrompt: (s.imagePrompt as string) || '',
     animationPrompt: (s.animationPrompt as string) || '',
+    characterIds: Array.isArray(s.characterIds) ? s.characterIds : [],
     notes: (s.notes as Scene['notes']) || { emotion: '', visualFocus: '', transitionSuggestion: '', importantDetails: '' },
     createdAt: s.createdAt as number,
     updatedAt: s.updatedAt as number,
+  };
+}
+
+function mapCharacter(c: Record<string, unknown>): Character {
+  return {
+    id: c.id as string,
+    projectId: c.projectId as string,
+    name: (c.name as string) || 'Untitled',
+    design: (c.design as Character['design']) || {
+      characterName: '', characterType: '', species: '', personality: '',
+      artStyle: '', primaryColor: '', secondaryColor: '', outlineColor: '',
+      headShape: '', bodyShape: '', eyeShape: '', mouthStyle: '',
+      accessories: '', theme: '', animationStyle: '',
+    },
+    imagePrompt: (c.imagePrompt as string) || '',
+    createdAt: c.createdAt as number,
+    updatedAt: c.updatedAt as number,
   };
 }
 
@@ -305,6 +331,71 @@ export const useAppStore = create<AppState>((set, get) => ({
       // silent
     }
     set({ scenes: renumbered });
+  },
+
+  // Characters — MongoDB API
+  characters: [],
+  charactersLoaded: false,
+  loadCharacters: async (projectId) => {
+    try {
+      const res = await fetch(`/api/projects/characters?projectId=${encodeURIComponent(projectId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const characters = (data.characters || []).map(mapCharacter);
+        set({ characters, charactersLoaded: true });
+      }
+    } catch {
+      // silently fail
+    }
+  },
+  addCharacter: async (character) => {
+    try {
+      const res = await fetch('/api/projects/characters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: character.projectId,
+          name: character.name,
+          design: character.design,
+          imagePrompt: character.imagePrompt,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const created = mapCharacter(data.character);
+        set((s) => ({ characters: [...s.characters, created] }));
+      }
+    } catch {
+      set((s) => ({ characters: [...s.characters, character] }));
+    }
+  },
+  updateCharacter: async (id, changes) => {
+    try {
+      const res = await fetch('/api/projects/characters', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...changes }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const updated = mapCharacter(data.character);
+        set((s) => ({
+          characters: s.characters.map((c) => (c.id === id ? updated : c)),
+        }));
+      }
+    } catch {
+      set((s) => ({
+        characters: s.characters.map((c) => (c.id === id ? { ...c, ...changes, updatedAt: Date.now() } : c)),
+      }));
+    }
+  },
+  removeCharacter: async (id) => {
+    try {
+      await fetch(`/api/projects/characters?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      set((s) => ({ characters: s.characters.filter((c) => c.id !== id) }));
+    } catch {
+      set((s) => ({ characters: s.characters.filter((c) => c.id !== id) }));
+    }
   },
 
   // Sidebar

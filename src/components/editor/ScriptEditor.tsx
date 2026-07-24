@@ -55,6 +55,7 @@ import SceneCard from '@/components/editor/SceneCard';
 import ProjectScoreCard from '@/components/editor/ProjectScoreCard';
 import VideoConceptCard from '@/components/editor/VideoConceptCard';
 import ProjectMetaCard from '@/components/editor/ProjectMetaCard';
+import { CharacterManager } from '@/components/editor/CharacterCard';
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -351,6 +352,7 @@ export default function ScriptEditor() {
   const addScene = useAppStore((s) => s.addScene);
   const addScenes = useAppStore((s) => s.addScenes);
   const loadScenes = useAppStore((s) => s.loadScenes);
+  const loadCharacters = useAppStore((s) => s.loadCharacters);
   const reorderScenes = useAppStore((s) => s.reorderScenes);
   const updateProject = useAppStore((s) => s.updateProject);
   const setActiveProjectId = useAppStore((s) => s.setActiveProjectId);
@@ -402,12 +404,13 @@ export default function ScriptEditor() {
     return grouped;
   }, [scenes, scenesPerPhase]);
 
-  // Load scenes on mount
+  // Load scenes and characters on mount
   useEffect(() => {
     if (activeProjectId) {
       loadScenes(activeProjectId);
+      loadCharacters(activeProjectId);
     }
-  }, [activeProjectId, loadScenes]);
+  }, [activeProjectId, loadScenes, loadCharacters]);
 
   // DnD sensors
   const sensors = useSensors(
@@ -448,6 +451,7 @@ export default function ScriptEditor() {
       narration: '',
       imagePrompt: '',
       animationPrompt: '',
+      characterIds: [],
       notes: {
         emotion: '',
         visualFocus: '',
@@ -731,6 +735,7 @@ export default function ScriptEditor() {
                   <ProjectScoreCard project={project} />
                   <VideoConceptCard project={project} />
                   <ProjectMetaCard project={project} />
+                  <CharacterManager project={project} />
                 </div>
 
                 {/* Scenes grouped by phase */}
