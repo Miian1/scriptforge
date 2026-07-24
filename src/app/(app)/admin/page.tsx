@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShieldCheck, Users, Crown, Zap, Search, Loader2, ChevronDown,
   Edit3, Trash2, X, Check, Clock, Star, UserCog,
-  AlertTriangle, RefreshCw, Plus, Minus, CalendarDays, Settings
+  AlertTriangle, RefreshCw, Plus, Minus, CalendarDays, Settings, Eye
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
