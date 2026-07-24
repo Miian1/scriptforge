@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bell, Crown, AlertTriangle, Clock, ChevronRight } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,25 +13,18 @@ import { cn } from '@/lib/utils';
 
 interface Notification {
   id: string;
-  type: 'warning' | 'urgent' | 'expired';
+  type: 'warning' | 'urgent';
   title: string;
   description: string;
   action: { label: string; href: string };
 }
 
-function getNotifications(plan: 'free' | 'pro', planDaysLeft: number): Notification[] {
+function getNotifications(plan: 'free' | 'pro', planDaysLeft: number, planExpiresAt: number): Notification[] {
   const notifications: Notification[] = [];
 
-  if (plan === 'pro') {
-    if (planDaysLeft <= 0) {
-      notifications.push({
-        id: 'expired',
-        type: 'expired',
-        title: 'Pro Plan Expired',
-        description: 'Your Pro plan has ended. Renew now to keep unlimited access to all features.',
-        action: { label: 'Renew Plan', href: '/plans' },
-      });
-    } else if (planDaysLeft <= 3) {
+  if (plan === 'pro' && planExpiresAt > 0) {
+    // Only compute days-based notifications when there IS an expiry set
+    if (planDaysLeft <= 3 && planDaysLeft > 0) {
       notifications.push({
         id: 'urgent',
         type: 'urgent',
@@ -39,7 +32,7 @@ function getNotifications(plan: 'free' | 'pro', planDaysLeft: number): Notificat
         description: `Your Pro plan expires in ${planDaysLeft} day${planDaysLeft !== 1 ? 's' : ''}. Renew now to avoid losing access.`,
         action: { label: 'Renew Plan', href: '/plans' },
       });
-    } else if (planDaysLeft <= 7) {
+    } else if (planDaysLeft <= 7 && planDaysLeft > 3) {
       notifications.push({
         id: 'warning',
         type: 'warning',
@@ -48,7 +41,6 @@ function getNotifications(plan: 'free' | 'pro', planDaysLeft: number): Notificat
         action: { label: 'Renew Plan', href: '/plans' },
       });
     }
-    // No "info" notification for 8+ days — no bell needed when everything is fine
   }
 
   return notifications;
@@ -56,8 +48,6 @@ function getNotifications(plan: 'free' | 'pro', planDaysLeft: number): Notificat
 
 function getNotificationIcon(type: Notification['type']) {
   switch (type) {
-    case 'expired':
-      return <AlertTriangle className="size-4 text-red-500" />;
     case 'urgent':
       return <AlertTriangle className="size-4 text-amber-500" />;
     case 'warning':
@@ -67,8 +57,6 @@ function getNotificationIcon(type: Notification['type']) {
 
 function getNotificationBg(type: Notification['type']) {
   switch (type) {
-    case 'expired':
-      return 'bg-red-500/5 border-red-500/20';
     case 'urgent':
       return 'bg-amber-500/5 border-amber-500/20';
     case 'warning':
@@ -79,17 +67,31 @@ function getNotificationBg(type: Notification['type']) {
 export default function NotificationBell() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const checkSession = useAuthStore((s) => s.checkSession);
   const [open, setOpen] = useState(false);
+
+  // If plan is "pro" but days = 0 and there IS an expiry set → plan is expired
+  // Auto-downgrade should have caught it. Force a session re-check.
+  useEffect(() => {
+    if (
+      user?.plan === 'pro' &&
+      user.planExpiresAt > 0 &&
+      user.planDaysLeft <= 0
+    ) {
+      // Force a session check so /api/auth/me runs the auto-downgrade
+      checkSession();
+    }
+  }, [user?.plan, user?.planExpiresAt, user?.planDaysLeft, checkSession]);
 
   // Don't show bell for free users or if no notifications
   if (!user || user.plan === 'free') return null;
 
-  const notifications = getNotifications(user.plan, user.planDaysLeft);
+  const notifications = getNotifications(user.plan, user.planDaysLeft, user.planExpiresAt);
 
-  // Don't show bell at all if no actionable notifications
+  // Don't show bell if no actionable notifications
   if (notifications.length === 0) return null;
 
-  const hasUrgent = notifications.some((n) => n.type === 'expired' || n.type === 'urgent');
+  const hasUrgent = notifications.some((n) => n.type === 'urgent');
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
