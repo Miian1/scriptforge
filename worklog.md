@@ -37,3 +37,23 @@ Stage Summary:
 - Logout accessible from sidebar (desktop + mobile)
 - Lint passes with zero errors
 - NOTE: MongoDB Atlas requires IP whitelisting — user needs to add current server IP to their Atlas cluster's IP whitelist at https://www.mongodb.com/docs/atlas/security-whitelist/
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Redesign dashboard — stats cards 2×2 grid, reduce YouTube div width, simplify channel card, add expand/collapse description
+
+Work Log:
+- StatsCards.tsx: Changed from vertical stack (3 cards) to 2×2 grid layout (4 cards) using CSS grid `grid-cols-1 sm:grid-cols-2`
+- StatsCards.tsx: Added 4th card "Current Plan" showing Free/Pro status with upgrade button
+- StatsCards.tsx: Fixed Pro user AI Generations card to show "Unlimited" instead of fractional display
+- ChannelCard.tsx: Removed banner image entirely, kept only avatar (14px, rounded-full)
+- ChannelCard.tsx: Restructured layout to horizontal avatar+title row, description below, stats at bottom
+- ChannelCard.tsx: Added expand/collapse toggle for long descriptions (>120 chars) with "See all ▾" / "Show less ▴" button using AnimatePresence
+- Dashboard.tsx: Swapped grid ratio from 2:3 to 3:2 (stats `col-span-3`, YouTube `col-span-2`) to reduce YouTube div width
+
+Stage Summary:
+- Dashboard layout now has wider stats area (3/5) and narrower YouTube channel card (2/5)
+- 4 stats cards in 2×2 grid: Total Projects, Projects Used, AI Generations, Current Plan
+- Channel card is compact with no banner, just avatar + expandable description
+- Build compiles successfully (Turbopack, zero TS errors)

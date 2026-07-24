@@ -163,12 +163,12 @@ export default function Dashboard() {
       {/* Stats + YouTube Channel: side-by-side */}
       {ytConnected && channel && !channelError ? (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          {/* Left — Stats Cards */}
-          <div className="lg:col-span-2 space-y-4">
+          {/* Left — Stats Cards (2×2 grid, wider) */}
+          <div className="lg:col-span-3">
             <StatsCards />
           </div>
-          {/* Right — YouTube Channel Card */}
-          <div className="lg:col-span-3">
+          {/* Right — YouTube Channel Card (narrower) */}
+          <div className="lg:col-span-2">
             <ChannelCard channel={channel} />
           </div>
         </div>
