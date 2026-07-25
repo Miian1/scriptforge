@@ -103,11 +103,11 @@ export async function generateSpeech(options: TTSOptions): Promise<Buffer> {
     body: JSON.stringify({
       model: modelId,
       input,
-      responseFormat: {
+      response_format: {
         type: 'audio',
       },
-      generationConfig: {
-        speechConfig: [
+      generation_config: {
+        speech_config: [
           { voice: voiceName },
         ],
       },
@@ -129,8 +129,8 @@ export async function generateSpeech(options: TTSOptions): Promise<Buffer> {
     throw new Error('No interaction in Gemini TTS response.');
   }
 
-  // Try convenience property first
-  const outputAudio = interaction['outputAudio'] as Record<string, unknown> | undefined;
+  // Try convenience property (snake_case)
+  const outputAudio = interaction['output_audio'] as Record<string, unknown> | undefined;
   if (outputAudio) {
     const audioData = outputAudio['data'] as string;
     if (audioData) {
@@ -138,7 +138,7 @@ export async function generateSpeech(options: TTSOptions): Promise<Buffer> {
     }
   }
 
-  // Try candidates path
+  // Try candidates path (snake_case)
   const candidates = interaction['candidates'] as Array<Record<string, unknown>> | undefined;
   if (candidates && candidates.length > 0) {
     const content = candidates[0]['content'] as Record<string, unknown>;
@@ -146,7 +146,7 @@ export async function generateSpeech(options: TTSOptions): Promise<Buffer> {
       const parts = content['parts'] as Array<Record<string, unknown>>;
       if (parts && parts.length > 0) {
         for (const part of parts) {
-          const inlineData = part['inlineData'] as Record<string, unknown> | undefined;
+          const inlineData = part['inline_data'] as Record<string, unknown> | undefined;
           if (inlineData && inlineData['data']) {
             return base64ToWav(inlineData['data'] as string);
           }
