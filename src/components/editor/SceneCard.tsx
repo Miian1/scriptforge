@@ -664,7 +664,14 @@ export default function SceneCard({ scene, project, totalScenes }: SceneCardProp
                 />
 
                 {/* Voice Generation */}
-                <VoiceGenerator text={scene.narration} sceneId={scene.id} narrationAudioPath={scene.narrationAudioPath} />
+                <VoiceGenerator
+                  text={scene.narration}
+                  sceneId={scene.id}
+                  narrationAudioPath={scene.narrationAudioPath}
+                  projectId={project.id}
+                  sceneNumber={scene.sceneNumber}
+                  sceneTitle={scene.title}
+                />
 
                 <Separator />
 

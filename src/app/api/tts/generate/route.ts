@@ -1,21 +1,43 @@
 // ── Gemini TTS: Generate Speech ──────────────────────
 // POST /api/tts/generate
-// Body: { voiceName, text, instructions?, modelId?, saveAudio?, sceneId? }
-// If saveAudio=true and sceneId provided, saves to disk and returns audioPath.
-// Returns: audio/wav binary stream (with audioPath in header)
+// Body: { voiceName, text, instructions?, modelId?, saveAudio?, sceneId?, projectId?, sceneNumber?, sceneTitle?, voiceDescription?, voiceCategory?, style?, pace?, accent? }
+// If saveAudio=true and sceneId provided, saves to disk, creates GeneratedAudio record, updates scene.
+// Returns: audio/wav binary stream (with audioPath and audioRecordId in headers)
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getSession } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
 import { SceneModel } from '@/lib/models/Scene';
-import { generateSpeech, stripStageDirections } from '@/lib/gemini-tts';
+import { GeneratedAudioModel } from '@/lib/models/GeneratedAudio';
+import { generateSpeech, stripStageDirections, GEMINI_TTS_VOICES } from '@/lib/gemini-tts';
 import { getActiveModelId } from '@/lib/get-active-model';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, unlink } from 'fs/promises';
 import { join } from 'path';
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+
     const body = await req.json();
-    const { voiceName, text, instructions, modelId, saveAudio, sceneId } = body;
+    const {
+      voiceName,
+      text,
+      instructions,
+      modelId,
+      saveAudio,
+      sceneId,
+      projectId,
+      sceneNumber,
+      sceneTitle,
+      voiceDescription,
+      voiceCategory,
+      style,
+      pace,
+      accent,
+    } = body;
 
     if (!voiceName) {
       return NextResponse.json({ error: 'voiceName is required' }, { status: 400 });
@@ -45,24 +67,56 @@ export async function POST(req: NextRequest) {
       modelId: resolvedModelId,
     });
 
-    // Optionally save audio to disk and update scene
+    // Resolve voice metadata
+    const voiceDef = GEMINI_TTS_VOICES.find(v => v.name === voiceName);
+    const resolvedDescription = voiceDescription || voiceDef?.description || '';
+    const resolvedCategory = voiceCategory || voiceDef?.category || '';
+
+    // Optionally save audio to disk and create DB record
     let audioPath = '';
-    if (saveAudio && sceneId) {
+    let audioRecordId = '';
+
+    if (saveAudio && sceneId && projectId) {
       try {
+        await connectDB();
+
         const audioDir = join(process.cwd(), 'data', 'audio');
         await mkdir(audioDir, { recursive: true });
         const filePath = join(audioDir, `${sceneId}.wav`);
         await writeFile(filePath, audioBuffer);
-        audioPath = `/api/audio/${sceneId}`;
+        audioPath = `/api/tts/audio/${sceneId}`;
 
-        // Update scene in DB
-        await connectDB();
+        // Upsert GeneratedAudio record (replace if exists for same scene)
+        const audioDoc = await GeneratedAudioModel.findOneAndUpdate(
+          { userId: session.userId, sceneId },
+          {
+            userId: session.userId,
+            projectId,
+            sceneId,
+            sceneNumber: sceneNumber || 0,
+            sceneTitle: sceneTitle || 'Untitled Scene',
+            narration: cleanText,
+            voiceName,
+            voiceDescription: resolvedDescription,
+            voiceCategory: resolvedCategory,
+            style: style || '',
+            pace: pace || '',
+            accent: accent || '',
+            instructions: instructions || '',
+            audioPath,
+            audioSize: audioBuffer.length,
+            duration: estimateDuration(cleanText),
+          },
+          { new: true, upsert: true },
+        );
+        audioRecordId = audioDoc._id.toString();
+
+        // Update scene in DB with audio path
         await SceneModel.findByIdAndUpdate(sceneId, {
           $set: { narrationAudioPath: audioPath },
         });
       } catch (saveErr) {
-        console.error('[gemini-tts] Failed to save audio:', saveErr);
-        // Don't fail the request — still return the audio
+        console.error('[tts/generate] Failed to save audio:', saveErr);
       }
     }
 
@@ -72,10 +126,19 @@ export async function POST(req: NextRequest) {
         'Content-Length': audioBuffer.length.toString(),
         'Cache-Control': 'no-cache',
         ...(audioPath ? { 'X-Audio-Path': audioPath } : {}),
+        ...(audioRecordId ? { 'X-Audio-Record-Id': audioRecordId } : {}),
       },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to generate speech';
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+/**
+ * Estimate audio duration from text (rough: ~150 words/min for normal speech).
+ */
+function estimateDuration(text: string): number {
+  const words = text.split(/\s+/).filter(Boolean).length;
+  return Math.round((words / 150) * 60); // seconds
 }

@@ -1,15 +1,17 @@
 // ── Gemini TTS: Generate Scene Narration ─────────────
 // POST /api/tts/generate-scene
-// Body: { sceneId, voiceName, instructions?, modelId?, saveAudio? }
+// Body: { sceneId, voiceName, instructions?, modelId?, saveAudio?, style?, pace?, accent? }
 // Fetches scene narration from DB, strips stage directions, generates speech.
-// If saveAudio=true, saves to disk and updates scene's narrationAudioPath.
-// Returns: audio/wav binary stream
+// If saveAudio=true, saves to disk, creates GeneratedAudio record, updates scene.
+// Returns: audio/wav binary stream (with X-Audio-Path and X-Audio-Record-Id headers)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
 import { SceneModel } from '@/lib/models/Scene';
-import { generateSpeech, stripStageDirections } from '@/lib/gemini-tts';
+import { ProjectModel } from '@/lib/models/Project';
+import { GeneratedAudioModel } from '@/lib/models/GeneratedAudio';
+import { generateSpeech, stripStageDirections, GEMINI_TTS_VOICES } from '@/lib/gemini-tts';
 import { getActiveModelId } from '@/lib/get-active-model';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
@@ -22,7 +24,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { sceneId, voiceName, instructions, modelId, saveAudio } = body;
+    const { sceneId, voiceName, instructions, modelId, saveAudio, style, pace, accent } = body;
 
     if (!sceneId || !voiceName) {
       return NextResponse.json(
@@ -66,22 +68,54 @@ export async function POST(req: NextRequest) {
       modelId: resolvedModelId,
     });
 
-    // Optionally save audio to disk
+    // Resolve voice metadata
+    const voiceDef = GEMINI_TTS_VOICES.find(v => v.name === voiceName);
+    const voiceDescription = voiceDef?.description || '';
+    const voiceCategory = voiceDef?.category || '';
+
+    // Save audio to disk and create DB record
     let audioPath = '';
+    let audioRecordId = '';
+
     if (saveAudio) {
       try {
         const audioDir = join(process.cwd(), 'data', 'audio');
         await mkdir(audioDir, { recursive: true });
         const filePath = join(audioDir, `${sceneId}.wav`);
         await writeFile(filePath, audioBuffer);
-        audioPath = `/api/audio/${sceneId}`;
+        audioPath = `/api/tts/audio/${sceneId}`;
+
+        // Upsert GeneratedAudio record
+        const audioDoc = await GeneratedAudioModel.findOneAndUpdate(
+          { userId: session.userId, sceneId },
+          {
+            userId: session.userId,
+            projectId: scene.projectId,
+            sceneId,
+            sceneNumber: scene.sceneNumber || 0,
+            sceneTitle: scene.title || 'Untitled Scene',
+            narration: cleanNarration,
+            voiceName,
+            voiceDescription,
+            voiceCategory,
+            style: style || '',
+            pace: pace || '',
+            accent: accent || '',
+            instructions: instructions || '',
+            audioPath,
+            audioSize: audioBuffer.length,
+            duration: estimateDuration(cleanNarration),
+          },
+          { new: true, upsert: true },
+        );
+        audioRecordId = audioDoc._id.toString();
 
         // Update scene in DB
         await SceneModel.findByIdAndUpdate(sceneId, {
           $set: { narrationAudioPath: audioPath },
         });
       } catch (saveErr) {
-        console.error('[gemini-tts] Failed to save audio:', saveErr);
+        console.error('[tts/generate-scene] Failed to save audio:', saveErr);
       }
     }
 
@@ -91,10 +125,16 @@ export async function POST(req: NextRequest) {
         'Content-Length': audioBuffer.length.toString(),
         'Cache-Control': 'no-cache',
         ...(audioPath ? { 'X-Audio-Path': audioPath } : {}),
+        ...(audioRecordId ? { 'X-Audio-Record-Id': audioRecordId } : {}),
       },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to generate scene narration';
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+function estimateDuration(text: string): number {
+  const words = text.split(/\s+/).filter(Boolean).length;
+  return Math.round((words / 150) * 60);
 }

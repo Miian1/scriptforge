@@ -18,6 +18,7 @@ import {
   Globe,
   ChevronDown,
   X,
+  CheckCircle2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -54,6 +55,9 @@ interface VoiceGeneratorProps {
   sceneId: string;
   narrationAudioPath?: string;
   label?: string;
+  projectId?: string;
+  sceneNumber?: number;
+  sceneTitle?: string;
 }
 
 // ── Strip stage directions client-side (for preview) ──
@@ -75,6 +79,9 @@ export default function VoiceGenerator({
   sceneId,
   narrationAudioPath,
   label = 'Narration',
+  projectId,
+  sceneNumber,
+  sceneTitle,
 }: VoiceGeneratorProps) {
   // Voice data from API
   const [voices, setVoices] = useState<Voice[]>([]);
@@ -102,6 +109,7 @@ export default function VoiceGenerator({
   const [audioProgress, setAudioProgress] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [hasSavedAudio, setHasSavedAudio] = useState(false);
+  const [audioRecordId, setAudioRecordId] = useState<string>('');
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Save voice preference per browser session
@@ -280,6 +288,12 @@ export default function VoiceGenerator({
           instructions: builtInstructions || undefined,
           saveAudio: sceneId !== 'preview',
           sceneId: sceneId !== 'preview' ? sceneId : undefined,
+          projectId: sceneId !== 'preview' ? projectId : undefined,
+          sceneNumber: sceneId !== 'preview' ? sceneNumber : undefined,
+          sceneTitle: sceneId !== 'preview' ? sceneTitle : undefined,
+          style: selectedStyle || undefined,
+          pace: selectedPace || undefined,
+          accent: selectedAccent || undefined,
         }),
       });
 
@@ -289,12 +303,15 @@ export default function VoiceGenerator({
       }
 
       const serverAudioPath = res.headers.get('X-Audio-Path');
+      const serverRecordId = res.headers.get('X-Audio-Record-Id') || '';
 
       let url: string;
       if (serverAudioPath) {
+        // Use persistent server URL so audio survives page refresh
         url = serverAudioPath;
         setHasSavedAudio(true);
-        toast.success('Voice generated and saved!');
+        setAudioRecordId(serverRecordId);
+        toast.success('Voice generated and saved to library!');
       } else {
         const blob = await res.blob();
         url = URL.createObjectURL(blob);
@@ -308,7 +325,7 @@ export default function VoiceGenerator({
     } finally {
       setGenerating(false);
     }
-  }, [selectedVoiceName, text, builtInstructions, sceneId, setupAudioPlayer]);
+  }, [selectedVoiceName, text, builtInstructions, sceneId, projectId, sceneNumber, sceneTitle, setupAudioPlayer]);
 
   // Playback controls
   const togglePlayback = useCallback(() => {
@@ -336,14 +353,20 @@ export default function VoiceGenerator({
 
   const handleDownload = useCallback(() => {
     if (!audioUrl) return;
-    const a = document.createElement('a');
-    a.href = audioUrl;
-    a.download = `narration-${sceneId}.wav`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    toast.success('Audio downloaded');
-  }, [audioUrl, sceneId]);
+    // Use persistent server URL with download flag for saved audio
+    if (hasSavedAudio && sceneId && sceneId !== 'preview') {
+      window.open(`/api/tts/audio/${sceneId}?download=1`, '_blank');
+      toast.success('Downloading audio...');
+    } else {
+      const a = document.createElement('a');
+      a.href = audioUrl;
+      a.download = `narration-${sceneId}.wav`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success('Audio downloaded');
+    }
+  }, [audioUrl, sceneId, hasSavedAudio]);
 
   // Handlers that save preferences
   const handleVoiceChange = useCallback((voiceName: string) => {
@@ -531,7 +554,7 @@ export default function VoiceGenerator({
         {/* Saved indicator */}
         {hasSavedAudio && (
           <span className="text-[10px] text-emerald-500 font-medium flex items-center gap-0.5 shrink-0">
-            <Volume2 className="size-3" /> Saved
+            <CheckCircle2 className="size-3" /> Saved
           </span>
         )}
 

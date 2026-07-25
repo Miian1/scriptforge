@@ -22,6 +22,7 @@ import {
   Layers,
   Zap,
   Volume2,
+  ListMusic,
 } from 'lucide-react';
 import {
   DndContext,
@@ -72,6 +73,7 @@ import ProjectScoreCard from '@/components/editor/ProjectScoreCard';
 import VideoConceptCard from '@/components/editor/VideoConceptCard';
 import ProjectMetaCard from '@/components/editor/ProjectMetaCard';
 import { CharacterManager } from '@/components/editor/CharacterCard';
+import AudioLibrary from '@/components/editor/AudioLibrary';
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -386,6 +388,9 @@ export default function ScriptEditor() {
   const [voiceDialogOpen, setVoiceDialogOpen] = useState(false);
   const [batchGenerating, setBatchGenerating] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+
+  // Audio library dialog state
+  const [audioLibraryOpen, setAudioLibraryOpen] = useState(false);
   const [batchSceneAudio, setBatchSceneAudio] = useState<Record<string, string>>({});
 
   const project = projects.find((p) => p.id === activeProjectId) ?? null;
@@ -726,6 +731,20 @@ export default function ScriptEditor() {
                 </TooltipTrigger>
                 <TooltipContent>Generate voice for all narration</TooltipContent>
               </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAudioLibraryOpen(true)}
+                    className="gap-1.5"
+                  >
+                    <ListMusic className="size-3.5 text-emerald-500" />
+                    <span className="hidden sm:inline">Audio Library</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Browse saved audio files</TooltipContent>
+              </Tooltip>
             </div>
           )}
         </div>
@@ -1037,6 +1056,12 @@ export default function ScriptEditor() {
                         instructions: voiceInstructions || undefined,
                         saveAudio: true,
                         sceneId: scene.id,
+                        projectId: activeProjectId || undefined,
+                        sceneNumber: scene.sceneNumber,
+                        sceneTitle: scene.title,
+                        style: parsed.style || undefined,
+                        pace: parsed.pace || undefined,
+                        accent: parsed.accent || undefined,
                       }),
                     });
 
@@ -1073,6 +1098,13 @@ export default function ScriptEditor() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Audio Library Dialog */}
+      <AudioLibrary
+        projectId={activeProjectId}
+        open={audioLibraryOpen}
+        onOpenChange={setAudioLibraryOpen}
+      />
     </div>
   );
 }
