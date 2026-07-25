@@ -251,8 +251,8 @@ export default function VideoDetailsPage() {
     return (
       <div className="text-center py-20">
         <p className="text-muted-foreground">Video not found</p>
-        <Button variant="outline" onClick={() => router.push('/dashboard')} className="mt-4">
-          <ArrowLeft className="size-4 mr-2" /> Back to Dashboard
+        <Button variant="outline" onClick={() => router.push('/youtube')} className="mt-4">
+          <ArrowLeft className="size-4 mr-2" /> Back to YouTube
         </Button>
       </div>
     );
@@ -262,7 +262,7 @@ export default function VideoDetailsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => router.push('/dashboard')} className="shrink-0">
+        <Button variant="ghost" size="icon" onClick={() => router.push('/youtube')} className="shrink-0">
           <ArrowLeft className="size-5" />
         </Button>
         <div className="min-w-0">

@@ -605,10 +605,10 @@ export default function ScriptEditor() {
     }
   }, [project, addScene, updateProject, loadScenes, setGeneratingProjectId]);
 
-  // Back to dashboard
+  // Back to projects
   const handleBack = useCallback(() => {
     setActiveProjectId(null);
-    router.push('/dashboard');
+    router.push('/projects');
   }, [setActiveProjectId, router]);
 
   // ---- Render ----
@@ -635,7 +635,7 @@ export default function ScriptEditor() {
                 <ArrowLeft className="size-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Back to Dashboard</TooltipContent>
+            <TooltipContent>Back to Projects</TooltipContent>
           </Tooltip>
 
           <div className="flex-1 min-w-0">

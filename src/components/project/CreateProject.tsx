@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Film, ArrowLeft, Sparkles, Check, AlertCircle, RefreshCw, Layers, Clock, Calculator } from 'lucide-react';
+import { Film, ArrowLeft, Sparkles, Check, AlertCircle, RefreshCw, Layers, Clock, Calculator, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
@@ -87,6 +87,7 @@ export default function CreateProject() {
 
   // Phase: 'form' | 'generating' | 'error'
   const [phase, setPhase] = useState<'form' | 'generating' | 'error'>('form');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentStage, setCurrentStage] = useState(-1);
   const [errorMessage, setErrorMessage] = useState('');
   const [elapsed, setElapsed] = useState(0);
@@ -94,6 +95,7 @@ export default function CreateProject() {
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const projectIdRef = useRef<string | null>(null);
   const formValuesRef = useRef<FormValues | null>(null);
+  const isSubmittingRef = useRef(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -143,6 +145,11 @@ export default function CreateProject() {
   }, []);
 
   const startGeneration = useCallback(async (values: FormValues) => {
+    // Block double submissions
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
+
     const now = Date.now();
     const sLen = values.sceneLengthMode === 'custom' && values.customSceneLength
       ? values.customSceneLength
@@ -239,6 +246,8 @@ export default function CreateProject() {
       setErrorMessage(message);
       await updateProject(mongoId, { status: 'error' });
       setPhase('error');
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
     }
   }, [addProject, setActiveProjectId, advanceStage, addScenes, updateProject, loadScenes, router]);
 
@@ -256,8 +265,8 @@ export default function CreateProject() {
     startGeneration(values);
   }, [startGeneration]);
 
-  const onBackToDashboard = useCallback(() => {
-    router.push('/dashboard');
+  const onBackToProjects = useCallback(() => {
+    router.push('/projects');
   }, [router]);
 
   const descriptionValue = form.watch('description') ?? '';
@@ -440,9 +449,9 @@ export default function CreateProject() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => router.push('/dashboard')}
+              onClick={() => router.push('/projects')}
               className="shrink-0"
-              aria-label="Back to dashboard"
+              aria-label="Back to projects"
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
@@ -807,9 +816,14 @@ export default function CreateProject() {
                   type="submit"
                   size="lg"
                   className="w-full text-base font-semibold"
+                  disabled={isSubmitting}
                 >
-                  <Sparkles className="mr-2 h-5 w-5" />
-                  Generate Script (Phase 1 of {totalPhases})
+                  {isSubmitting ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-5 w-5" />
+                  )}
+                  {isSubmitting ? 'Generating...' : `Generate Script (Phase 1 of ${totalPhases})`}
                 </Button>
                 <p className="text-center text-xs text-muted-foreground mt-2">
                   <Clock className="inline size-3 mr-1" />

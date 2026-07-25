@@ -131,14 +131,9 @@ export default function PlansPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => router.push('/dashboard')} className="shrink-0">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Plans & Usage</h1>
-          <p className="text-sm text-muted-foreground">Manage your subscription and monitor usage</p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Plans & Usage</h1>
+        <p className="text-sm text-muted-foreground">Manage your subscription and monitor usage</p>
       </div>
 
       {/* Current Plan Badge + Usage */}
