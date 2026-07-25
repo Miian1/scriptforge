@@ -992,7 +992,21 @@ export default function ScriptEditor() {
                 const prefs = (sessionStorage.getItem('scriptforge_voice_settings') || '{}');
                 const parsed = JSON.parse(prefs);
                 const selectedVoiceName = parsed.voiceName;
-                const voiceInstructions = parsed.instructions || '';
+
+                // Build instructions from style/pace/accent/custom
+                const instrParts: string[] = [];
+                if (parsed.style) instrParts.push(parsed.style);
+                if (parsed.pace === 'very_slow') instrParts.push('speak very slowly');
+                else if (parsed.pace === 'slow') instrParts.push('speak slowly');
+                else if (parsed.pace === 'moderate') instrParts.push('speak at a moderate pace');
+                else if (parsed.pace === 'fast') instrParts.push('speak quickly');
+                else if (parsed.pace === 'very_fast') instrParts.push('speak very quickly');
+                if (parsed.accent === 'american') instrParts.push('with an American accent');
+                else if (parsed.accent === 'british') instrParts.push('with a British accent');
+                else if (parsed.accent === 'australian') instrParts.push('with an Australian accent');
+                else if (parsed.accent === 'neutral') instrParts.push('with a neutral accent');
+                if (parsed.customInstructions) instrParts.push(parsed.customInstructions);
+                const voiceInstructions = instrParts.join(', ');
 
                 if (!selectedVoiceName) {
                   toast.error('Please select a voice first');

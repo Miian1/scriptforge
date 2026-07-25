@@ -14,44 +14,127 @@ if (!GEMINI_API_KEY) {
 export interface GeminiVoice {
   name: string;
   description: string;
+  category: string;
 }
 
 export const GEMINI_TTS_VOICES: GeminiVoice[] = [
-  { name: 'Zephyr', description: 'Bright' },
-  { name: 'Puck', description: 'Upbeat' },
-  { name: 'Charon', description: 'Informative' },
-  { name: 'Kore', description: 'Firm' },
-  { name: 'Fenrir', description: 'Excitable' },
-  { name: 'Leda', description: 'Youthful' },
-  { name: 'Orus', description: 'Firm' },
-  { name: 'Aoede', description: 'Breezy' },
-  { name: 'Callirrhoe', description: 'Easy-going' },
-  { name: 'Autonoe', description: 'Bright' },
-  { name: 'Enceladus', description: 'Breathy' },
-  { name: 'Iapetus', description: 'Clear' },
-  { name: 'Umbriel', description: 'Easy-going' },
-  { name: 'Algieba', description: 'Smooth' },
-  { name: 'Despina', description: 'Smooth' },
-  { name: 'Erinome', description: 'Clear' },
-  { name: 'Algenib', description: 'Gravelly' },
-  { name: 'Rasalgethi', description: 'Informative' },
-  { name: 'Laomedeia', description: 'Upbeat' },
-  { name: 'Achernar', description: 'Soft' },
-  { name: 'Alnilam', description: 'Firm' },
-  { name: 'Schedar', description: 'Even' },
-  { name: 'Gacrux', description: 'Mature' },
-  { name: 'Pulcherrima', description: 'Forward' },
-  { name: 'Achird', description: 'Friendly' },
-  { name: 'Zubenelgenubi', description: 'Casual' },
-  { name: 'Vindemiatrix', description: 'Gentle' },
-  { name: 'Sadachbia', description: 'Lively' },
-  { name: 'Sadaltager', description: 'Knowledgeable' },
-  { name: 'Sulafat', description: 'Warm' },
+  // Bright / Clear
+  { name: 'Zephyr', description: 'Bright', category: 'Narration' },
+  { name: 'Autonoe', description: 'Bright', category: 'Narration' },
+  { name: 'Iapetus', description: 'Clear', category: 'Narration' },
+  { name: 'Erinome', description: 'Clear', category: 'Narration' },
+
+  // Upbeat / Excitable
+  { name: 'Puck', description: 'Upbeat', category: 'Energetic' },
+  { name: 'Fenrir', description: 'Excitable', category: 'Energetic' },
+  { name: 'Laomedeia', description: 'Upbeat', category: 'Energetic' },
+  { name: 'Sadachbia', description: 'Lively', category: 'Energetic' },
+
+  // Informative / Knowledgeable
+  { name: 'Charon', description: 'Informative', category: 'Professional' },
+  { name: 'Rasalgethi', description: 'Informative', category: 'Professional' },
+  { name: 'Sadaltager', description: 'Knowledgeable', category: 'Professional' },
+
+  // Firm / Confident
+  { name: 'Kore', description: 'Firm', category: 'Confident' },
+  { name: 'Orus', description: 'Firm', category: 'Confident' },
+  { name: 'Alnilam', description: 'Firm', category: 'Confident' },
+
+  // Smooth / Soft / Gentle
+  { name: 'Algieba', description: 'Smooth', category: 'Warm' },
+  { name: 'Despina', description: 'Smooth', category: 'Warm' },
+  { name: 'Achernar', description: 'Soft', category: 'Warm' },
+  { name: 'Vindemiatrix', description: 'Gentle', category: 'Warm' },
+  { name: 'Sulafat', description: 'Warm', category: 'Warm' },
+  { name: 'Achird', description: 'Friendly', category: 'Warm' },
+
+  // Youthful / Breezy
+  { name: 'Leda', description: 'Youthful', category: 'Casual' },
+  { name: 'Aoede', description: 'Breezy', category: 'Casual' },
+  { name: 'Callirrhoe', description: 'Easy-going', category: 'Casual' },
+  { name: 'Umbriel', description: 'Easy-going', category: 'Casual' },
+  { name: 'Zubenelgenubi', description: 'Casual', category: 'Casual' },
+
+  // Dramatic / Character
+  { name: 'Enceladus', description: 'Breathy', category: 'Character' },
+  { name: 'Algenib', description: 'Gravelly', category: 'Character' },
+  { name: 'Gacrux', description: 'Mature', category: 'Character' },
+  { name: 'Pulcherrima', description: 'Forward', category: 'Character' },
+  { name: 'Schedar', description: 'Even', category: 'Character' },
 ];
+
+// Voice categories for filtering
+export const VOICE_CATEGORIES = [...new Set(GEMINI_TTS_VOICES.map(v => v.category))].sort();
+
+// ── TTS Style / Pace / Accent options ─────────────────
+
+export const TTS_STYLES = [
+  { value: '', label: 'Default' },
+  { value: 'professional', label: 'Professional' },
+  { value: 'casual', label: 'Casual' },
+  { value: 'dramatic', label: 'Dramatic' },
+  { value: 'news_anchor', label: 'News Anchor' },
+  { value: 'storytelling', label: 'Storytelling' },
+  { value: 'friendly', label: 'Friendly' },
+  { value: 'excited', label: 'Excited' },
+  { value: 'calm', label: 'Calm' },
+  { value: 'whisper', label: 'Whisper' },
+  { value: 'cheerful', label: 'Cheerful' },
+  { value: 'serious', label: 'Serious' },
+];
+
+export const TTS_PACES = [
+  { value: '', label: 'Default' },
+  { value: 'very_slow', label: 'Very Slow' },
+  { value: 'slow', label: 'Slow' },
+  { value: 'moderate', label: 'Moderate' },
+  { value: 'fast', label: 'Fast' },
+  { value: 'very_fast', label: 'Very Fast' },
+];
+
+export const TTS_ACCENTS = [
+  { value: '', label: 'Default (Auto)' },
+  { value: 'american', label: 'American' },
+  { value: 'british', label: 'British' },
+  { value: 'australian', label: 'Australian' },
+  { value: 'neutral', label: 'Neutral / Accent-free' },
+];
+
+/**
+ * Build natural-language instructions from Style / Pace / Accent selections.
+ */
+export function buildInstructions(
+  style: string,
+  pace: string,
+  accent: string,
+  customInstructions: string,
+): string {
+  const parts: string[] = [];
+
+  if (style) {
+    parts.push(style);
+  }
+
+  if (pace === 'very_slow') parts.push('speak very slowly');
+  else if (pace === 'slow') parts.push('speak slowly');
+  else if (pace === 'moderate') parts.push('speak at a moderate pace');
+  else if (pace === 'fast') parts.push('speak quickly');
+  else if (pace === 'very_fast') parts.push('speak very quickly');
+
+  if (accent === 'american') parts.push('with an American accent');
+  else if (accent === 'british') parts.push('with a British accent');
+  else if (accent === 'australian') parts.push('with an Australian accent');
+  else if (accent === 'neutral') parts.push('with a neutral accent');
+
+  if (customInstructions.trim()) {
+    parts.push(customInstructions.trim());
+  }
+
+  return parts.join(', ');
+}
 
 // ── TTS Model ───────────────────────────────────────
 
-// Default fallback if DB is unreachable
 export const GEMINI_TTS_MODEL_FALLBACK = 'gemini-3.1-flash-tts-preview';
 
 // ── TTS Options ──────────────────────────────────────
@@ -59,7 +142,7 @@ export const GEMINI_TTS_MODEL_FALLBACK = 'gemini-3.1-flash-tts-preview';
 export interface TTSOptions {
   voiceName: string;
   text: string;
-  instructions?: string;  // Optional emotion/style instructions e.g. "Say cheerfully" or "whisper softly"
+  instructions?: string;
   modelId?: string;
 }
 
@@ -93,12 +176,13 @@ export async function generateSpeech(options: TTSOptions): Promise<Buffer> {
   // Build the input — prepend any style instructions
   const input = instructions ? `${instructions}: ${text}` : text;
 
-  const url = `${GEMINI_TTS_BASE}/interactions?key=${GEMINI_API_KEY}`;
+  const url = `${GEMINI_TTS_BASE}/interactions`;
 
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'x-goog-api-key': GEMINI_API_KEY,
     },
     body: JSON.stringify({
       model: modelId,
@@ -116,46 +200,79 @@ export async function generateSpeech(options: TTSOptions): Promise<Buffer> {
 
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
+    console.error('[gemini-tts] API error response:', JSON.stringify(errData));
     const msg = (errData as Record<string, Record<string, string>>)?.error?.message || `Gemini TTS error: ${res.status}`;
     throw new Error(msg);
   }
 
   const data = await res.json() as Record<string, unknown>;
 
-  // The response contains interaction.candidates[].content.parts[].inlineData.data (base64)
-  // or interaction.outputAudio (convenience property)
+  // Debug: log raw response keys for troubleshooting
+  console.log('[gemini-tts] Response top-level keys:', Object.keys(data));
+
+  // Strategy 1: interaction.output_audio.data (SDK-style response from Interactions API)
   const interaction = data['interaction'] as Record<string, unknown> | undefined;
-  if (!interaction) {
-    throw new Error('No interaction in Gemini TTS response.');
-  }
-
-  // Try convenience property (snake_case)
-  const outputAudio = interaction['output_audio'] as Record<string, unknown> | undefined;
-  if (outputAudio) {
-    const audioData = outputAudio['data'] as string;
-    if (audioData) {
-      return base64ToWav(audioData);
+  if (interaction) {
+    // Try snake_case (SDK convention)
+    const outputAudio = interaction['output_audio'] as Record<string, unknown> | undefined;
+    if (outputAudio && outputAudio['data']) {
+      return base64ToWav(outputAudio['data'] as string);
     }
-  }
-
-  // Try candidates path (snake_case)
-  const candidates = interaction['candidates'] as Array<Record<string, unknown>> | undefined;
-  if (candidates && candidates.length > 0) {
-    const content = candidates[0]['content'] as Record<string, unknown>;
-    if (content) {
-      const parts = content['parts'] as Array<Record<string, unknown>>;
-      if (parts && parts.length > 0) {
-        for (const part of parts) {
-          const inlineData = part['inline_data'] as Record<string, unknown> | undefined;
-          if (inlineData && inlineData['data']) {
-            return base64ToWav(inlineData['data'] as string);
-          }
-        }
-      }
+    // Try camelCase (REST convention)
+    const outputAudioCamel = interaction['outputAudio'] as Record<string, unknown> | undefined;
+    if (outputAudioCamel && outputAudioCamel['data']) {
+      return base64ToWav(outputAudioCamel['data'] as string);
     }
+    // Try candidates inside interaction
+    const candidates = interaction['candidates'] as Array<Record<string, unknown>> | undefined;
+    const audioFromCandidates = extractAudioFromCandidates(candidates);
+    if (audioFromCandidates) return audioFromCandidates;
   }
 
+  // Strategy 2: candidates at top level (standard generateContent response)
+  const topCandidates = data['candidates'] as Array<Record<string, unknown>> | undefined;
+  const audioFromTop = extractAudioFromCandidates(topCandidates);
+  if (audioFromTop) return audioFromTop;
+
+  // Strategy 3: outputAudio at top level
+  const topOutputAudio = data['output_audio'] as Record<string, unknown> | undefined
+    || data['outputAudio'] as Record<string, unknown> | undefined;
+  if (topOutputAudio && topOutputAudio['data']) {
+    return base64ToWav(topOutputAudio['data'] as string);
+  }
+
+  console.error('[gemini-tts] Full response:', JSON.stringify(data).substring(0, 2000));
   throw new Error('No audio data found in Gemini TTS response.');
+}
+
+/**
+ * Extract audio base64 from a candidates array (handles both snake_case and camelCase).
+ */
+function extractAudioFromCandidates(
+  candidates: Array<Record<string, unknown>> | undefined,
+): Buffer | null {
+  if (!candidates || candidates.length === 0) return null;
+
+  const content = candidates[0]['content'] as Record<string, unknown> | undefined;
+  if (!content) return null;
+
+  const parts = content['parts'] as Array<Record<string, unknown>> | undefined;
+  if (!parts || parts.length === 0) return null;
+
+  for (const part of parts) {
+    // Try snake_case
+    const inlineData = part['inline_data'] as Record<string, unknown> | undefined;
+    if (inlineData && inlineData['data']) {
+      return base64ToWav(inlineData['data'] as string);
+    }
+    // Try camelCase
+    const inlineDataCamel = part['inlineData'] as Record<string, unknown> | undefined;
+    if (inlineDataCamel && inlineDataCamel['data']) {
+      return base64ToWav(inlineDataCamel['data'] as string);
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -191,17 +308,12 @@ function base64ToWav(base64Data: string): Buffer {
 }
 
 // ── Clean narration text for TTS ─────────────────────
-// Removes stage directions like [pause], [dramatic], [music], [emotional], etc.
 export function stripStageDirections(text: string): string {
   return text
-    // Remove bracketed content: [anything], (anything), *anything*
     .replace(/\[.*?\]/g, '')
     .replace(/\(.*?\)/g, '')
     .replace(/\*.*?\*/g, '')
-    // Remove remaining empty parentheses/brackets
     .replace(/[\[\]\(\)]/g, '')
-    // Collapse multiple spaces
     .replace(/\s{2,}/g, ' ')
-    // Trim
     .trim();
 }
