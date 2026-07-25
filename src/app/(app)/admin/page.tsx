@@ -7,7 +7,8 @@ import {
   ShieldCheck, Users, Crown, Zap, Search, Loader2, ChevronDown,
   Edit3, Trash2, X, Check, Clock, Star, UserCog,
   AlertTriangle, RefreshCw, Plus, Minus, CalendarDays, Settings, Eye, Bell, Send,
-  Wrench, Youtube, ToggleLeft, ToggleRight, Save
+  Wrench, Youtube, ToggleLeft, ToggleRight, Save,
+  BrainCircuit, Mic, MessageSquare, Sparkles, Trash
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -25,6 +26,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { useAuthStore } from '@/lib/auth-store';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -59,6 +61,17 @@ function formatExpiryDate(timestamp: number): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// ── AI Model types ──
+interface AIModelItem {
+  _id: string;
+  name: string;
+  modelId: string;
+  category: 'text' | 'voice';
+  description: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
 // ── Days editing mode ──
 type DaysEditMode = 'add' | 'reduce' | 'set';
 
@@ -82,6 +95,20 @@ export default function AdminPage() {
   const [toolsConfig, setToolsConfig] = useState({ youtube: true });
   const [toolsLoading, setToolsLoading] = useState(false);
   const [toolsSaving, setToolsSaving] = useState(false);
+
+  // AI Models state
+  const [aiModels, setAiModels] = useState<AIModelItem[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
+  const [editingModel, setEditingModel] = useState<AIModelItem | null>(null);
+  const [modelSaving, setModelSaving] = useState(false);
+  const [modelName, setModelName] = useState('');
+  const [modelId, setModelId] = useState('');
+  const [modelCategory, setModelCategory] = useState<'text' | 'voice'>('text');
+  const [modelDescription, setModelDescription] = useState('');
+  const [modelIsActive, setModelIsActive] = useState(true);
+  const [deletingModel, setDeletingModel] = useState<AIModelItem | null>(null);
+  const [deletingModelLoading, setDeletingModelLoading] = useState(false);
 
   // Edit form state
   const [editPlan, setEditPlan] = useState('free');
@@ -369,6 +396,140 @@ export default function AdminPage() {
     }
   };
 
+  // ── AI Models Management ──
+  const fetchModels = useCallback(async () => {
+    setModelsLoading(true);
+    try {
+      const res = await fetch('/api/admin/models');
+      if (res.ok) {
+        const data = await res.json();
+        setAiModels(data.models || []);
+      }
+    } catch {
+      // silent
+    } finally {
+      setModelsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      fetchModels();
+    }
+  }, [user, fetchModels]);
+
+  const openModelDialog = (model?: AIModelItem) => {
+    if (model) {
+      setEditingModel(model);
+      setModelName(model.name);
+      setModelId(model.modelId);
+      setModelCategory(model.category);
+      setModelDescription(model.description);
+      setModelIsActive(model.isActive);
+    } else {
+      setEditingModel(null);
+      setModelName('');
+      setModelId('');
+      setModelCategory('text');
+      setModelDescription('');
+      setModelIsActive(true);
+    }
+    setModelDialogOpen(true);
+  };
+
+  const handleSaveModel = async () => {
+    if (!modelName.trim() || !modelId.trim()) {
+      toast.error('Name and Model ID are required');
+      return;
+    }
+    setModelSaving(true);
+    try {
+      const body = {
+        name: modelName.trim(),
+        modelId: modelId.trim(),
+        category: modelCategory,
+        description: modelDescription.trim(),
+        isActive: modelIsActive,
+      };
+      const res = editingModel
+        ? await fetch(`/api/admin/models/${editingModel._id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+        : await fetch('/api/admin/models', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(editingModel ? 'Model updated' : 'Model added');
+        setModelDialogOpen(false);
+        fetchModels();
+      } else {
+        toast.error(data.error || 'Failed to save model');
+      }
+    } catch {
+      toast.error('Network error');
+    } finally {
+      setModelSaving(false);
+    }
+  };
+
+  const handleToggleModel = async (model: AIModelItem) => {
+    try {
+      const res = await fetch(`/api/admin/models/${model._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !model.isActive }),
+      });
+      if (res.ok) {
+        toast.success(`${model.name} ${!model.isActive ? 'activated' : 'deactivated'}`);
+        fetchModels();
+      } else {
+        toast.error('Failed to toggle model');
+      }
+    } catch {
+      toast.error('Network error');
+    }
+  };
+
+  const handleDeleteModel = async () => {
+    if (!deletingModel) return;
+    setDeletingModelLoading(true);
+    try {
+      const res = await fetch(`/api/admin/models/${deletingModel._id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`Deleted ${deletingModel.name}`);
+        setDeletingModel(null);
+        fetchModels();
+      } else {
+        toast.error(data.error || 'Failed to delete model');
+      }
+    } catch {
+      toast.error('Network error');
+    } finally {
+      setDeletingModelLoading(false);
+    }
+  };
+
+  const handleSeedModels = async () => {
+    try {
+      const res = await fetch('/api/admin/models/seed', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message || 'Models seeded');
+        fetchModels();
+      } else {
+        toast.error(data.error || 'Failed to seed models');
+      }
+    } catch {
+      toast.error('Network error');
+    }
+  };
+
   if (!user || user.role !== 'admin') return null;
 
   return (
@@ -488,6 +649,238 @@ export default function AdminPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ══════════════════════════════════════════════════════ */}
+      {/* ── AI Models Management ── */}
+      {/* ══════════════════════════════════════════════════════ */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <BrainCircuit className="size-4" />
+                AI Models
+                <Badge variant="secondary" className="text-[10px]">{aiModels.length}</Badge>
+              </CardTitle>
+              <CardDescription>
+                Manage text generation and voice AI models. Only active models are used in generation.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={handleSeedModels} disabled={modelsLoading}>
+                <Sparkles className="size-3" />
+                Seed Defaults
+              </Button>
+              <Button size="sm" className="gap-1.5 text-xs h-8" onClick={() => openModelDialog()}>
+                <Plus className="size-3" />
+                Add Model
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {modelsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-sm text-muted-foreground">Loading models...</span>
+            </div>
+          ) : aiModels.length === 0 ? (
+            <div className="text-center py-12 space-y-3">
+              <BrainCircuit className="size-8 text-muted-foreground mx-auto" />
+              <div>
+                <p className="text-sm text-muted-foreground">No AI models configured.</p>
+                <p className="text-xs text-muted-foreground mt-1">Click &quot;Seed Defaults&quot; to add the default models.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {/* Text Models */}
+              {aiModels.filter(m => m.category === 'text').length > 0 && (
+                <>
+                  <div className="px-4 py-2 bg-muted/30">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <MessageSquare className="size-3" />
+                      Text Generation Models
+                    </p>
+                  </div>
+                  {aiModels.filter(m => m.category === 'text').map((model) => (
+                    <div key={model._id} className="flex items-center justify-between px-4 py-3.5">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={cn(
+                          'size-9 rounded-lg flex items-center justify-center shrink-0',
+                          model.isActive ? 'bg-blue-500/10' : 'bg-muted/50'
+                        )}>
+                          <Sparkles className={cn('size-4', model.isActive ? 'text-blue-500' : 'text-muted-foreground')} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{model.name}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono truncate">{model.modelId}</p>
+                          {model.description && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{model.description}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-3">
+                        <Badge variant={model.isActive ? 'default' : 'secondary'} className="text-[10px]">
+                          {model.isActive ? 'Active' : 'Off'}
+                        </Badge>
+                        <Switch checked={model.isActive} onCheckedChange={() => handleToggleModel(model)} />
+                        <Button variant="ghost" size="icon" className="size-7" onClick={() => openModelDialog(model)}>
+                          <Edit3 className="size-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="size-7 text-destructive" onClick={() => setDeletingModel(model)}>
+                          <Trash className="size-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+              {/* Voice Models */}
+              {aiModels.filter(m => m.category === 'voice').length > 0 && (
+                <>
+                  <div className="px-4 py-2 bg-muted/30">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <Mic className="size-3" />
+                      Voice (TTS) Models
+                    </p>
+                  </div>
+                  {aiModels.filter(m => m.category === 'voice').map((model) => (
+                    <div key={model._id} className="flex items-center justify-between px-4 py-3.5">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={cn(
+                          'size-9 rounded-lg flex items-center justify-center shrink-0',
+                          model.isActive ? 'bg-purple-500/10' : 'bg-muted/50'
+                        )}>
+                          <Mic className={cn('size-4', model.isActive ? 'text-purple-500' : 'text-muted-foreground')} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{model.name}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono truncate">{model.modelId}</p>
+                          {model.description && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{model.description}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-3">
+                        <Badge variant={model.isActive ? 'default' : 'secondary'} className="text-[10px]">
+                          {model.isActive ? 'Active' : 'Off'}
+                        </Badge>
+                        <Switch checked={model.isActive} onCheckedChange={() => handleToggleModel(model)} />
+                        <Button variant="ghost" size="icon" className="size-7" onClick={() => openModelDialog(model)}>
+                          <Edit3 className="size-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="size-7 text-destructive" onClick={() => setDeletingModel(model)}>
+                          <Trash className="size-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Add/Edit Model Dialog ── */}
+      <Dialog open={modelDialogOpen} onOpenChange={setModelDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingModel ? 'Edit AI Model' : 'Add AI Model'}</DialogTitle>
+            <DialogDescription>
+              {editingModel ? 'Update the model configuration.' : 'Add a new AI model for text generation or voice synthesis.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">Category</Label>
+              <Select value={modelCategory} onValueChange={(v: string) => setModelCategory(v as 'text' | 'voice')}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="size-3.5" />
+                      Text Generation
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="voice">
+                    <div className="flex items-center gap-2">
+                      <Mic className="size-3.5" />
+                      Voice (TTS)
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">Display Name</Label>
+              <Input
+                value={modelName}
+                onChange={(e) => setModelName(e.target.value)}
+                placeholder="e.g. Gemini 2.5 Flash"
+                className="h-9 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">Model ID</Label>
+              <Input
+                value={modelId}
+                onChange={(e) => setModelId(e.target.value)}
+                placeholder="e.g. gemini-2.5-flash"
+                className="h-9 text-sm font-mono"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                The exact model identifier used in the API call (e.g. gemini-2.5-flash, gemini-3.1-flash-tts-preview)
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">Description</Label>
+              <Input
+                value={modelDescription}
+                onChange={(e) => setModelDescription(e.target.value)}
+                placeholder="Brief description of the model"
+                className="h-9 text-sm"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-xs font-medium">Active</Label>
+                <p className="text-[10px] text-muted-foreground">Only active models are used in generation</p>
+              </div>
+              <Switch checked={modelIsActive} onCheckedChange={setModelIsActive} />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setModelDialogOpen(false)} className="text-sm">Cancel</Button>
+            <Button onClick={handleSaveModel} disabled={modelSaving || !modelName.trim() || !modelId.trim()} className="text-sm gap-1.5">
+              {modelSaving && <Loader2 className="size-3 animate-spin" />}
+              {editingModel ? 'Update Model' : 'Add Model'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete Model Confirmation ── */}
+      <Dialog open={!!deletingModel} onOpenChange={() => setDeletingModel(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Model</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{deletingModel?.name}</strong>? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDeletingModel(null)} className="text-sm">Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteModel} disabled={deletingModelLoading} className="text-sm gap-1.5">
+              {deletingModelLoading && <Loader2 className="size-3 animate-spin" />}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Users Table */}
       <Card>

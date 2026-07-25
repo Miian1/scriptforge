@@ -10,6 +10,7 @@ import { getSession } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
 import { SceneModel } from '@/lib/models/Scene';
 import { generateSpeech, stripStageDirections } from '@/lib/gemini-tts';
+import { getActiveModelId } from '@/lib/get-active-model';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
@@ -55,11 +56,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Resolve voice model: use caller-specified modelId, else active from DB, else fallback
+    const resolvedModelId = modelId || await getActiveModelId('voice');
+
     const audioBuffer = await generateSpeech({
       voiceName,
       text: cleanNarration,
       instructions: instructions || undefined,
-      modelId: modelId || undefined,
+      modelId: resolvedModelId,
     });
 
     // Optionally save audio to disk

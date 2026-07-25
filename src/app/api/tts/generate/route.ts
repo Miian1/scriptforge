@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import { SceneModel } from '@/lib/models/Scene';
 import { generateSpeech, stripStageDirections } from '@/lib/gemini-tts';
+import { getActiveModelId } from '@/lib/get-active-model';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
@@ -34,11 +35,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Text is too long (max 5000 characters)' }, { status: 400 });
     }
 
+    // Resolve voice model: use caller-specified modelId, else active from DB, else fallback
+    const resolvedModelId = modelId || await getActiveModelId('voice');
+
     const audioBuffer = await generateSpeech({
       voiceName,
       text: cleanText,
       instructions: instructions || undefined,
-      modelId: modelId || undefined,
+      modelId: resolvedModelId,
     });
 
     // Optionally save audio to disk and update scene

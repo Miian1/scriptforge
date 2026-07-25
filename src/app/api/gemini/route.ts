@@ -3,9 +3,10 @@ import { getSession } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models/User';
 import { PLAN_LIMITS, resetIfNewDay } from '@/lib/usage';
+import { getActiveModelId } from '@/lib/get-active-model';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const FALLBACK_MODEL = 'gemini-2.5-flash';
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,7 +55,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Prompt is required.' }, { status: 400 });
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    const modelId = await getActiveModelId('text').catch(() => FALLBACK_MODEL);
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${GEMINI_API_KEY}`;
 
     const res = await fetch(url, {
       method: 'POST',

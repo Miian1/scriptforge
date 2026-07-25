@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import { AppSettings } from '@/lib/models/AppSettings';
 import { getSession } from '@/lib/auth';
+import { getActiveModelId } from '@/lib/get-active-model';
 
 // PUT /api/settings — admin only
 export async function PUT(req: NextRequest) {
@@ -27,8 +28,9 @@ export async function PUT(req: NextRequest) {
 
     // Test action — validate the key before saving
     if (action === 'test' && geminiApiKey) {
+      const testModel = await getActiveModelId('text').catch(() => 'gemini-2.5-flash');
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${testModel}:generateContent?key=${geminiApiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -51,11 +51,8 @@ export const GEMINI_TTS_VOICES: GeminiVoice[] = [
 
 // ── TTS Model ───────────────────────────────────────
 
-export const GEMINI_TTS_MODEL = 'gemini-3.1-flash-tts-preview';
-
-export const GEMINI_TTS_MODELS = [
-  { id: 'gemini-3.1-flash-tts-preview', name: 'Gemini 3.1 Flash TTS', description: 'Latest TTS preview, fast generation' },
-];
+// Default fallback if DB is unreachable
+export const GEMINI_TTS_MODEL_FALLBACK = 'gemini-3.1-flash-tts-preview';
 
 // ── TTS Options ──────────────────────────────────────
 
@@ -87,7 +84,7 @@ export async function generateSpeech(options: TTSOptions): Promise<Buffer> {
     voiceName,
     text,
     instructions = '',
-    modelId = GEMINI_TTS_MODEL,
+    modelId = GEMINI_TTS_MODEL_FALLBACK,
   } = options;
 
   if (!voiceName) throw new Error('voiceName is required.');

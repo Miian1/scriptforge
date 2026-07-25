@@ -6,9 +6,12 @@ import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models/User';
 import { PLAN_LIMITS, resetIfNewDay } from '@/lib/usage';
 import { getSession } from '@/lib/auth';
+import { getActiveModelId } from '@/lib/get-active-model';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.5-flash';
+
+// Fallback if DB is unreachable
+const FALLBACK_MODEL = 'gemini-2.5-flash';
 
 export interface GeminiCallOptions {
   prompt: string;
@@ -46,8 +49,9 @@ export async function geminiServerCall(
   user.dailyUsage = { ...usage, aiGenerations: usage.aiGenerations + 1 };
   await user.save();
 
-  // Call Gemini
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  // Call Gemini — use active model from DB
+  const modelId = await getActiveModelId('text').catch(() => FALLBACK_MODEL);
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${GEMINI_API_KEY}`;
 
   const res = await fetch(url, {
     method: 'POST',

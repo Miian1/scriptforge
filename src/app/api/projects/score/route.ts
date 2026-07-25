@@ -5,9 +5,10 @@ import { User } from '@/lib/models/User';
 import { YouTubeCache } from '@/lib/models/YouTubeCache';
 import { getSession } from '@/lib/auth';
 import { PLAN_LIMITS, resetIfNewDay } from '@/lib/usage';
+import { getActiveModelId } from '@/lib/get-active-model';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const FALLBACK_MODEL = 'gemini-2.5-flash';
 
 export async function POST(req: NextRequest) {
   try {
@@ -127,7 +128,8 @@ Return JSON in this exact format:
       return NextResponse.json({ error: 'Gemini API key not configured' }, { status: 500 });
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    const modelId = await getActiveModelId('text').catch(() => FALLBACK_MODEL);
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${GEMINI_API_KEY}`;
 
     const res = await fetch(url, {
       method: 'POST',
