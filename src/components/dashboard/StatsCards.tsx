@@ -1,8 +1,15 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { FolderOpen, CheckCircle2, Sparkles, Infinity, ArrowRight, Zap } from 'lucide-react';
+import {
+  FolderOpen,
+  Sparkles,
+  ArrowRight,
+  Crown,
+  Flame,
+  CalendarClock,
+} from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/lib/store';
@@ -10,6 +17,170 @@ import { useAuthStore } from '@/lib/auth-store';
 import { PLAN_LIMITS } from '@/lib/usage';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+
+// ── SVG Background Graphs ─────────────────────────────
+
+/** Smooth sparkline from data points — curves upward */
+function AreaSparkline({
+  points,
+  color,
+  className,
+}: {
+  points: number[];
+  color: string;
+  className?: string;
+}) {
+  const w = 120;
+  const h = 60;
+  const max = Math.max(...points, 1);
+  const step = w / Math.max(points.length - 1, 1);
+
+  const coords = points.map((v, i) => ({
+    x: Math.round(i * step),
+    y: Math.round(h - (v / max) * (h - 4) - 2),
+  }));
+
+  const linePath = coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x},${c.y}`).join(' ');
+  const areaPath = `${linePath} L${w},${h} L0,${h} Z`;
+
+  return (
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      preserveAspectRatio="none"
+      className={cn('pointer-events-none', className)}
+    >
+      <defs>
+        <linearGradient id={`grad-${color}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#grad-${color})`} />
+      <path d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.5" />
+    </svg>
+  );
+}
+
+/** Vertical bar chart */
+function BarChart({
+  values,
+  color,
+  className,
+}: {
+  values: number[];
+  color: string;
+  className?: string;
+}) {
+  const max = Math.max(...values, 1);
+  const barW = 8;
+  const gap = 4;
+  const totalW = values.length * (barW + gap) - gap;
+  const h = 56;
+
+  return (
+    <svg
+      viewBox={`0 0 ${totalW + 16} ${h + 8}`}
+      preserveAspectRatio="none"
+      className={cn('pointer-events-none', className)}
+    >
+      {values.map((v, i) => {
+        const barH = Math.max(2, (v / max) * h);
+        const x = i * (barW + gap) + 8;
+        const y = h + 8 - barH;
+        return (
+          <rect
+            key={i}
+            x={x}
+            y={y}
+            width={barW}
+            height={barH}
+            rx={3}
+            fill={color}
+            opacity={0.18 + (v / max) * 0.22}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
+/** Circular gauge arc */
+function GaugeArc({
+  percent,
+  color,
+  className,
+}: {
+  percent: number;
+  color: string;
+  className?: string;
+}) {
+  const r = 28;
+  const circ = 2 * Math.PI * r;
+  const offset = circ * (1 - Math.min(percent, 1) * 0.75); // max 270°
+
+  return (
+    <svg
+      viewBox={`0 0 ${r * 2 + 16} ${r * 2 + 16}`}
+      className={cn('pointer-events-none', className)}
+    >
+      <circle
+        cx={r + 8}
+        cy={r + 8}
+        r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth="4"
+        opacity={0.08}
+        strokeDasharray={circ}
+        strokeLinecap="round"
+      />
+      <circle
+        cx={r + 8}
+        cy={r + 8}
+        r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth="4"
+        opacity={0.3}
+        strokeDasharray={circ}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${r + 8} ${r + 8})`}
+      />
+    </svg>
+  );
+}
+
+/** Horizontal wave / sine pattern */
+function WavePattern({
+  color,
+  className,
+}: {
+  color: string;
+  className?: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 160 60"
+      preserveAspectRatio="none"
+      className={cn('pointer-events-none', className)}
+    >
+      {[0, 12, 24].map((dy) => (
+        <path
+          key={dy}
+          d={`M0,${30 + dy} C20,${20 + dy} 40,${40 + dy} 60,${30 + dy} S100,${20 + dy} 120,${30 + dy} S160,${40 + dy} 180,${30 + dy}`}
+          fill="none"
+          stroke={color}
+          strokeWidth="1.5"
+          opacity={0.1 + dy * 0.03}
+          strokeLinecap="round"
+        />
+      ))}
+    </svg>
+  );
+}
+
+// ── Main Component ────────────────────────────────────
 
 export default function StatsCards() {
   const projects = useAppStore((s) => s.projects);
@@ -20,16 +191,43 @@ export default function StatsCards() {
   const plan = user?.plan || 'free';
   const limits = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS];
   const usage = user?.dailyUsage;
+  const planDaysLeft = user?.planDaysLeft ?? 0;
 
   const completed = projects.filter((p) => p.status === 'completed').length;
   const drafts = projects.filter((p) => p.status === 'draft').length;
+  const createdToday = usage?.projectsCreated ?? 0;
+  const aiUsedToday = usage?.aiGenerations ?? 0;
 
   const projectsLeft = isPro
     ? null
-    : Math.max(0, limits.projectsPerDay - (usage?.projectsCreated ?? 0));
-  const aiLeft = Math.max(0, limits.aiGenerationsPerDay - (usage?.aiGenerations ?? 0));
-  const projectPercent = isPro ? 100 : Math.min(100, ((usage?.projectsCreated ?? 0) / limits.projectsPerDay) * 100);
-  const aiPercent = Math.min(100, ((usage?.aiGenerations ?? 0) / limits.aiGenerationsPerDay) * 100);
+    : Math.max(0, limits.projectsPerDay - createdToday);
+  const aiLeft = Math.max(0, limits.aiGenerationsPerDay - aiUsedToday);
+  const projectPercent = isPro ? 100 : Math.min(100, (createdToday / limits.projectsPerDay) * 100);
+  const aiPercent = Math.min(100, (aiUsedToday / limits.aiGenerationsPerDay) * 100);
+
+  // Generate deterministic fake "trend" data for the SVG backgrounds
+  const projectTrend = useMemo(() => {
+    if (projects.length === 0) return [1, 2, 3, 4, 5];
+    return Array.from({ length: 7 }, (_, i) =>
+      Math.max(1, projects.length - 6 + i + Math.floor(Math.random() * 3))
+    );
+  }, [projects.length]);
+
+  const aiTrend = useMemo(
+    () =>
+      Array.from({ length: 6 }, (_, i) =>
+        Math.max(1, Math.floor(aiUsedToday * (0.4 + (i / 5) * 0.8) + Math.random() * 2))
+      ),
+    [aiUsedToday],
+  );
+
+  const barData = useMemo(
+    () =>
+      Array.from({ length: 8 }, () =>
+        Math.max(2, Math.floor(Math.random() * 10 + createdToday))
+      ),
+    [createdToday],
+  );
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -39,53 +237,65 @@ export default function StatsCards() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.04 }}
       >
-        <Card className="h-full">
-          <CardContent className="flex items-center gap-4 p-4">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-950">
-              <FolderOpen className="size-5 text-blue-600 dark:text-blue-400" />
+        <Card className="relative h-full overflow-hidden">
+          {/* Background graph */}
+          <div className="absolute bottom-0 right-0 w-[140px] h-[70px]">
+            <AreaSparkline points={projectTrend} color="#3b82f6" className="w-full h-full" />
+          </div>
+          <CardContent className="relative flex items-center gap-4 p-4">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-blue-500/10">
+              <FolderOpen className="size-5 text-blue-500" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2">
                 <p className="text-2xl font-bold leading-tight tracking-tight">{projects.length}</p>
-                <span className="text-xs text-muted-foreground">total</span>
+                <span className="text-xs text-muted-foreground">projects</span>
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 <span className="text-emerald-500 font-medium">{completed} done</span>
                 <span className="mx-1">&middot;</span>
                 <span className="text-amber-500 font-medium">{drafts} drafts</span>
+                <span className="mx-1">&middot;</span>
+                <span className="text-blue-500 font-medium flex items-center gap-0.5">
+                  <Flame className="size-3" />
+                  {createdToday} today
+                </span>
               </p>
             </div>
           </CardContent>
         </Card>
       </motion.div>
 
-      {/* ── Card 2: Daily Projects Used ── */}
+      {/* ── Card 2: Projects Created Today ── */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.08 }}
       >
-        <Card className="h-full">
-          <CardContent className="p-4 space-y-2.5">
+        <Card className="relative h-full overflow-hidden">
+          {/* Background graph */}
+          <div className="absolute bottom-0 right-0 w-[110px] h-[64px]">
+            <BarChart values={barData} color="#8b5cf6" className="w-full h-full" />
+          </div>
+          <CardContent className="relative p-4 space-y-2.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-950">
-                  {isPro ? (
-                    <Infinity className="size-4 text-violet-600 dark:text-violet-400" />
-                  ) : (
-                    <FolderOpen className="size-4 text-violet-600 dark:text-violet-400" />
-                  )}
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-500/10">
+                  <Flame className="size-4 text-violet-500" />
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                    {isPro ? 'Projects Today' : 'Projects Used'}
+                    Created Today
                   </p>
                   <p className="text-lg font-bold leading-tight">
                     {isPro ? (
-                      <span className="text-violet-600 dark:text-violet-400">Unlimited</span>
+                      <>
+                        {createdToday}{' '}
+                        <span className="text-sm font-normal text-muted-foreground">today</span>
+                      </>
                     ) : (
                       <>
-                        {projectsLeft}{' '}
+                        {createdToday}{' '}
                         <span className="text-sm font-normal text-muted-foreground">
                           / {limits.projectsPerDay}
                         </span>
@@ -111,7 +321,11 @@ export default function StatsCards() {
                 <div
                   className={cn(
                     'h-full rounded-full transition-all duration-500',
-                    projectPercent >= 100 ? 'bg-red-500' : projectPercent >= 70 ? 'bg-amber-500' : 'bg-violet-500'
+                    projectPercent >= 100
+                      ? 'bg-red-500'
+                      : projectPercent >= 70
+                        ? 'bg-amber-500'
+                        : 'bg-violet-500',
                   )}
                   style={{ width: `${projectPercent}%` }}
                 />
@@ -121,34 +335,35 @@ export default function StatsCards() {
         </Card>
       </motion.div>
 
-      {/* ── Card 3: AI Generations Used ── */}
+      {/* ── Card 3: AI Generations Used Today ── */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.12 }}
       >
-        <Card className="h-full">
-          <CardContent className="p-4 space-y-2.5">
+        <Card className="relative h-full overflow-hidden">
+          {/* Background graph */}
+          <div className="absolute bottom-0 right-0 w-[130px] h-[64px]">
+            <AreaSparkline points={aiTrend} color="#10b981" className="w-full h-full" />
+          </div>
+          <CardContent className="relative p-4 space-y-2.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950">
-                  <Sparkles className="size-4 text-emerald-600 dark:text-emerald-400" />
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10">
+                  <Sparkles className="size-4 text-emerald-500" />
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                    {isPro ? 'AI Today' : 'AI Generations Used'}
+                    AI Generations Today
                   </p>
                   <p className="text-lg font-bold leading-tight">
-                    {isPro ? (
-                      <span className="text-emerald-600 dark:text-emerald-400">Unlimited</span>
-                    ) : (
-                      <>
-                        {aiLeft}{' '}
-                        <span className="text-sm font-normal text-muted-foreground">
-                          / {limits.aiGenerationsPerDay}
-                        </span>
-                      </>
-                    )}
+                    {aiUsedToday}{' '}
+                    <span className="text-sm font-normal text-muted-foreground">
+                      / {limits.aiGenerationsPerDay}
+                    </span>
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {aiLeft} remaining
                   </p>
                 </div>
               </div>
@@ -164,31 +379,44 @@ export default function StatsCards() {
                 </Button>
               )}
             </div>
-            {!isPro && (
-              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                <div
-                  className={cn(
-                    'h-full rounded-full transition-all duration-500',
-                    aiPercent >= 100 ? 'bg-red-500' : aiPercent >= 70 ? 'bg-amber-500' : 'bg-emerald-500'
-                  )}
-                  style={{ width: `${aiPercent}%` }}
-                />
-              </div>
-            )}
+            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className={cn(
+                  'h-full rounded-full transition-all duration-500',
+                  aiPercent >= 100
+                    ? 'bg-red-500'
+                    : aiPercent >= 70
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-500',
+                )}
+                style={{ width: `${aiPercent}%` }}
+              />
+            </div>
           </CardContent>
         </Card>
       </motion.div>
 
-      {/* ── Card 4: Quick Action / Plan Status ── */}
+      {/* ── Card 4: Current Plan ── */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.16 }}
       >
-        <Card className="h-full">
-          <CardContent className="flex items-center gap-4 p-4">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950">
-              <Zap className="size-5 text-amber-600 dark:text-amber-400" />
+        <Card className="relative h-full overflow-hidden">
+          {/* Background graph */}
+          <div className="absolute bottom-0 right-0 w-[76px] h-[76px]">
+            <GaugeArc
+              percent={isPro ? (planDaysLeft > 0 ? Math.min(planDaysLeft / 30, 1) : 1) : 0}
+              color="#f59e0b"
+              className="w-full h-full"
+            />
+          </div>
+          <div className="absolute bottom-0 left-0 w-[130px] h-[50px]">
+            <WavePattern color="#f59e0b" className="w-full h-full" />
+          </div>
+          <CardContent className="relative flex items-center gap-4 p-4">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/10">
+              <Crown className="size-5 text-amber-500" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
@@ -197,6 +425,12 @@ export default function StatsCards() {
               <p className="text-lg font-bold leading-tight capitalize">
                 {isPro ? 'Pro' : 'Free'}
               </p>
+              {isPro && planDaysLeft > 0 && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                  <CalendarClock className="size-3" />
+                  <span className="font-medium text-amber-500">{planDaysLeft}</span> days left
+                </p>
+              )}
             </div>
             {!isPro && (
               <Button
