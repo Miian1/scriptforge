@@ -43,6 +43,15 @@ export interface IChannelNiche {
   channelUrl: string;       // YouTube channel URL
 }
 
+export interface INotification {
+  id: string;
+  type: 'info' | 'warning' | 'urgent';
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: number; // ms timestamp
+}
+
 export interface IUser extends Document {
   name: string;
   email: string;
@@ -61,6 +70,7 @@ export interface IUser extends Document {
   youtube: IYouTubeConnection;
   channelNiche: IChannelNiche;
   stripe: IStripeInfo;
+  notifications: INotification[];
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidate: string): Promise<boolean>;
@@ -103,6 +113,15 @@ const CustomPlanSchema = new Schema<ICustomPlan>({
   customDays: { type: Number, default: 0 },
 });
 
+const NotificationSchema = new Schema<INotification>({
+  id: { type: String, required: true },
+  type: { type: String, enum: ['info', 'warning', 'urgent'], default: 'info' },
+  title: { type: String, required: true },
+  message: { type: String, required: true },
+  read: { type: Boolean, default: false },
+  createdAt: { type: Number, default: () => Date.now() },
+});
+
 const UserSchema = new Schema<IUser>(
   {
     name: { type: String, required: true, trim: true, maxlength: 100 },
@@ -143,6 +162,10 @@ const UserSchema = new Schema<IUser>(
     customPlan: {
       type: CustomPlanSchema,
       default: () => ({ isCustom: false, customLabel: '', customDays: 0 }),
+    },
+    notifications: {
+      type: [NotificationSchema],
+      default: () => [],
     },
   },
   { timestamps: true }

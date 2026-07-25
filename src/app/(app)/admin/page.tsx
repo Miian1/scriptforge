@@ -6,11 +6,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShieldCheck, Users, Crown, Zap, Search, Loader2, ChevronDown,
   Edit3, Trash2, X, Check, Clock, Star, UserCog,
-  AlertTriangle, RefreshCw, Plus, Minus, CalendarDays, Settings, Eye
+  AlertTriangle, RefreshCw, Plus, Minus, CalendarDays, Settings, Eye, Bell, Send
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -69,6 +70,11 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [notifyUser, setNotifyUser] = useState<AdminUser | null>(null);
+  const [sendingNotif, setSendingNotif] = useState(false);
+  const [notifTitle, setNotifTitle] = useState('');
+  const [notifMessage, setNotifMessage] = useState('');
+  const [notifType, setNotifType] = useState<'info' | 'warning' | 'urgent'>('info');
 
   // Edit form state
   const [editPlan, setEditPlan] = useState('free');
@@ -276,6 +282,38 @@ export default function AdminPage() {
     }
   };
 
+  // Send notification to user
+  const handleSendNotification = async () => {
+    if (!notifyUser || !notifTitle.trim() || !notifMessage.trim()) return;
+    setSendingNotif(true);
+    try {
+      const res = await fetch('/api/admin/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: notifyUser.id,
+          title: notifTitle.trim(),
+          message: notifMessage.trim(),
+          type: notifType,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`Notification sent to ${notifyUser.name}`);
+        setNotifyUser(null);
+        setNotifTitle('');
+        setNotifMessage('');
+        setNotifType('info');
+      } else {
+        toast.error(data.error || 'Failed to send notification');
+      }
+    } catch {
+      toast.error('Network error');
+    } finally {
+      setSendingNotif(false);
+    }
+  };
+
   if (!user || user.role !== 'admin') return null;
 
   return (
@@ -472,6 +510,16 @@ export default function AdminPage() {
                             onClick={() => quickAddDays(u, 30)}
                           >
                             <Plus className="size-3" />
+                          </Button>
+                          {/* Send notification */}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 text-blue-500 hover:text-blue-500"
+                            title="Send notification"
+                            onClick={() => { setNotifyUser(u); setNotifTitle(''); setNotifMessage(''); setNotifType('info'); }}
+                          >
+                            <Bell className="size-3" />
                           </Button>
                           {/* Edit */}
                           <Button
@@ -833,6 +881,100 @@ export default function AdminPage() {
             <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
               {deleting ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ══════════════════════════════════════════════════════ */}
+      {/* ── Send Notification Dialog ── */}
+      {/* ══════════════════════════════════════════════════════ */}
+      <Dialog open={!!notifyUser} onOpenChange={() => setNotifyUser(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bell className="size-4 text-blue-500" />
+              Send Notification
+            </DialogTitle>
+            <DialogDescription>
+              Send a notification to {notifyUser?.name} ({notifyUser?.email})
+            </DialogDescription>
+          </DialogHeader>
+
+          {notifyUser && (
+            <div className="space-y-4 py-2">
+              {/* Recipient */}
+              <div className="rounded-lg bg-muted/50 p-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Recipient</span>
+                  <span className="font-medium">{notifyUser.name}</span>
+                </div>
+                <div className="flex justify-between text-sm mt-1">
+                  <span className="text-muted-foreground">Plan</span>
+                  <span className={cn(notifyUser.plan === 'pro' && 'text-primary font-medium')}>
+                    {notifyUser.plan === 'pro' ? 'Pro' : 'Free'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Notification Type */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Type</label>
+                <div className="flex items-center gap-1.5">
+                  {([
+                    { value: 'info' as const, label: 'Info', color: 'text-blue-500' },
+                    { value: 'warning' as const, label: 'Warning', color: 'text-amber-500' },
+                    { value: 'urgent' as const, label: 'Urgent', color: 'text-red-500' },
+                  ]).map(({ value, label, color }) => (
+                    <Button
+                      key={value}
+                      variant={notifType === value ? 'default' : 'outline'}
+                      size="sm"
+                      className={cn('gap-1 text-xs', notifType !== value && 'text-muted-foreground')}
+                      onClick={() => setNotifType(value)}
+                    >
+                      <span className={cn('size-1.5 rounded-full', color === 'text-blue-500' ? 'bg-blue-500' : color === 'text-amber-500' ? 'bg-amber-500' : 'bg-red-500')} />
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Title */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Title</label>
+                <Input
+                  placeholder="e.g. Welcome to Pro!"
+                  value={notifTitle}
+                  onChange={(e) => setNotifTitle(e.target.value)}
+                  maxLength={100}
+                />
+              </div>
+
+              {/* Message */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Message</label>
+                <Textarea
+                  placeholder="Write your notification message..."
+                  value={notifMessage}
+                  onChange={(e) => setNotifMessage(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                />
+                <p className="text-[11px] text-muted-foreground text-right">{notifMessage.length}/500</p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setNotifyUser(null)}>Cancel</Button>
+            <Button
+              onClick={handleSendNotification}
+              disabled={sendingNotif || !notifTitle.trim() || !notifMessage.trim()}
+              className="gap-2"
+            >
+              {sendingNotif ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              Send
             </Button>
           </DialogFooter>
         </DialogContent>

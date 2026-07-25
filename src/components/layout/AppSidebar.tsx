@@ -129,14 +129,20 @@ function SidebarNavItem({
 // ── Collapse Toggle ────────────────────────────────────
 
 function CollapseToggle() {
-  const { sidebarCollapsed, toggleSidebarCollapsed } = useAppStore();
+  const { sidebarCollapsed, setSidebarCollapsed } = useAppStore();
+
+  // Collapse button only collapses (never expands). Expansion happens by clicking sidebar.
+  const handleCollapse = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!sidebarCollapsed) setSidebarCollapsed(true);
+  };
 
   return (
     <Tooltip delayDuration={0}>
       <TooltipTrigger asChild>
         <Button
           variant="ghost"
-          onClick={toggleSidebarCollapsed}
+          onClick={handleCollapse}
           className={cn('h-10 w-full rounded-lg justify-start pl-0', sidebar.text, sidebar.hover)}
           aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
@@ -246,7 +252,7 @@ function MobileLogoutButton({ onClose }: { onClose: () => void }) {
 // ── Desktop Sidebar (lg+): Full or Collapsed ───────────
 
 function DesktopSidebar() {
-  const { sidebarCollapsed } = useAppStore();
+  const { sidebarCollapsed, setSidebarCollapsed } = useAppStore();
   const pathname = usePathname();
   const router = useRouter();
   const userName = useAuthStore((s) => s.user?.name);
@@ -261,9 +267,12 @@ function DesktopSidebar() {
       animate={{ width: sidebarCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       className={cn(
-        'hidden md:fixed md:inset-y-0 md:z-40 md:flex md:flex-col overflow-hidden border-r shadow-sm',
+        'hidden md:fixed md:inset-y-0 md:z-40 md:flex md:flex-col overflow-hidden border-r shadow-sm cursor-pointer',
         sidebar.bg, sidebar.border
       )}
+      onClick={() => {
+        if (sidebarCollapsed) setSidebarCollapsed(false);
+      }}
     >
       {/* Brand — hidden when collapsed on tablet */}
       <AnimatePresence>
