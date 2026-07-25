@@ -1,8 +1,13 @@
 // ── Gemini TTS: Debug Endpoint ────────────────────────
-// POST /api/tts/debug
-// Dumps the raw Gemini API response for troubleshooting
+// POST /api/tts/debug — tests all Gemini TTS API formats and returns response info
 
 import { NextRequest, NextResponse } from 'next/server';
+
+async function truncate(data: unknown, maxLen = 500): Promise<unknown> {
+  const json = JSON.stringify(data);
+  if (json.length <= maxLen) return data;
+  return JSON.parse(json.substring(0, maxLen) + '..."');
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,96 +16,137 @@ export async function POST(req: NextRequest) {
 
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     if (!GEMINI_API_KEY) {
-      return NextResponse.json({ error: 'GEMINI_API_KEY is not configured in server environment' }, { status: 500 });
+      return NextResponse.json({ error: 'GEMINI_API_KEY is not set in .env.local' }, { status: 500 });
     }
 
     const results: Record<string, unknown> = {};
+    const voice = voiceName || 'Kore';
+    const testText = text || 'Hello, this is a test.';
 
-    // ── Test 1: text:synthesize API ──
+    // ── Test 1: generateContent (camelCase, ?key=) ──
     try {
-      const ttsBody = {
-        input: {
-          text: text || 'Hello, this is a test.',
-        },
-        voice: {
-          languageCode: 'en-US',
-          name: voiceName || 'Kore',
-          model_name: 'gemini-3.1-flash-tts-preview',
-        },
-        audioConfig: {
-          audioEncoding: 'LINEAR16',
-          sampleRateHertz: 24000,
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-tts-preview:generateContent?key=${GEMINI_API_KEY}`;
+      const gcBody = {
+        contents: [{ role: 'user', parts: [{ text: `Say cheerfully: ${testText}` }] }],
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: voice },
+            },
+          },
         },
       };
 
-      const ttsRes = await fetch('https://texttospeech.googleapis.com/v1/text:synthesize', {
+      const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': GEMINI_API_KEY,
-        },
-        body: JSON.stringify(ttsBody),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(gcBody),
       });
 
-      const ttsData = await ttsRes.json();
-      results['text_synthesize'] = {
-        status: ttsRes.status,
-        keys: Object.keys(ttsData),
-        hasAudioContent: !!ttsData.audioContent,
-        audioContentLength: ttsData.audioContent?.length || 0,
-        raw: JSON.stringify(ttsData).substring(0, 500),
+      const data = await res.json();
+      const candidates = data.candidates as Array<Record<string, unknown>> | undefined;
+      const parts = candidates?.[0]?.content?.parts as Array<Record<string, unknown>> | undefined;
+      const firstPart = parts?.[0] || {};
+
+      results['generateContent_camelCase'] = {
+        status: res.status,
+        topKeys: Object.keys(data),
+        candidatesCount: candidates?.length || 0,
+        partsCount: parts?.length || 0,
+        firstPartKeys: Object.keys(firstPart),
+        hasInlineData: !!firstPart['inlineData'],
+        hasInlineDataSnake: !!firstPart['inline_data'],
+        hasText: !!firstPart['text'],
+        inlineDataMime: (firstPart['inlineData'] as Record<string, string>)?.mimeType || null,
+        inlineDataLen: ((firstPart['inlineData'] as Record<string, string>)?.data?.length) || 0,
+        raw: await truncate(data, 600),
       };
     } catch (err) {
-      results['text_synthesize'] = { error: (err as Error).message };
+      results['generateContent_camelCase'] = { error: (err as Error).message };
     }
 
-    // ── Test 2: Interactions API ──
+    // ── Test 2: generateContent (snake_case, ?key=) ──
     try {
-      const intBody = {
-        model: 'gemini-3.1-flash-tts-preview',
-        input: text || 'Hello, this is a test.',
-        response_format: { type: 'audio' },
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-tts-preview:generateContent?key=${GEMINI_API_KEY}`;
+      const gcBody = {
+        contents: [{ role: 'user', parts: [{ text: `Say cheerfully: ${testText}` }] }],
         generation_config: {
-          speech_config: [{ voice: voiceName || 'Kore' }],
+          response_modalities: ['AUDIO'],
+          speech_config: {
+            voice_config: {
+              prebuilt_voice_config: { voice_name: voice },
+            },
+          },
         },
       };
 
-      const intRes = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+      const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': GEMINI_API_KEY,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(gcBody),
+      });
+
+      const data = await res.json();
+      const candidates = data.candidates as Array<Record<string, unknown>> | undefined;
+      const parts = candidates?.[0]?.content?.parts as Array<Record<string, unknown>> | undefined;
+      const firstPart = parts?.[0] || {};
+
+      results['generateContent_snakeCase'] = {
+        status: res.status,
+        topKeys: Object.keys(data),
+        candidatesCount: candidates?.length || 0,
+        partsCount: parts?.length || 0,
+        firstPartKeys: Object.keys(firstPart),
+        hasInlineData: !!firstPart['inlineData'],
+        hasInlineDataSnake: !!firstPart['inline_data'],
+        hasText: !!firstPart['text'],
+        error: data.error ? await truncate(data.error, 200) : null,
+        raw: await truncate(data, 600),
+      };
+    } catch (err) {
+      results['generateContent_snakeCase'] = { error: (err as Error).message };
+    }
+
+    // ── Test 3: Interactions API ──
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/interactions?key=${GEMINI_API_KEY}`;
+      const intBody = {
+        model: 'gemini-3.1-flash-tts-preview',
+        input: `Say cheerfully: ${testText}`,
+        response_format: { type: 'audio' },
+        generation_config: {
+          speech_config: [{ voice: voice }],
         },
+      };
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(intBody),
       });
 
-      const intData = await intRes.json();
+      const data = await res.json();
+      const interaction = data.interaction as Record<string, unknown> | undefined;
 
-      // Truncate base64 for readability
-      const truncated = JSON.parse(JSON.stringify(intData, (key, value) => {
-        if (key === 'data' && typeof value === 'string' && value.length > 100) {
-          return `[base64, ${value.length} chars]`;
-        }
-        return value;
-      }));
-
-      results['interactions'] = {
-        status: intRes.status,
-        keys: Object.keys(intData),
-        interactionKeys: intData.interaction ? Object.keys(intData.interaction) : null,
-        hasOutputAudio: !!intData.interaction?.output_audio || !!intData.interaction?.outputAudio,
-        hasCandidates: !!(intData.interaction?.candidates || intData.candidates),
-        raw: JSON.stringify(truncated).substring(0, 1000),
+      results['interactions_keyParam'] = {
+        status: res.status,
+        topKeys: Object.keys(data),
+        hasInteraction: !!interaction,
+        interactionKeys: interaction ? Object.keys(interaction) : null,
+        hasOutputAudio: !!(interaction?.output_audio || interaction?.outputAudio),
+        hasCandidates: !!(interaction?.candidates || data.candidates),
+        error: data.error ? await truncate(data.error, 200) : null,
+        raw: await truncate(data, 600),
       };
     } catch (err) {
-      results['interactions'] = { error: (err as Error).message };
+      results['interactions_keyParam'] = { error: (err as Error).message };
     }
 
     return NextResponse.json({
-      apiKeySet: !!GEMINI_API_KEY,
-      apiKeyPrefix: GEMINI_API_KEY?.substring(0, 8) + '...',
-      requestedVoice: voiceName || 'Kore',
-      requestedText: (text || 'Hello, this is a test.').substring(0, 50),
+      apiKeySet: true,
+      apiKeyPrefix: GEMINI_API_KEY.substring(0, 8) + '...',
+      requestedVoice: voice,
       results,
     });
   } catch (error) {
