@@ -237,9 +237,13 @@ export default function LandingPage() {
             <img src="/logo.svg" alt="ScriptForge" className="size-4 rounded" />
             <span className="text-sm text-muted-foreground">ScriptForge v1.0</span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            AI-powered YouTube scripting agent
-          </p>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span>AI-powered YouTube scripting agent</span>
+            <span className="text-border">·</span>
+            <a href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</a>
+            <span className="text-border">·</span>
+            <a href="/terms" className="hover:text-foreground transition-colors">Terms of Service</a>
+          </div>
         </div>
       </footer>
 

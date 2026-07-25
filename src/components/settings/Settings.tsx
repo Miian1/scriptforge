@@ -681,6 +681,19 @@ export default function SettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ══════════════════════════════════════════════════════ */}
+      {/* Legal Links */}
+      {/* ══════════════════════════════════════════════════════ */}
+      <div className="flex items-center justify-center gap-4 py-4 text-xs text-muted-foreground">
+        <a href="/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+          Privacy Policy
+        </a>
+        <span className="text-border">·</span>
+        <a href="/terms" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+          Terms of Service
+        </a>
+      </div>
     </motion.div>
   );
 }
