@@ -8,6 +8,7 @@ import {
   Settings,
   Info,
   PanelLeftClose,
+  PanelLeftOpen,
   LogOut,
   X,
   Crown,
@@ -131,10 +132,9 @@ function SidebarNavItem({
 function CollapseToggle() {
   const { sidebarCollapsed, setSidebarCollapsed } = useAppStore();
 
-  // Collapse button only collapses (never expands). Expansion happens by clicking sidebar.
-  const handleCollapse = (e: React.MouseEvent) => {
+  const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!sidebarCollapsed) setSidebarCollapsed(true);
+    setSidebarCollapsed(!sidebarCollapsed);
   };
 
   return (
@@ -142,16 +142,19 @@ function CollapseToggle() {
       <TooltipTrigger asChild>
         <Button
           variant="ghost"
-          onClick={handleCollapse}
+          onClick={handleToggle}
           className={cn('h-10 w-full rounded-lg justify-start pl-0', sidebar.text, sidebar.hover)}
           aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           <IconSlot>
             <motion.div
-              animate={{ rotate: sidebarCollapsed ? 0 : 180 }}
+              animate={{ rotate: sidebarCollapsed ? 180 : 0 }}
               transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
             >
-              <PanelLeftClose className="size-4" />
+              {sidebarCollapsed
+                ? <PanelLeftOpen className="size-4" />
+                : <PanelLeftClose className="size-4" />
+              }
             </motion.div>
           </IconSlot>
           <AnimatePresence initial={false}>

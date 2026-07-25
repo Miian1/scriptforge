@@ -138,17 +138,18 @@ export default function LandingPage() {
 
         <div className="mx-auto max-w-6xl px-4 sm:px-6 pt-16 sm:pt-24 pb-16 sm:pb-20">
           <div className="text-center max-w-3xl mx-auto">
-            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground mb-6">
-              <Youtube className="size-3.5" />
-              AI-Powered YouTube Scripting Agent
-            </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.1] mb-6">
-              Your AI YouTube{' '}
-              <span className="text-primary">Content Studio</span>
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.1] mb-3">
+              ScriptForge
             </h1>
-            <p className="text-lg sm:text-xl text-muted-foreground leading-relaxed mb-8 max-w-2xl mx-auto">
-              Generate production-ready scripts, improve video metadata, reply to comments with AI,
-              and manage your entire YouTube channel from one dashboard.
+            <p className="text-xl sm:text-2xl text-primary font-semibold mb-4">
+              AI-Powered YouTube Content Creation Assistant
+            </p>
+            <p className="text-lg sm:text-xl text-muted-foreground leading-relaxed mb-4 max-w-2xl mx-auto">
+              Create professional YouTube scripts, optimize video metadata, analyze channel performance,
+              and manage audience engagement with AI-powered tools.
+            </p>
+            <p className="text-base text-muted-foreground leading-relaxed mb-8 max-w-2xl mx-auto">
+              ScriptForge helps YouTube creators transform ideas into production-ready videos using artificial intelligence.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <Button size="lg" className="w-full sm:w-auto gap-2" onClick={() => openAuth('register')}>
@@ -160,6 +161,19 @@ export default function LandingPage() {
                 Sign In
               </Button>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* What is ScriptForge? */}
+      <section className="border-t border-border bg-muted/30 py-16 sm:py-20">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <div className="max-w-3xl mx-auto text-center">
+            <h2 className="text-3xl font-bold tracking-tight mb-4">What is ScriptForge?</h2>
+            <p className="text-lg text-muted-foreground leading-relaxed">
+              ScriptForge is an AI-powered YouTube content creation platform that helps creators generate scripts,
+              improve video SEO, analyze their channel data, and manage YouTube workflows from one dashboard.
+            </p>
           </div>
         </div>
       </section>
@@ -233,16 +247,22 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-border py-8">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <img src="/logo.svg" alt="ScriptForge" className="size-4 rounded" />
-            <span className="text-sm text-muted-foreground">ScriptForge v1.0</span>
+          <div className="text-center sm:text-left">
+            <div className="flex items-center gap-2 justify-center sm:justify-start">
+              <img src="/logo.svg" alt="ScriptForge" className="size-5 rounded" />
+              <span className="text-sm font-semibold">ScriptForge</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+              AI-powered content creation assistant that helps creators write scripts, optimize videos, and manage their channels.
+            </p>
           </div>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span>AI-powered YouTube scripting agent</span>
-            <span className="text-border">·</span>
-            <a href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</a>
-            <span className="text-border">·</span>
-            <a href="/terms" className="hover:text-foreground transition-colors">Terms of Service</a>
+          <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 text-xs text-muted-foreground">
+            <span>&copy; 2026 ScriptForge. All rights reserved.</span>
+            <div className="flex items-center gap-4">
+              <a href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</a>
+              <span className="text-border">·</span>
+              <a href="/terms" className="hover:text-foreground transition-colors">Terms of Service</a>
+            </div>
           </div>
         </div>
       </footer>

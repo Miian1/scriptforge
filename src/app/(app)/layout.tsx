@@ -70,11 +70,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user, loadProjects, loadTools]);
 
-  // Hide header on editor pages
-  const isEditor = pathname.startsWith('/project/');
+  // Hide header + sidebar on detail/editor pages for full-screen experience
+  const isFullscreen = pathname.startsWith('/project/') || pathname.startsWith('/video/');
+  const isEditor = isFullscreen;
 
   if (!checked) {
-    return <div style={{ padding: 40, fontFamily: 'sans-serif' }}>Loading...</div>;
+    return (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-6">
+          <div className="relative">
+            <div className="absolute inset-[-8px] rounded-2xl bg-primary/10 animate-ping" />
+            <img src="/logo.svg" alt="ScriptForge" className="relative size-16 rounded-xl animate-pulse" />
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            <span className="text-lg font-bold tracking-tight text-foreground animate-pulse">ScriptForge</span>
+            <div className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-primary animate-bounce [animation-delay:0ms]" />
+              <span className="size-2 rounded-full bg-primary animate-bounce [animation-delay:150ms]" />
+              <span className="size-2 rounded-full bg-primary animate-bounce [animation-delay:300ms]" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!user) {
@@ -90,18 +108,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     >
       <div className="relative min-h-screen">
         <ThemeSync />
-        <AppSidebar />
+        {!isFullscreen && <AppSidebar />}
 
         <div
           className={cn(
             'flex min-h-screen flex-col',
             'transition-[margin-left] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
             isMobile && 'pb-20',
-            !isMobile && (sidebarCollapsed ? 'md:ml-[68px]' : 'md:ml-[256px]')
+            isFullscreen && 'pb-0',
+            !isMobile && !isFullscreen && (sidebarCollapsed ? 'md:ml-[68px]' : 'md:ml-[256px]')
           )}
         >
           {!isEditor && <AppHeader />}
-          <main className="flex-1 p-4 md:p-6">
+          <main className={cn('flex-1', isFullscreen ? '' : 'p-4 md:p-6')}>
             {children}
           </main>
         </div>

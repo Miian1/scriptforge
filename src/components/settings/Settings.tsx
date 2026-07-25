@@ -249,7 +249,7 @@ export default function SettingsPage() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className="mx-auto max-w-3xl space-y-6 p-4 sm:p-6"
+      className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6"
     >
       {/* Header */}
       <div className="space-y-1">
