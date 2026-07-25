@@ -50,6 +50,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
+import VoiceGenerator from '@/components/editor/VoiceGenerator';
 
 // ---- Color palette for scene border cycling ----
 const SCENE_COLORS = [
@@ -661,6 +662,9 @@ export default function SceneCard({ scene, project, totalScenes }: SceneCardProp
                   sceneId={scene.id}
                   field="narration"
                 />
+
+                {/* Voice Generation */}
+                <VoiceGenerator text={scene.narration} sceneId={scene.id} />
 
                 <Separator />
 

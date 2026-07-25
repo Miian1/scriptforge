@@ -21,6 +21,7 @@ import {
   Check,
   Layers,
   Zap,
+  Volume2,
 } from 'lucide-react';
 import {
   DndContext,
@@ -51,6 +52,21 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import VoiceGenerator from '@/components/editor/VoiceGenerator';
 import SceneCard from '@/components/editor/SceneCard';
 import ProjectScoreCard from '@/components/editor/ProjectScoreCard';
 import VideoConceptCard from '@/components/editor/VideoConceptCard';
@@ -365,6 +381,12 @@ export default function ScriptEditor() {
   // Local generating state for phases
   const [isGeneratingPhase, setIsGeneratingPhase] = useState(false);
   const [generatingPhaseLabel, setGeneratingPhaseLabel] = useState('');
+
+  // Batch voice generation dialog state
+  const [voiceDialogOpen, setVoiceDialogOpen] = useState(false);
+  const [batchGenerating, setBatchGenerating] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+  const [batchSceneAudio, setBatchSceneAudio] = useState<Record<string, string>>({});
 
   const project = projects.find((p) => p.id === activeProjectId) ?? null;
 
@@ -689,6 +711,21 @@ export default function ScriptEditor() {
                 </TooltipTrigger>
                 <TooltipContent>Export script as JSON</TooltipContent>
               </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setVoiceDialogOpen(true)}
+                    disabled={scenes.length === 0}
+                    className="gap-1.5"
+                  >
+                    <Volume2 className="size-3.5" />
+                    <span className="hidden sm:inline">Generate All Audio</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Generate voice for all narration</TooltipContent>
+              </Tooltip>
             </div>
           )}
         </div>
@@ -867,6 +904,161 @@ export default function ScriptEditor() {
           </>
         )}
       </main>
+
+      {/* ── Batch Voice Generation Dialog ── */}
+      <Dialog open={voiceDialogOpen} onOpenChange={setVoiceDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Volume2 className="size-5 text-primary" />
+              Generate All Narration Audio
+            </DialogTitle>
+            <DialogDescription>
+              Generate voice-over audio for all scene narrations in this project. Select a voice and settings below.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-2">
+            {/* Voice selector for all scenes */}
+            <div className="space-y-3">
+              <VoiceGenerator
+                text={scenes[0]?.narration || ''}
+                sceneId="preview"
+                label="Voice Preview"
+              />
+            </div>
+
+            <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-2">
+              <p>
+                <strong className="text-foreground">{scenes.length}</strong> scenes with narration will be generated.
+                Each scene&apos;s narration text will be converted to speech using the selected voice and settings above.
+              </p>
+              <p>
+                The same voice and settings will be applied to all scenes. You can also generate individual scene audio
+                from the voice controls on each scene card.
+              </p>
+            </div>
+
+            {/* Progress */}
+            {batchGenerating && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">
+                    Generating scene {batchProgress.current} of {batchProgress.total}...
+                  </span>
+                  <span className="font-medium text-primary">
+                    {Math.round((batchProgress.current / batchProgress.total) * 100)}%
+                  </span>
+                </div>
+                <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <motion.div
+                    className="absolute inset-y-0 left-0 rounded-full bg-primary"
+                    animate={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Completed scene audios */}
+            {Object.keys(batchSceneAudio).length > 0 && !batchGenerating && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                  <Check className="size-3.5" />
+                  {Object.keys(batchSceneAudio).length} audio files generated
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(batchSceneAudio).map(([sceneId, url]) => {
+                    const scene = scenes.find((s) => s.id === sceneId);
+                    return (
+                      <a
+                        key={sceneId}
+                        href={url}
+                        download={`scene-${scene?.sceneNumber || sceneId}.mp3`}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-muted/50 text-xs hover:bg-muted transition-colors"
+                      >
+                        <Download className="size-3" />
+                        Scene {scene?.sceneNumber || '?'}
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Generate button */}
+            <Button
+              onClick={async () => {
+                const voiceId = (sessionStorage.getItem('scriptforge_voice_settings') || '{}');
+                const parsed = JSON.parse(voiceId);
+                const selectedVoice = parsed.voiceId;
+                const selectedModel = parsed.modelId || 'eleven_multilingual_v2';
+                const voiceSettings = parsed.settings || {};
+
+                if (!selectedVoice) {
+                  toast.error('Please select a voice first');
+                  return;
+                }
+
+                setBatchGenerating(true);
+                setBatchSceneAudio({});
+                const narrationScenes = scenes.filter((s) => s.narration?.trim());
+                setBatchProgress({ current: 0, total: narrationScenes.length });
+
+                const generated: Record<string, string> = {};
+                for (let i = 0; i < narrationScenes.length; i++) {
+                  const scene = narrationScenes[i];
+                  try {
+                    const res = await fetch('/api/elevenlabs/generate', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        voiceId: selectedVoice,
+                        text: scene.narration.trim(),
+                        settings: {
+                          stability: voiceSettings.stability ?? 0.5,
+                          similarity_boost: voiceSettings.similarity_boost ?? 0.75,
+                          style: voiceSettings.style ?? 0.0,
+                          speed: voiceSettings.speed ?? 1.0,
+                          use_speaker_boost: true,
+                        },
+                        modelId: selectedModel,
+                      }),
+                    });
+
+                    if (res.ok) {
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      generated[scene.id] = url;
+                      setBatchSceneAudio({ ...generated });
+                    }
+                  } catch {
+                    // Skip failed scenes, continue with rest
+                  }
+                  setBatchProgress({ current: i + 1, total: narrationScenes.length });
+                }
+
+                setBatchGenerating(false);
+                toast.success(`${Object.keys(generated).length} audio files generated!`);
+              }}
+              disabled={batchGenerating || scenes.length === 0}
+              className="w-full gap-2"
+            >
+              {batchGenerating ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Generating All Audio ({batchProgress.current}/{batchProgress.total})...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="size-4" />
+                  Generate Audio for All {scenes.filter((s) => s.narration?.trim()).length} Scenes
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
