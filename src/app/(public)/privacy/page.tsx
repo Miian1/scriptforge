@@ -24,14 +24,10 @@ export default function PrivacyPage() {
         <p className="text-sm text-muted-foreground mb-8">Last updated: July 25, 2025</p>
 
         <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none space-y-6 text-sm leading-relaxed text-muted-foreground">
-          <p className="text-base text-foreground/80 leading-relaxed">
-            This Privacy Policy explains how ScriptForge collects, uses, and protects information when users
-            connect their YouTube account and use our AI-powered YouTube content creation services.
-          </p>
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">1. Information We Collect</h2>
             <p>
-              When you create an account on ScriptForge, we collect your name, email address, and password (encrypted).
+              When you create an account, we collect your name, email address, and password (encrypted).
               If you sign in with Google, we receive your name and email from Google. If you connect your
               YouTube channel, we store your channel name, description, and statistics provided by the
               YouTube API. We do not store your YouTube password or OAuth tokens in plain text.

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ScriptForge - AI YouTube Content Creation Assistant",
-  description: "ScriptForge is an AI-powered YouTube content creation platform. Generate professional scripts, optimize metadata, analyze your channel, and manage audience engagement.",
+  title: "ScriptForge — AI YouTube Script Studio",
+  description: "Transform your video ideas into production-ready scripts with AI. Scene-by-scene narration, image prompts, and animation prompts.",
   icons: {
     icon: "/favicon.svg",
   },
