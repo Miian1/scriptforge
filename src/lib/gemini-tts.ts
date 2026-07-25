@@ -157,8 +157,9 @@ export async function listVoices(): Promise<GeminiVoice[]> {
 }
 
 /**
- * Generate speech from text using Gemini TTS Interactions API.
- * Returns PCM audio data (24kHz, 16-bit, mono) which we convert to a WAV buffer.
+ * Generate speech from text using Gemini TTS.
+ * Tries Interactions API first, falls back to Cloud Text-to-Speech text:synthesize.
+ * Returns PCM audio data (24kHz, 16-bit, mono) converted to WAV buffer.
  */
 export async function generateSpeech(options: TTSOptions): Promise<Buffer> {
   if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not configured.');
@@ -173,76 +174,137 @@ export async function generateSpeech(options: TTSOptions): Promise<Buffer> {
   if (!voiceName) throw new Error('voiceName is required.');
   if (!text || text.trim().length === 0) throw new Error('text is required and must be non-empty.');
 
-  // Build the input — prepend any style instructions
-  const input = instructions ? `${instructions}: ${text}` : text;
-
-  const url = `${GEMINI_TTS_BASE}/interactions`;
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': GEMINI_API_KEY,
-    },
-    body: JSON.stringify({
-      model: modelId,
-      input,
-      response_format: {
-        type: 'audio',
+  // ── Strategy 1: Cloud Text-to-Speech text:synthesize API ──
+  // This is the most reliable Gemini TTS endpoint.
+  // Endpoint: POST https://texttospeech.googleapis.com/v1/text:synthesize
+  // Returns: { audioContent: "<base64-encoded MP3 or LINEAR16 PCM>" }
+  try {
+    const ttsUrl = 'https://texttospeech.googleapis.com/v1/text:synthesize';
+    const ttsBody: Record<string, unknown> = {
+      input: {
+        text: text.trim(),
+        ...(instructions ? { prompt: instructions } : {}),
       },
-      generation_config: {
-        speech_config: [
-          { voice: voiceName },
-        ],
+      voice: {
+        languageCode: 'en-US',
+        name: voiceName,
+        model_name: modelId,
       },
-    }),
-  });
+      audioConfig: {
+        audioEncoding: 'LINEAR16',
+        sampleRateHertz: 24000,
+      },
+    };
 
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    console.error('[gemini-tts] API error response:', JSON.stringify(errData));
-    const msg = (errData as Record<string, Record<string, string>>)?.error?.message || `Gemini TTS error: ${res.status}`;
-    throw new Error(msg);
+    console.log('[gemini-tts] Trying text:synthesize API with voice:', voiceName);
+
+    const ttsRes = await fetch(ttsUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': GEMINI_API_KEY,
+      },
+      body: JSON.stringify(ttsBody),
+    });
+
+    if (ttsRes.ok) {
+      const ttsData = await ttsRes.json() as Record<string, unknown>;
+      console.log('[gemini-tts] text:synthesize response keys:', Object.keys(ttsData));
+
+      const audioContent = ttsData['audioContent'] as string | undefined;
+      if (audioContent) {
+        console.log('[gemini-tts] Got audioContent, length:', audioContent.length);
+        // text:synthesize returns LINEAR16 PCM directly (24kHz mono per our config)
+        return base64ToWav(audioContent);
+      }
+
+      // If no audioContent, log and fall through
+      console.warn('[gemini-tts] text:synthesize returned OK but no audioContent:', JSON.stringify(ttsData).substring(0, 500));
+    } else {
+      const errData = await ttsRes.json().catch(() => ({}));
+      console.warn('[gemini-tts] text:synthesize error:', ttsRes.status, JSON.stringify(errData).substring(0, 300));
+    }
+  } catch (err) {
+    console.warn('[gemini-tts] text:synthesize failed, trying Interactions API:', (err as Error).message);
   }
 
-  const data = await res.json() as Record<string, unknown>;
+  // ── Strategy 2: Interactions API (ai.google.dev style) ──
+  try {
+    const input = instructions ? `${instructions}: ${text}` : text;
+    const url = `${GEMINI_TTS_BASE}/interactions`;
 
-  // Debug: log raw response keys for troubleshooting
-  console.log('[gemini-tts] Response top-level keys:', Object.keys(data));
+    console.log('[gemini-tts] Trying Interactions API with voice:', voiceName);
 
-  // Strategy 1: interaction.output_audio.data (SDK-style response from Interactions API)
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': GEMINI_API_KEY,
+      },
+      body: JSON.stringify({
+        model: modelId,
+        input,
+        response_format: { type: 'audio' },
+        generation_config: {
+          speech_config: [{ voice: voiceName }],
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      console.error('[gemini-tts] Interactions API error:', res.status, JSON.stringify(errData).substring(0, 300));
+      const msg = (errData as Record<string, Record<string, string>>)?.error?.message || `Gemini TTS error: ${res.status}`;
+      throw new Error(msg);
+    }
+
+    const data = await res.json() as Record<string, unknown>;
+    console.log('[gemini-tts] Interactions response keys:', Object.keys(data));
+
+    // Try all possible response paths
+    const audio = extractAudioFromResponse(data);
+    if (audio) return audio;
+
+    console.error('[gemini-tts] Interactions response (no audio):', JSON.stringify(data).substring(0, 2000));
+    throw new Error('No audio data found in Gemini TTS response. Check server logs for the raw API response structure.');
+  } catch (err) {
+    throw err; // re-throw Interactions error
+  }
+}
+
+/**
+ * Extract audio from any known Gemini response format.
+ * Handles: interaction.output_audio, interaction.candidates, top-level candidates,
+ * top-level output_audio, and variations of snake_case/camelCase.
+ */
+function extractAudioFromResponse(data: Record<string, unknown>): Buffer | null {
+  // 1. interaction.output_audio.data / interaction.outputAudio.data
   const interaction = data['interaction'] as Record<string, unknown> | undefined;
   if (interaction) {
-    // Try snake_case (SDK convention)
-    const outputAudio = interaction['output_audio'] as Record<string, unknown> | undefined;
-    if (outputAudio && outputAudio['data']) {
-      return base64ToWav(outputAudio['data'] as string);
+    for (const key of ['output_audio', 'outputAudio'] as const) {
+      const oa = interaction[key] as Record<string, unknown> | undefined;
+      if (oa && oa['data']) {
+        return base64ToWav(oa['data'] as string);
+      }
     }
-    // Try camelCase (REST convention)
-    const outputAudioCamel = interaction['outputAudio'] as Record<string, unknown> | undefined;
-    if (outputAudioCamel && outputAudioCamel['data']) {
-      return base64ToWav(outputAudioCamel['data'] as string);
-    }
-    // Try candidates inside interaction
-    const candidates = interaction['candidates'] as Array<Record<string, unknown>> | undefined;
-    const audioFromCandidates = extractAudioFromCandidates(candidates);
-    if (audioFromCandidates) return audioFromCandidates;
+    // 2. interaction.candidates[].content.parts[].inline_data/inlineData.data
+    const audio = extractAudioFromCandidates(interaction['candidates'] as Array<Record<string, unknown>> | undefined);
+    if (audio) return audio;
   }
 
-  // Strategy 2: candidates at top level (standard generateContent response)
-  const topCandidates = data['candidates'] as Array<Record<string, unknown>> | undefined;
-  const audioFromTop = extractAudioFromCandidates(topCandidates);
-  if (audioFromTop) return audioFromTop;
+  // 3. top-level candidates
+  const topAudio = extractAudioFromCandidates(data['candidates'] as Array<Record<string, unknown>> | undefined);
+  if (topAudio) return topAudio;
 
-  // Strategy 3: outputAudio at top level
-  const topOutputAudio = data['output_audio'] as Record<string, unknown> | undefined
-    || data['outputAudio'] as Record<string, unknown> | undefined;
-  if (topOutputAudio && topOutputAudio['data']) {
-    return base64ToWav(topOutputAudio['data'] as string);
+  // 4. top-level output_audio / outputAudio
+  for (const key of ['output_audio', 'outputAudio'] as const) {
+    const oa = data[key] as Record<string, unknown> | undefined;
+    if (oa && oa['data']) {
+      return base64ToWav(oa['data'] as string);
+    }
   }
 
-  console.error('[gemini-tts] Full response:', JSON.stringify(data).substring(0, 2000));
-  throw new Error('No audio data found in Gemini TTS response.');
+  return null;
 }
 
 /**
@@ -260,15 +322,11 @@ function extractAudioFromCandidates(
   if (!parts || parts.length === 0) return null;
 
   for (const part of parts) {
-    // Try snake_case
-    const inlineData = part['inline_data'] as Record<string, unknown> | undefined;
-    if (inlineData && inlineData['data']) {
-      return base64ToWav(inlineData['data'] as string);
-    }
-    // Try camelCase
-    const inlineDataCamel = part['inlineData'] as Record<string, unknown> | undefined;
-    if (inlineDataCamel && inlineDataCamel['data']) {
-      return base64ToWav(inlineDataCamel['data'] as string);
+    for (const key of ['inline_data', 'inlineData'] as const) {
+      const inlineData = part[key] as Record<string, unknown> | undefined;
+      if (inlineData && inlineData['data']) {
+        return base64ToWav(inlineData['data'] as string);
+      }
     }
   }
 
