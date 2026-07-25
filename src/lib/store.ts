@@ -8,6 +8,11 @@ interface AppState {
   generatingProjectId: string | null;
   setGeneratingProjectId: (id: string | null) => void;
 
+  // Tools config (fetched from /api/config)
+  tools: { youtube: boolean };
+  toolsLoaded: boolean;
+  loadTools: () => Promise<void>;
+
   // Projects
   projects: Project[];
   projectsLoaded: boolean;
@@ -111,6 +116,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   setActiveProjectId: (id) => set({ activeProjectId: id }),
   generatingProjectId: null,
   setGeneratingProjectId: (id) => set({ generatingProjectId: id }),
+
+  // Tools config
+  tools: { youtube: true },
+  toolsLoaded: false,
+  loadTools: async () => {
+    try {
+      const res = await fetch('/api/config');
+      if (res.ok) {
+        const data = await res.json();
+        set({ tools: data.tools || { youtube: true }, toolsLoaded: true });
+      }
+    } catch {
+      // graceful — defaults stay true
+    }
+  },
 
   // Projects — MongoDB API
   projects: [],

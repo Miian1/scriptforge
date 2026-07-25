@@ -35,16 +35,16 @@ const SIDEBAR_COLLAPSED = 68;
 const TABLET_BREAKPOINT = 1024;
 
 const NAV_ITEMS = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, primary: true },
-  { path: '/projects', label: 'Projects', icon: FolderKanban, primary: true },
-  { path: '/youtube', label: 'YouTube', icon: Youtube, primary: true },
-  { path: '/plans', label: 'Plans', icon: Crown, primary: true },
-  { path: '/settings', label: 'Settings', icon: Settings, primary: false },
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, primary: true, tool: null },
+  { path: '/projects', label: 'Projects', icon: FolderKanban, primary: true, tool: null },
+  { path: '/youtube', label: 'YouTube', icon: Youtube, primary: true, tool: 'youtube' as const },
+  { path: '/plans', label: 'Plans', icon: Crown, primary: true, tool: null },
+  { path: '/settings', label: 'Settings', icon: Settings, primary: false, tool: null },
 ];
 
 const ADMIN_NAV_ITEMS = [
-  { path: '/about', label: 'About', icon: Info, primary: false },
-  { path: '/admin', label: 'Admin Panel', icon: ShieldCheck, primary: false },
+  { path: '/about', label: 'About', icon: Info, primary: false, tool: null },
+  { path: '/admin', label: 'Admin Panel', icon: ShieldCheck, primary: false, tool: null },
 ];
 
 // ── Sidebar Palette (theme-aware) ─────────────────────
@@ -252,15 +252,24 @@ function MobileLogoutButton({ onClose }: { onClose: () => void }) {
 // ── Desktop Sidebar (lg+): Full or Collapsed ───────────
 
 function DesktopSidebar() {
-  const { sidebarCollapsed, setSidebarCollapsed } = useAppStore();
+  const { sidebarCollapsed, setSidebarCollapsed, tools, loadTools, toolsLoaded } = useAppStore();
   const pathname = usePathname();
   const router = useRouter();
   const userName = useAuthStore((s) => s.user?.name);
   const userRole = useAuthStore((s) => s.user?.role);
 
-  const allNavItems = userRole === 'admin'
-    ? [...NAV_ITEMS, ...ADMIN_NAV_ITEMS]
-    : NAV_ITEMS;
+  // Fetch tools config on mount
+  useEffect(() => { loadTools(); }, [loadTools]);
+
+  const adminNavItems: typeof ADMIN_NAV_ITEMS = userRole === 'admin' ? ADMIN_NAV_ITEMS : [];
+  const allNavItems = [
+    ...NAV_ITEMS.filter((item) => {
+      // Filter out items whose tool is disabled
+      if (item.tool && !tools[item.tool]) return false;
+      return true;
+    }),
+    ...adminNavItems,
+  ];
 
   return (
     <motion.aside
@@ -348,10 +357,16 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
   const pathname = usePathname();
   const router = useRouter();
   const userRole = useAuthStore((s) => s.user?.role);
+  const { tools } = useAppStore();
 
-  const allNavItems = userRole === 'admin'
-    ? [...NAV_ITEMS, ...ADMIN_NAV_ITEMS]
-    : NAV_ITEMS;
+  const adminNavItems: typeof ADMIN_NAV_ITEMS = userRole === 'admin' ? ADMIN_NAV_ITEMS : [];
+  const allNavItems = [
+    ...NAV_ITEMS.filter((item) => {
+      if (item.tool && !tools[item.tool]) return false;
+      return true;
+    }),
+    ...adminNavItems,
+  ];
 
   return (
     <AnimatePresence>
@@ -445,9 +460,14 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
 function BottomNavBar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { tools } = useAppStore();
 
   // Only show main nav items in bottom bar (not admin-only items like About)
-  const bottomItems = NAV_ITEMS;
+  // Also filter out disabled tools
+  const bottomItems = NAV_ITEMS.filter((item) => {
+    if (item.tool && !tools[item.tool]) return false;
+    return true;
+  });
 
   return (
     <div

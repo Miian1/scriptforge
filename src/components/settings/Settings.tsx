@@ -23,6 +23,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { useAuthStore } from '@/lib/auth-store';
+import { useAppStore } from '@/lib/store';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -109,6 +110,7 @@ export default function SettingsPage() {
   const [mounted, setMounted] = useState(false);
   const { user, checkSession } = useAuthStore();
   const { setTheme: applyTheme, theme: nextTheme } = useTheme();
+  const { tools, loadTools } = useAppStore();
 
   const activeTheme = nextTheme ?? 'system';
   const isAdmin = user?.role === 'admin';
@@ -137,13 +139,14 @@ export default function SettingsPage() {
   useEffect(() => {
     setMounted(true);
     setSettings(loadSettings());
+    loadTools();
     if (ytConnected) {
       fetch('/api/youtube/channel')
         .then((r) => r.ok ? r.json() : null)
         .then((data) => data?.channel?.title && setYtChannelName(data.channel.title))
         .catch(() => {});
     }
-  }, [ytConnected]);
+  }, [ytConnected, loadTools]);
 
   const autoPersist = useCallback(
     (newSettings: AppSettings) => {
@@ -290,8 +293,9 @@ export default function SettingsPage() {
       )}
 
       {/* ══════════════════════════════════════════════════════ */}
-      {/* YouTube Channel Section */}
+      {/* YouTube Channel Section — only visible when YouTube tool is enabled */}
       {/* ══════════════════════════════════════════════════════ */}
+      {tools.youtube && (
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -478,6 +482,7 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Appearance */}
       <Card>

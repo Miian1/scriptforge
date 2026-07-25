@@ -6,13 +6,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShieldCheck, Users, Crown, Zap, Search, Loader2, ChevronDown,
   Edit3, Trash2, X, Check, Clock, Star, UserCog,
-  AlertTriangle, RefreshCw, Plus, Minus, CalendarDays, Settings, Eye, Bell, Send
+  AlertTriangle, RefreshCw, Plus, Minus, CalendarDays, Settings, Eye, Bell, Send,
+  Wrench, Youtube, ToggleLeft, ToggleRight, Save
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import {
   Dialog,
@@ -75,6 +77,11 @@ export default function AdminPage() {
   const [notifTitle, setNotifTitle] = useState('');
   const [notifMessage, setNotifMessage] = useState('');
   const [notifType, setNotifType] = useState<'info' | 'warning' | 'urgent'>('info');
+
+  // Tools config state
+  const [toolsConfig, setToolsConfig] = useState({ youtube: true });
+  const [toolsLoading, setToolsLoading] = useState(false);
+  const [toolsSaving, setToolsSaving] = useState(false);
 
   // Edit form state
   const [editPlan, setEditPlan] = useState('free');
@@ -314,6 +321,54 @@ export default function AdminPage() {
     }
   };
 
+  // ── Tools Management ──
+  const fetchToolsConfig = useCallback(async () => {
+    setToolsLoading(true);
+    try {
+      const res = await fetch('/api/admin/config');
+      if (res.ok) {
+        const data = await res.json();
+        setToolsConfig(data.config?.tools || { youtube: true });
+      }
+    } catch {
+      // silent
+    } finally {
+      setToolsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      fetchToolsConfig();
+    }
+  }, [user, fetchToolsConfig]);
+
+  const handleToggleTool = async (tool: 'youtube') => {
+    const newValue = !toolsConfig[tool];
+    const updated = { ...toolsConfig, [tool]: newValue };
+    setToolsConfig(updated);
+    setToolsSaving(true);
+    try {
+      const res = await fetch('/api/admin/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tools: updated }),
+      });
+      if (res.ok) {
+        toast.success(`${tool === 'youtube' ? 'YouTube' : tool} ${newValue ? 'enabled' : 'disabled'}`);
+      } else {
+        // Revert on failure
+        setToolsConfig(toolsConfig);
+        toast.error('Failed to update tool setting');
+      }
+    } catch {
+      setToolsConfig(toolsConfig);
+      toast.error('Network error');
+    } finally {
+      setToolsSaving(false);
+    }
+  };
+
   if (!user || user.role !== 'admin') return null;
 
   return (
@@ -375,6 +430,62 @@ export default function AdminPage() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ══════════════════════════════════════════════════════ */}
+      {/* ── Tools Management ── */}
+      {/* ══════════════════════════════════════════════════════ */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Wrench className="size-4" />
+            Tools Management
+            {toolsSaving && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+          </CardTitle>
+          <CardDescription>
+            Enable or disable tools. Disabled tools are hidden from all users.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {toolsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-sm text-muted-foreground">Loading tools...</span>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {/* YouTube Tool */}
+              <div className="flex items-center justify-between px-4 py-3.5">
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    'size-9 rounded-lg flex items-center justify-center',
+                    toolsConfig.youtube ? 'bg-red-500/10' : 'bg-muted/50'
+                  )}>
+                    <Youtube className={cn('size-4', toolsConfig.youtube ? 'text-red-500' : 'text-muted-foreground')} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">YouTube</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {toolsConfig.youtube
+                        ? 'Users can connect channels, view stats, and manage videos'
+                        : 'YouTube page, sidebar item, and connect option are hidden'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Badge variant={toolsConfig.youtube ? 'default' : 'secondary'} className="text-[10px]">
+                    {toolsConfig.youtube ? 'Active' : 'Disabled'}
+                  </Badge>
+                  <Switch
+                    checked={toolsConfig.youtube}
+                    onCheckedChange={() => handleToggleTool('youtube')}
+                    disabled={toolsSaving}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
