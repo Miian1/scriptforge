@@ -49,6 +49,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, checked, checkSession } = useAuthStore();
   const loadProjects = useAppStore((s) => s.loadProjects);
+  const loadTools = useAppStore((s) => s.loadTools);
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
   const isMobile = useIsMobile();
 
@@ -65,8 +66,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (user) {
       loadProjects();
+      loadTools();
     }
-  }, [user, loadProjects]);
+  }, [user, loadProjects, loadTools]);
 
   // Hide header on editor pages
   const isEditor = pathname.startsWith('/project/');

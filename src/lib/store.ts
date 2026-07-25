@@ -9,7 +9,7 @@ interface AppState {
   setGeneratingProjectId: (id: string | null) => void;
 
   // Tools config (fetched from /api/config)
-  tools: { youtube: boolean };
+  tools: { youtube: boolean } | null;
   toolsLoaded: boolean;
   loadTools: () => Promise<void>;
 
@@ -118,7 +118,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setGeneratingProjectId: (id) => set({ generatingProjectId: id }),
 
   // Tools config
-  tools: { youtube: true },
+  tools: null,
   toolsLoaded: false,
   loadTools: async () => {
     try {
@@ -126,9 +126,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (res.ok) {
         const data = await res.json();
         set({ tools: data.tools || { youtube: true }, toolsLoaded: true });
+      } else {
+        set({ tools: { youtube: true }, toolsLoaded: true });
       }
     } catch {
-      // graceful — defaults stay true
+      set({ tools: { youtube: true }, toolsLoaded: true });
     }
   },
 

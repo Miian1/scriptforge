@@ -265,7 +265,11 @@ function DesktopSidebar() {
   const allNavItems = [
     ...NAV_ITEMS.filter((item) => {
       // Filter out items whose tool is disabled
-      if (item.tool && !tools[item.tool]) return false;
+      // When tools is null (loading), only show items with no tool requirement
+      if (item.tool) {
+        if (!tools) return false; // not loaded yet — hide tool-dependent items
+        if (!tools[item.tool]) return false; // tool is disabled
+      }
       return true;
     }),
     ...adminNavItems,
@@ -362,7 +366,10 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
   const adminNavItems: typeof ADMIN_NAV_ITEMS = userRole === 'admin' ? ADMIN_NAV_ITEMS : [];
   const allNavItems = [
     ...NAV_ITEMS.filter((item) => {
-      if (item.tool && !tools[item.tool]) return false;
+      if (item.tool) {
+        if (!tools) return false;
+        if (!tools[item.tool]) return false;
+      }
       return true;
     }),
     ...adminNavItems,
@@ -463,9 +470,12 @@ function BottomNavBar() {
   const { tools } = useAppStore();
 
   // Only show main nav items in bottom bar (not admin-only items like About)
-  // Also filter out disabled tools
+  // Also filter out disabled tools — when tools is null, hide tool-dependent items
   const bottomItems = NAV_ITEMS.filter((item) => {
-    if (item.tool && !tools[item.tool]) return false;
+    if (item.tool) {
+      if (!tools) return false;
+      if (!tools[item.tool]) return false;
+    }
     return true;
   });
 

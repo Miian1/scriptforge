@@ -295,7 +295,7 @@ export default function SettingsPage() {
       {/* ══════════════════════════════════════════════════════ */}
       {/* YouTube Channel Section — only visible when YouTube tool is enabled */}
       {/* ══════════════════════════════════════════════════════ */}
-      {tools.youtube && (
+      {tools && tools.youtube && (
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">

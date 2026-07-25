@@ -20,10 +20,10 @@ export default function YouTubePage() {
 
   // Redirect to dashboard if YouTube tool is disabled
   useEffect(() => {
-    if (toolsLoaded && !tools.youtube) {
+    if (toolsLoaded && tools && !tools.youtube) {
       router.replace('/dashboard');
     }
-  }, [toolsLoaded, tools.youtube, router]);
+  }, [toolsLoaded, tools, router]);
 
   // Show loading while checking
   if (!toolsLoaded) {
@@ -35,7 +35,10 @@ export default function YouTubePage() {
   }
 
   // Don't render if disabled
-  if (!tools.youtube) return null;
+  if (toolsLoaded && tools && !tools.youtube) return null;
+
+  // Don't render while loading (prevents flash of YouTube page)
+  if (!toolsLoaded || !tools) return null;
 
   return <YouTubeManager />;
 }
