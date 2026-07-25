@@ -63,6 +63,7 @@ export interface Scene {
   imagePrompt: string;
   animationPrompt: string;
   characterIds: string[];
+  narrationAudioPath: string;
   notes: SceneNotes;
   createdAt: number;
   updatedAt: number;

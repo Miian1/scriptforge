@@ -111,6 +111,22 @@ export async function generateSpeech(options: TTSOptions): Promise<Buffer> {
   return Buffer.from(arrayBuffer);
 }
 
+// ── Clean narration text for TTS ─────────────────────
+// Removes stage directions like [pause], [dramatic], [music], [emotional], etc.
+export function stripStageDirections(text: string): string {
+  return text
+    // Remove bracketed content: [anything], (anything), *anything*
+    .replace(/\[.*?\]/g, '')
+    .replace(/\(.*?\)/g, '')
+    .replace(/\*.*?\*/g, '')
+    // Remove remaining empty parentheses/brackets
+    .replace(/[\[\]\(\)]/g, '')
+    // Collapse multiple spaces
+    .replace(/\s{2,}/g, ' ')
+    // Trim
+    .trim();
+}
+
 // Available TTS models
 export const ELEVENLABS_MODELS = [
   { id: 'eleven_multilingual_v2', name: 'Multilingual v2', description: 'Latest multilingual model, best quality' },

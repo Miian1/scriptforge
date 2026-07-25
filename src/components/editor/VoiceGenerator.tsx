@@ -3,17 +3,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Volume2,
-  VolumeX,
   Play,
   Pause,
   Square,
   Loader2,
-  ChevronDown,
-  ChevronUp,
   Settings2,
   Mic,
   Download,
   Sparkles,
+  MessageSquare,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -21,9 +19,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
 import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -31,86 +27,50 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
-} from '@/components/ui/collapsible';
+import { Textarea } from '@/components/ui/textarea';
 
 // ── Types ─────────────────────────────────────────────
 
 interface Voice {
-  voice_id: string;
   name: string;
-  category: string;
-  labels?: Record<string, string>;
-  preview_url?: string;
-}
-
-interface VoiceSettingsState {
-  stability: number;
-  similarity_boost: number;
-  style: number;
-  speed: number;
+  description: string;
 }
 
 interface VoiceGeneratorProps {
   text: string;
   sceneId: string;
+  narrationAudioPath?: string;
   label?: string;
 }
 
-interface SettingSliderProps {
-  label: string;
-  description: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (value: number) => void;
-}
+// ── Strip stage directions client-side (for preview) ──
 
-// ── Setting Slider ────────────────────────────────────
-
-function SettingSlider({ label, description, value, min, max, step, onChange }: SettingSliderProps) {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <Label className="text-xs font-medium">{label}</Label>
-        <span className="text-xs font-mono text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
-          {value.toFixed(2)}
-        </span>
-      </div>
-      <Slider
-        value={[value]}
-        min={min}
-        max={max}
-        step={step}
-        onValueChange={([v]) => onChange(v)}
-        className="w-full"
-      />
-      <p className="text-[10px] text-muted-foreground leading-relaxed">{description}</p>
-    </div>
-  );
+function stripBrackets(text: string): string {
+  return text
+    .replace(/\[.*?\]/g, '')
+    .replace(/\(.*?\)/g, '')
+    .replace(/\*.*?\*/g, '')
+    .replace(/[\[\]\(\)]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 // ── Voice Generator Component ────────────────────────
 
-export default function VoiceGenerator({ text, sceneId, label = 'Narration' }: VoiceGeneratorProps) {
+export default function VoiceGenerator({
+  text,
+  sceneId,
+  narrationAudioPath,
+  label = 'Narration',
+}: VoiceGeneratorProps) {
   // Voices
   const [voices, setVoices] = useState<Voice[]>([]);
   const [voicesLoading, setVoicesLoading] = useState(false);
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('');
-  const [selectedModelId, setSelectedModelId] = useState<string>('eleven_multilingual_v2');
+  const [selectedVoiceName, setSelectedVoiceName] = useState<string>('');
 
-  // Settings
+  // Instructions (emotion/style)
+  const [instructions, setInstructions] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settings, setSettings] = useState<VoiceSettingsState>({
-    stability: 0.5,
-    similarity_boost: 0.75,
-    style: 0.0,
-    speed: 1.0,
-  });
 
   // Playback
   const [generating, setGenerating] = useState(false);
@@ -118,6 +78,7 @@ export default function VoiceGenerator({ text, sceneId, label = 'Narration' }: V
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioProgress, setAudioProgress] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
+  const [hasSavedAudio, setHasSavedAudio] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Save voice preference per browser session
@@ -126,19 +87,34 @@ export default function VoiceGenerator({ text, sceneId, label = 'Narration' }: V
       const saved = sessionStorage.getItem('scriptforge_voice_settings');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.voiceId) setSelectedVoiceId(parsed.voiceId);
-        if (parsed.modelId) setSelectedModelId(parsed.modelId);
-        if (parsed.settings) setSettings(parsed.settings);
+        if (parsed.voiceName) setSelectedVoiceName(parsed.voiceName);
+        if (parsed.instructions) setInstructions(parsed.instructions);
       }
     } catch {}
   }, []);
 
-  const savePreference = useCallback((voiceId: string, modelId: string, s: VoiceSettingsState) => {
+  // Load saved audio on mount
+  useEffect(() => {
+    if (narrationAudioPath) {
+      setHasSavedAudio(true);
+      setAudioUrl(narrationAudioPath);
+    }
+  }, [narrationAudioPath]);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    };
+  }, []);
+
+  const savePreference = useCallback((voiceName: string, instr: string) => {
     try {
       sessionStorage.setItem('scriptforge_voice_settings', JSON.stringify({
-        voiceId,
-        modelId,
-        settings: s,
+        voiceName,
+        instructions: instr,
       }));
     } catch {}
   }, []);
@@ -148,14 +124,13 @@ export default function VoiceGenerator({ text, sceneId, label = 'Narration' }: V
     async function fetchVoices() {
       setVoicesLoading(true);
       try {
-        const res = await fetch('/api/elevenlabs/voices');
+        const res = await fetch('/api/tts/voices');
         if (res.ok) {
           const data = await res.json();
           const voiceList: Voice[] = data.voices || [];
           setVoices(voiceList);
-          // Auto-select first voice if none selected
-          if (!selectedVoiceId && voiceList.length > 0) {
-            setSelectedVoiceId(voiceList[0].voice_id);
+          if (!selectedVoiceName && voiceList.length > 0) {
+            setSelectedVoiceName(voiceList[0].name);
           }
         } else {
           const data = await res.json().catch(() => ({}));
@@ -170,9 +145,38 @@ export default function VoiceGenerator({ text, sceneId, label = 'Narration' }: V
     fetchVoices();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Setup audio player from URL
+  const setupAudioPlayer = useCallback((url: string, autoPlay = false) => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+
+    const audio = new Audio(url);
+    audioRef.current = audio;
+
+    audio.addEventListener('loadedmetadata', () => {
+      setAudioDuration(audio.duration);
+    });
+    audio.addEventListener('timeupdate', () => {
+      setAudioProgress(audio.currentTime / (audio.duration || 1));
+    });
+    audio.addEventListener('ended', () => {
+      setPlaying(false);
+      setAudioProgress(0);
+    });
+    audio.addEventListener('error', () => {
+      toast.error('Audio playback error');
+      setPlaying(false);
+    });
+
+    if (autoPlay) {
+      audio.play().then(() => setPlaying(true)).catch(() => {});
+    }
+  }, []);
+
   // Generate speech
   const handleGenerate = useCallback(async () => {
-    if (!selectedVoiceId) {
+    if (!selectedVoiceName) {
       toast.error('Please select a voice first');
       return;
     }
@@ -181,13 +185,17 @@ export default function VoiceGenerator({ text, sceneId, label = 'Narration' }: V
       return;
     }
 
+    // Check if text has anything after stripping brackets
+    const cleanText = stripBrackets(text);
+    if (!cleanText) {
+      toast.error('No spoken text after removing stage directions');
+      return;
+    }
+
     // Stop any current playback
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
-    }
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
     }
     setPlaying(false);
     setAudioProgress(0);
@@ -195,20 +203,15 @@ export default function VoiceGenerator({ text, sceneId, label = 'Narration' }: V
 
     setGenerating(true);
     try {
-      const res = await fetch('/api/elevenlabs/generate', {
+      const res = await fetch('/api/tts/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          voiceId: selectedVoiceId,
-          text: text.trim(),
-          settings: {
-            stability: settings.stability,
-            similarity_boost: settings.similarity_boost,
-            style: settings.style,
-            speed: settings.speed,
-            use_speaker_boost: true,
-          },
-          modelId: selectedModelId,
+          voiceName: selectedVoiceName,
+          text: cleanText,
+          instructions: instructions || undefined,
+          saveAudio: sceneId !== 'preview',
+          sceneId: sceneId !== 'preview' ? sceneId : undefined,
         }),
       });
 
@@ -217,50 +220,48 @@ export default function VoiceGenerator({ text, sceneId, label = 'Narration' }: V
         throw new Error((data as Record<string, string>).error || 'Generation failed');
       }
 
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      // Check if server saved the audio
+      const serverAudioPath = res.headers.get('X-Audio-Path');
+
+      let url: string;
+      if (serverAudioPath) {
+        // Use server-saved audio URL (persistent)
+        url = serverAudioPath;
+        setHasSavedAudio(true);
+        toast.success('Voice generated and saved!');
+      } else {
+        // Fallback to blob URL (not persisted — for preview only)
+        const blob = await res.blob();
+        url = URL.createObjectURL(blob);
+        toast.success('Voice generated!');
+      }
+
       setAudioUrl(url);
-
-      // Auto-play
-      const audio = new Audio(url);
-      audioRef.current = audio;
-
-      audio.addEventListener('loadedmetadata', () => {
-        setAudioDuration(audio.duration);
-      });
-      audio.addEventListener('timeupdate', () => {
-        setAudioProgress(audio.currentTime / (audio.duration || 1));
-      });
-      audio.addEventListener('ended', () => {
-        setPlaying(false);
-        setAudioProgress(0);
-      });
-      audio.addEventListener('error', () => {
-        toast.error('Audio playback error');
-        setPlaying(false);
-      });
-
-      await audio.play();
-      setPlaying(true);
-      toast.success('Voice generated successfully!');
+      setupAudioPlayer(url, true);
     } catch (err) {
       toast.error((err as Error).message || 'Failed to generate voice');
     } finally {
       setGenerating(false);
     }
-  }, [selectedVoiceId, text, settings, selectedModelId]);
+  }, [selectedVoiceName, text, instructions, sceneId, setupAudioPlayer]);
 
   // Playback controls
   const togglePlayback = useCallback(() => {
-    if (!audioRef.current) return;
-    if (playing) {
-      audioRef.current.pause();
-      setPlaying(false);
+    if (!audioUrl) return;
+
+    if (audioRef.current) {
+      if (playing) {
+        audioRef.current.pause();
+        setPlaying(false);
+      } else {
+        audioRef.current.play();
+        setPlaying(true);
+      }
     } else {
-      audioRef.current.play();
-      setPlaying(true);
+      // Re-create player for saved audio
+      setupAudioPlayer(audioUrl, true);
     }
-  }, [playing]);
+  }, [playing, audioUrl, setupAudioPlayer]);
 
   const stopPlayback = useCallback(() => {
     if (!audioRef.current) return;
@@ -274,38 +275,23 @@ export default function VoiceGenerator({ text, sceneId, label = 'Narration' }: V
     if (!audioUrl) return;
     const a = document.createElement('a');
     a.href = audioUrl;
-    a.download = `narration-${sceneId}.mp3`;
+    a.download = `narration-${sceneId}.wav`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     toast.success('Audio downloaded');
   }, [audioUrl, sceneId]);
 
-  // Preview voice
-  const handlePreviewVoice = useCallback((voice: Voice) => {
-    if (!voice.preview_url) return;
-    const preview = new Audio(voice.preview_url);
-    preview.play().catch(() => {});
-  }, []);
-
   // Update voice selection
-  const handleVoiceChange = useCallback((voiceId: string) => {
-    setSelectedVoiceId(voiceId);
-    savePreference(voiceId, selectedModelId, settings);
-  }, [selectedModelId, settings, savePreference]);
+  const handleVoiceChange = useCallback((voiceName: string) => {
+    setSelectedVoiceName(voiceName);
+    savePreference(voiceName, instructions);
+  }, [instructions, savePreference]);
 
-  const handleModelChange = useCallback((modelId: string) => {
-    setSelectedModelId(modelId);
-    savePreference(selectedVoiceId, modelId, settings);
-  }, [selectedVoiceId, settings, savePreference]);
-
-  const handleSettingsChange = useCallback(<K extends keyof VoiceSettingsState>(key: K, value: number) => {
-    setSettings((prev) => {
-      const updated = { ...prev, [key]: value };
-      savePreference(selectedVoiceId, selectedModelId, updated);
-      return updated;
-    });
-  }, [selectedVoiceId, selectedModelId, savePreference]);
+  const handleInstructionsChange = useCallback((value: string) => {
+    setInstructions(value);
+    savePreference(selectedVoiceName, value);
+  }, [selectedVoiceName, savePreference]);
 
   // Format time
   const formatTime = (seconds: number) => {
@@ -314,11 +300,11 @@ export default function VoiceGenerator({ text, sceneId, label = 'Narration' }: V
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Group voices by category
-  const categories = [...new Set(voices.map((v) => v.category || 'Other'))].sort();
-  const groupedVoices = categories.map((cat) => ({
-    category: cat,
-    voices: voices.filter((v) => (v.category || 'Other') === cat),
+  // Group voices by description category
+  const descriptions = [...new Set(voices.map((v) => v.description))].sort();
+  const groupedVoices = descriptions.map((desc) => ({
+    description: desc,
+    voices: voices.filter((v) => v.description === desc),
   }));
 
   const hasAudio = !!audioUrl;
@@ -329,28 +315,20 @@ export default function VoiceGenerator({ text, sceneId, label = 'Narration' }: V
       {/* Voice Selection + Generate Row */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="flex-1 min-w-[200px]">
-          <Select value={selectedVoiceId} onValueChange={handleVoiceChange} disabled={voicesLoading}>
+          <Select value={selectedVoiceName} onValueChange={handleVoiceChange} disabled={voicesLoading}>
             <SelectTrigger className="h-8 text-xs">
               <Mic className="size-3 mr-1.5 shrink-0 text-muted-foreground" />
               <SelectValue placeholder={voicesLoading ? 'Loading voices...' : 'Select voice'} />
             </SelectTrigger>
             <SelectContent>
               {groupedVoices.map((group) => (
-                <React.Fragment key={group.category}>
+                <React.Fragment key={group.description}>
                   <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    {group.category}
+                    {group.description}
                   </div>
                   {group.voices.map((voice) => (
-                    <SelectItem key={voice.voice_id} value={voice.voice_id} className="text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{voice.name}</span>
-                        {voice.labels && (
-                          <span className="text-muted-foreground text-[10px]">
-                            {voice.labels.accent && `${voice.labels.accent}`}
-                            {voice.labels.gender && ` · ${voice.labels.gender}`}
-                          </span>
-                        )}
-                      </div>
+                    <SelectItem key={voice.name} value={voice.name} className="text-xs">
+                      <span className="font-medium">{voice.name}</span>
                     </SelectItem>
                   ))}
                 </React.Fragment>
@@ -362,7 +340,7 @@ export default function VoiceGenerator({ text, sceneId, label = 'Narration' }: V
         <Button
           size="sm"
           onClick={handleGenerate}
-          disabled={generating || noText || !selectedVoiceId}
+          disabled={generating || noText || !selectedVoiceName}
           className="gap-1.5 h-8 text-xs shrink-0"
         >
           {generating ? (
@@ -416,6 +394,13 @@ export default function VoiceGenerator({ text, sceneId, label = 'Narration' }: V
           </div>
         )}
 
+        {/* Saved indicator */}
+        {hasSavedAudio && (
+          <span className="text-[10px] text-emerald-500 font-medium flex items-center gap-0.5 shrink-0">
+            <Volume2 className="size-3" /> Saved
+          </span>
+        )}
+
         {/* Settings Toggle */}
         <Button
           variant="ghost"
@@ -458,71 +443,37 @@ export default function VoiceGenerator({ text, sceneId, label = 'Narration' }: V
           >
             <Card className="border-dashed">
               <CardContent className="p-4 space-y-4">
-                {/* Model Selection */}
+                {/* Model Info */}
                 <div className="space-y-2">
-                  <Label className="text-xs font-medium">TTS Model</Label>
-                  <Select value={selectedModelId} onValueChange={handleModelChange}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[
-                        { id: 'eleven_multilingual_v2', name: 'Multilingual v2', desc: 'Best quality' },
-                        { id: 'eleven_turbo_v2_5', name: 'Turbo v2.5', desc: 'Low latency' },
-                        { id: 'eleven_turbo_v2', name: 'Turbo v2', desc: 'Fast generation' },
-                        { id: 'eleven_monolingual_v1', name: 'English v1', desc: 'English only' },
-                      ].map((model) => (
-                        <SelectItem key={model.id} value={model.id} className="text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{model.name}</span>
-                            <span className="text-muted-foreground text-[10px]">{model.desc}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-xs font-medium flex items-center gap-1.5">
+                    <Sparkles className="size-3 text-primary" />
+                    Gemini 3.1 Flash TTS Preview
+                  </Label>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    Powered by Google Gemini. 30 built-in voices with automatic language detection.
+                    Add style instructions below to control emotion and tone.
+                  </p>
                 </div>
 
                 <Separator />
 
-                {/* Voice Settings Sliders */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <SettingSlider
-                    label="Stability"
-                    description="Higher = more consistent but less expressive"
-                    value={settings.stability}
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    onChange={(v) => handleSettingsChange('stability', v)}
+                {/* Style Instructions */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium flex items-center gap-1.5">
+                    <MessageSquare className="size-3" />
+                    Style Instructions
+                  </Label>
+                  <Textarea
+                    value={instructions}
+                    onChange={(e) => handleInstructionsChange(e.target.value)}
+                    placeholder="e.g. Say cheerfully, whisper softly, speak with excitement, dramatic tone..."
+                    className="min-h-[60px] text-xs resize-none"
+                    rows={2}
                   />
-                  <SettingSlider
-                    label="Similarity"
-                    description="Higher = closer to the original voice"
-                    value={settings.similarity_boost}
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    onChange={(v) => handleSettingsChange('similarity_boost', v)}
-                  />
-                  <SettingSlider
-                    label="Style"
-                    description="Higher = more stylized and expressive"
-                    value={settings.style}
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    onChange={(v) => handleSettingsChange('style', v)}
-                  />
-                  <SettingSlider
-                    label="Speed"
-                    description="Controls speaking speed (0.25x - 4.0x)"
-                    value={settings.speed}
-                    min={0.25}
-                    max={4.0}
-                    step={0.05}
-                    onChange={(v) => handleSettingsChange('speed', v)}
-                  />
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    Prepend emotion/style cues to guide the voice. Examples: &quot;Say cheerfully&quot;, 
+                    &quot;whisper softly&quot;, &quot;speak with dramatic pause&quot;, &quot;excited and energetic&quot;.
+                  </p>
                 </div>
 
                 {/* Reset button */}
@@ -532,12 +483,11 @@ export default function VoiceGenerator({ text, sceneId, label = 'Narration' }: V
                     size="sm"
                     className="h-7 text-xs"
                     onClick={() => {
-                      const defaults = { stability: 0.5, similarity_boost: 0.75, style: 0.0, speed: 1.0 };
-                      setSettings(defaults);
-                      savePreference(selectedVoiceId, selectedModelId, defaults);
+                      setInstructions('');
+                      savePreference(selectedVoiceName, '');
                     }}
                   >
-                    Reset to Defaults
+                    Clear Instructions
                   </Button>
                 </div>
               </CardContent>

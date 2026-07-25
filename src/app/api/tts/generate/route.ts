@@ -1,24 +1,23 @@
-// ── ElevenLabs: Generate Speech ──────────────────────
-// POST /api/elevenlabs/generate
-// Body: { voiceId, text, settings?, modelId?, saveAudio?, sceneId? }
+// ── Gemini TTS: Generate Speech ──────────────────────
+// POST /api/tts/generate
+// Body: { voiceName, text, instructions?, modelId?, saveAudio?, sceneId? }
 // If saveAudio=true and sceneId provided, saves to disk and returns audioPath.
-// Returns: audio/mpeg binary stream (with audioPath in header)
+// Returns: audio/wav binary stream (with audioPath in header)
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
 import { SceneModel } from '@/lib/models/Scene';
-import { generateSpeech, stripStageDirections } from '@/lib/elevenlabs';
+import { generateSpeech, stripStageDirections } from '@/lib/gemini-tts';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { voiceId, text, settings, modelId, saveAudio, sceneId } = body;
+    const { voiceName, text, instructions, modelId, saveAudio, sceneId } = body;
 
-    if (!voiceId) {
-      return NextResponse.json({ error: 'voiceId is required' }, { status: 400 });
+    if (!voiceName) {
+      return NextResponse.json({ error: 'voiceName is required' }, { status: 400 });
     }
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return NextResponse.json({ error: 'text is required and must be non-empty' }, { status: 400 });
@@ -36,9 +35,9 @@ export async function POST(req: NextRequest) {
     }
 
     const audioBuffer = await generateSpeech({
-      voiceId,
+      voiceName,
       text: cleanText,
-      settings: settings || undefined,
+      instructions: instructions || undefined,
       modelId: modelId || undefined,
     });
 
@@ -48,7 +47,7 @@ export async function POST(req: NextRequest) {
       try {
         const audioDir = join(process.cwd(), 'data', 'audio');
         await mkdir(audioDir, { recursive: true });
-        const filePath = join(audioDir, `${sceneId}.mp3`);
+        const filePath = join(audioDir, `${sceneId}.wav`);
         await writeFile(filePath, audioBuffer);
         audioPath = `/api/audio/${sceneId}`;
 
@@ -58,14 +57,14 @@ export async function POST(req: NextRequest) {
           $set: { narrationAudioPath: audioPath },
         });
       } catch (saveErr) {
-        console.error('[elevenlabs] Failed to save audio:', saveErr);
+        console.error('[gemini-tts] Failed to save audio:', saveErr);
         // Don't fail the request — still return the audio
       }
     }
 
-    return new NextResponse(audioBuffer, {
+    return new NextResponse(new Uint8Array(audioBuffer), {
       headers: {
-        'Content-Type': 'audio/mpeg',
+        'Content-Type': 'audio/wav',
         'Content-Length': audioBuffer.length.toString(),
         'Cache-Control': 'no-cache',
         ...(audioPath ? { 'X-Audio-Path': audioPath } : {}),

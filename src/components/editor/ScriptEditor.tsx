@@ -974,7 +974,7 @@ export default function ScriptEditor() {
                       <a
                         key={sceneId}
                         href={url}
-                        download={`scene-${scene?.sceneNumber || sceneId}.mp3`}
+                        download={`scene-${scene?.sceneNumber || sceneId}.wav`}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-muted/50 text-xs hover:bg-muted transition-colors"
                       >
                         <Download className="size-3" />
@@ -989,46 +989,46 @@ export default function ScriptEditor() {
             {/* Generate button */}
             <Button
               onClick={async () => {
-                const voiceId = (sessionStorage.getItem('scriptforge_voice_settings') || '{}');
-                const parsed = JSON.parse(voiceId);
-                const selectedVoice = parsed.voiceId;
-                const selectedModel = parsed.modelId || 'eleven_multilingual_v2';
-                const voiceSettings = parsed.settings || {};
+                const prefs = (sessionStorage.getItem('scriptforge_voice_settings') || '{}');
+                const parsed = JSON.parse(prefs);
+                const selectedVoiceName = parsed.voiceName;
+                const voiceInstructions = parsed.instructions || '';
 
-                if (!selectedVoice) {
+                if (!selectedVoiceName) {
                   toast.error('Please select a voice first');
                   return;
                 }
 
                 setBatchGenerating(true);
                 setBatchSceneAudio({});
-                const narrationScenes = scenes.filter((s) => s.narration?.trim());
+                // Strip stage directions from narration before generating
+                const stripBrackets = (t: string) => t.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').replace(/\*.*?\*/g, '').replace(/[\[\]\(\)]/g, '').replace(/\s{2,}/g, ' ').trim();
+                const narrationScenes = scenes.filter((s) => {
+                  const cleaned = stripBrackets(s.narration || '');
+                  return cleaned.length > 0;
+                });
                 setBatchProgress({ current: 0, total: narrationScenes.length });
 
                 const generated: Record<string, string> = {};
                 for (let i = 0; i < narrationScenes.length; i++) {
                   const scene = narrationScenes[i];
                   try {
-                    const res = await fetch('/api/elevenlabs/generate', {
+                    const cleanedText = stripBrackets(scene.narration);
+                    const res = await fetch('/api/tts/generate', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
-                        voiceId: selectedVoice,
-                        text: scene.narration.trim(),
-                        settings: {
-                          stability: voiceSettings.stability ?? 0.5,
-                          similarity_boost: voiceSettings.similarity_boost ?? 0.75,
-                          style: voiceSettings.style ?? 0.0,
-                          speed: voiceSettings.speed ?? 1.0,
-                          use_speaker_boost: true,
-                        },
-                        modelId: selectedModel,
+                        voiceName: selectedVoiceName,
+                        text: cleanedText,
+                        instructions: voiceInstructions || undefined,
+                        saveAudio: true,
+                        sceneId: scene.id,
                       }),
                     });
 
                     if (res.ok) {
-                      const blob = await res.blob();
-                      const url = URL.createObjectURL(blob);
+                      const serverPath = res.headers.get('X-Audio-Path');
+                      const url = serverPath || URL.createObjectURL(await res.blob());
                       generated[scene.id] = url;
                       setBatchSceneAudio({ ...generated });
                     }
@@ -1039,7 +1039,7 @@ export default function ScriptEditor() {
                 }
 
                 setBatchGenerating(false);
-                toast.success(`${Object.keys(generated).length} audio files generated!`);
+                toast.success(`${Object.keys(generated).length} audio files generated and saved!`);
               }}
               disabled={batchGenerating || scenes.length === 0}
               className="w-full gap-2"

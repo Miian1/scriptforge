@@ -1,4 +1,31 @@
 ---
+Task ID: 2-gemini-tts
+Agent: Main Agent
+Task: Replace ElevenLabs TTS with Gemini 3.1 Flash TTS Preview + strip bracket text + persist audio
+
+Work Log:
+- Researched Gemini TTS API (POST /v1beta/interactions) via official docs
+- Identified 30 built-in voices (Zephyr, Puck, Charon, Kore, etc.) with style descriptions
+- Created src/lib/gemini-tts.ts — Gemini TTS utility with voice list, generateSpeech(), base64 to WAV conversion, stripStageDirections()
+- Created src/app/api/tts/voices/route.ts — returns 30 Gemini voices
+- Created src/app/api/tts/generate/route.ts — generates speech via Gemini API, saves WAV to disk + DB
+- Created src/app/api/tts/generate-scene/route.ts — fetches scene narration, strips brackets, generates speech
+- Updated src/app/api/audio/[id]/route.ts — serves both WAV and legacy MP3 files
+- Rewrote src/components/editor/VoiceGenerator.tsx — Gemini voice selector grouped by style, style instructions textarea, play/pause/stop/download
+- Updated src/components/editor/ScriptEditor.tsx — batch generation now uses /api/tts/generate with voiceName + instructions
+- Removed all ElevenLabs files: src/lib/elevenlabs.ts, src/app/api/elevenlabs/*
+- Verified zero ElevenLabs references remain in codebase
+- Build compiles successfully
+
+Stage Summary:
+- ElevenLabs completely removed and replaced with Gemini 3.1 Flash TTS Preview
+- 30 voices with style descriptions (Bright, Upbeat, Informative, Firm, etc.)
+- Style instructions replace old slider settings (stability, similarity, style, speed)
+- Bracket text [pause], (dramatic), *music* stripped before TTS
+- Audio saved to disk as WAV and persisted in MongoDB via narrationAudioPath
+- No new env variables needed — uses existing GEMINI_API_KEY
+
+---
 Task ID: 1
 Agent: Main Agent
 Task: Add MongoDB auth system, landing page, login/register pages, logout to ScriptForge

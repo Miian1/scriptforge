@@ -10,6 +10,7 @@ export interface IScene extends Document {
   imagePrompt: string;
   animationPrompt: string;
   characterIds: string[];
+  narrationAudioPath: string;
   notes: {
     emotion: string;
     visualFocus: string;
@@ -31,6 +32,7 @@ const SceneSchema = new Schema<IScene>(
     imagePrompt: { type: String, default: '', trim: true },
     animationPrompt: { type: String, default: '', trim: true },
     characterIds: [{ type: String, default: '' }],
+    narrationAudioPath: { type: String, default: '' },
     notes: {
       emotion: { type: String, default: '' },
       visualFocus: { type: String, default: '' },
