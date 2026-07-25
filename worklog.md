@@ -57,3 +57,20 @@ Stage Summary:
 - 4 stats cards in 2×2 grid: Total Projects, Projects Used, AI Generations, Current Plan
 - Channel card is compact with no banner, just avatar + expandable description
 - Build compiles successfully (Turbopack, zero TS errors)
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Create separate YouTube management page, remove YouTube UI from dashboard
+
+Work Log:
+- Simplified Dashboard.tsx to show only header + StatsCards (removed all YouTube logic, connect/disconnect, channel card, video carousel)
+- Created src/components/youtube/YouTubeManager.tsx — full YouTube management with channel card, video carousel, connect/disconnect, URL param handling
+- Created src/app/(app)/youtube/page.tsx — route entry point with dynamic import (SSR disabled)
+- Updated AppSidebar.tsx — added YouTube nav item (path: /youtube, icon: Youtube, primary: true) between Projects and Plans
+- ChannelCard and VideoCarousel components reused from dashboard/ folder
+
+Stage Summary:
+- Dashboard is now clean: just header + 4 stats cards
+- YouTube Studio page at /youtube handles all channel connection, metadata display, and recent videos
+- Sidebar nav: Dashboard → Projects → YouTube → Plans → Settings
