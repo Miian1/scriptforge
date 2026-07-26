@@ -37,9 +37,7 @@ export async function POST() {
 
     // Dynamic import — safer for Vercel serverless
     const Stripe = (await import('stripe')).default;
-    const stripeClient = new Stripe(STRIPE_SECRET_KEY, {
-      apiVersion: '2025-06-30.basil',
-    });
+    const stripeClient = new Stripe(STRIPE_SECRET_KEY);
 
     // Try subscription mode first (recurring price), fall back to payment (one-time)
     let checkoutSession;

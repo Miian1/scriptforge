@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import type Stripe from 'stripe';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models/User';
 import { getSession } from '@/lib/auth';
@@ -36,12 +37,11 @@ export async function GET() {
         const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
         if (STRIPE_SECRET_KEY) {
           const Stripe = (await import('stripe')).default;
-          const stripeClient = new Stripe(STRIPE_SECRET_KEY, {
-            apiVersion: '2025-06-30.basil',
-          });
+          const stripeClient = new Stripe(STRIPE_SECRET_KEY);
 
           const subscription = await stripeClient.subscriptions.retrieve(
-            user.stripe.subscriptionId
+            user.stripe.subscriptionId,
+            { expand: ['latest_invoice'] }
           );
 
           if (subscription.status === 'canceled' || subscription.status === 'unpaid' || subscription.status === 'past_due') {
@@ -60,20 +60,29 @@ export async function GET() {
             });
             console.log(`[Auto-Downgrade] User ${user._id} downgraded to free (subscription ${subscription.status})`);
             downgraded = true;
-          } else if (
-            subscription.status === 'active' &&
-            subscription.current_period_end
-          ) {
-            // Stripe says still active — sync the period end and move on
-            const newPeriodEnd = new Date(subscription.current_period_end * 1000).getTime();
-            await User.findByIdAndUpdate(user._id, {
-              'stripe.currentPeriodEnd': newPeriodEnd,
-              'stripe.cancelAtPeriodEnd': subscription.cancel_at_period_end === true,
-              planExpiresAt: newPeriodEnd,
-            });
-            // Re-fetch to get updated data
-            const updatedUser = await User.findById(session.userId).select('-password');
-            return NextResponse.json({ user: formatUserResponse(updatedUser!) });
+          } else if (subscription.status === 'active') {
+            // Stripe says still active — sync the period end and move on.
+            // In Stripe API 2026-06-24.dahlia, current_period_end was removed
+            // from Subscription. We expanded latest_invoice on retrieve so we
+            // can read period_end from the invoice object instead.
+            const li = subscription.latest_invoice;
+            const invoicePeriodEnd =
+              li && typeof li === 'object' && 'period_end' in li
+                ? (li as Stripe.Invoice).period_end
+                : 0;
+            const newPeriodEnd = invoicePeriodEnd
+              ? new Date(invoicePeriodEnd * 1000).getTime()
+              : 0;
+            if (newPeriodEnd) {
+              await User.findByIdAndUpdate(user._id, {
+                'stripe.currentPeriodEnd': newPeriodEnd,
+                'stripe.cancelAtPeriodEnd': subscription.cancel_at_period_end === true,
+                planExpiresAt: newPeriodEnd,
+              });
+              // Re-fetch to get updated data
+              const updatedUser = await User.findById(session.userId).select('-password');
+              return NextResponse.json({ user: formatUserResponse(updatedUser!) });
+            }
           }
         }
       } catch (stripeErr) {
