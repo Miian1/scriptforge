@@ -1,5 +1,14 @@
 import type { Project, Scene } from './types';
 
+export interface ChannelCharacter {
+  id: string;
+  name: string;
+  role: string;
+  description: string;
+  visualPrompt: string;
+  personalityPrompt: string;
+}
+
 export interface ChannelNiche {
   visualTheme: string;
   writingStyle: string;
@@ -10,6 +19,7 @@ export interface ChannelNiche {
   channelDescription: string;
   channelCategory: string;
   channelUrl: string;
+  characters?: ChannelCharacter[];
 }
 
 function buildNicheContext(niche?: ChannelNiche | null): string {
@@ -25,6 +35,28 @@ function buildNicheContext(niche?: ChannelNiche | null): string {
   if (niche.audience) ctx += `- Target Audience: ${niche.audience}\n`;
   if (niche.language) ctx += `- Channel Language: ${niche.language}\n`;
   if (niche.description) ctx += `\n### Detailed Niche Context:\n${niche.description}\n`;
+
+  // ── Channel Characters ──
+  // Inject recurring characters so the AI references them in scene image
+  // prompts, narration voice, and animation. The AI is instructed to:
+  //   - Use these characters when relevant (don't force them)
+  //   - Match the visual prompt to the channel's visual theme
+  //   - Mimic personality cues in the narration
+  const validChars = (niche.characters || []).filter((c) => c.name && c.name.trim());
+  if (validChars.length > 0) {
+    ctx += `\n### Channel Characters (recurring personas)\n`;
+    ctx += `The user has defined the following recurring characters for this channel. When a scene naturally features a character (host, narrator, expert, mascot), use one of these — do NOT invent new ones unless the scene explicitly demands it.\n\n`;
+    validChars.forEach((c, i) => {
+      ctx += `**Character ${i + 1}: ${c.name.trim()}**\n`;
+      if (c.role) ctx += `- Role: ${c.role.trim()}\n`;
+      if (c.description) ctx += `- Description: ${c.description.trim()}\n`;
+      if (c.visualPrompt) ctx += `- Visual Prompt (must be incorporated into imagePrompt when this character appears): ${c.visualPrompt.trim()}\n`;
+      if (c.personalityPrompt) ctx += `- Personality / Voice (must be reflected in narration when this character speaks): ${c.personalityPrompt.trim()}\n`;
+      ctx += `\n`;
+    });
+    ctx += `IMPORTANT: When a scene features one of these characters, the imagePrompt MUST include the character's visual description (fused with the channel's visual theme), and the narration MUST match the character's personality and voice.\n`;
+  }
+
   ctx += '\nIMPORTANT: Generate content that matches this channel\'s brand identity. The narration, visual prompts, and overall tone should feel like it belongs on this channel.';
   return ctx;
 }
@@ -39,7 +71,55 @@ export interface PhaseInfo {
   previousPhaseTitles: string[];
 }
 
-function buildPhasePrompt(project: Project, phase: PhaseInfo, niche?: ChannelNiche | null): string {
+// ── Research context ──
+// Output of generateResearch() — fed into buildPhasePrompt so scene
+// generation is informed by real analysis of the user's channel + niche.
+export interface ResearchContext {
+  /** Short summary of the channel + niche analysis (2-4 sentences). */
+  channelSummary: string;
+  /** Angles / hooks the script should leverage (3-6 items). */
+  angles: string[];
+  /** Recurring themes the user's audience responds to. */
+  contentGaps: string[];
+  /** Suggested narrative structure (intro hook → body → CTA). */
+  narrativeArc: string;
+  /** SEO keywords to weave into narration / description. */
+  keywords: string[];
+  /** Free-form extra notes the AI should consider. */
+  notes: string;
+}
+
+/** Compact, in-prompt rendering of the research findings. */
+function buildResearchContext(research?: ResearchContext | null): string {
+  if (!research) return '';
+  let out = '\n## Pre-Generation Research Findings\n';
+  out += `The following research was performed BEFORE scene generation. Use it to ground the script in the channel's actual performance and audience.\n\n`;
+  if (research.channelSummary) out += `**Channel Summary:** ${research.channelSummary}\n\n`;
+  if (research.angles.length > 0) {
+    out += `**Angles & Hooks to leverage:**\n`;
+    research.angles.forEach((a) => (out += `- ${a}\n`));
+    out += `\n`;
+  }
+  if (research.contentGaps.length > 0) {
+    out += `**Audience content gaps to address:**\n`;
+    research.contentGaps.forEach((g) => (out += `- ${g}\n`));
+    out += `\n`;
+  }
+  if (research.narrativeArc) out += `**Suggested narrative arc:** ${research.narrativeArc}\n\n`;
+  if (research.keywords.length > 0) {
+    out += `**SEO keywords (weave into narration naturally):** ${research.keywords.join(', ')}\n\n`;
+  }
+  if (research.notes) out += `**Additional notes:** ${research.notes}\n\n`;
+  out += `IMPORTANT: Treat this research as authoritative guidance. The scenes you generate should reflect these angles and gaps.\n`;
+  return out;
+}
+
+function buildPhasePrompt(
+  project: Project,
+  phase: PhaseInfo,
+  niche?: ChannelNiche | null,
+  research?: ResearchContext | null,
+): string {
   const { settings, topic, description } = project;
   const sceneLength = settings.sceneLength || 8;
   const scenesInThisPhase = phase.sceneEnd - phase.sceneStart + 1;
@@ -79,6 +159,7 @@ IMPORTANT: Continue the narrative seamlessly from where the previous phase ended
 - Writing Style: ${settings.writingStyle}
 - Target Audience: ${settings.targetAudience}
 ${buildNicheContext(niche)}
+${buildResearchContext(research)}
 ${previousContext}
 
 ## Your Task
@@ -89,7 +170,7 @@ For each scene, generate:
 2. **estimatedDuration**: Set to ${sceneLength} (this is the fixed scene length)
 3. **goal**: What this scene accomplishes (1-2 sentences)
 4. **narration**: Complete spoken narration for a ${sceneLength}-second scene. Write it as if speaking directly to the camera. Include pacing cues in brackets like [pause], [dramatic music]. Keep it concise and impactful for the short duration. Must be in ${settings.language}.
-5. **imagePrompt**: A detailed AI image generation prompt describing: environment, characters, camera angle, composition, lighting, colors, mood, style, and quality. Must be compatible with Midjourney/DALL-E style generators. Use the theme "${settings.theme}" as the visual style. In English.
+5. **imagePrompt**: A detailed AI image generation prompt describing: environment, characters, camera angle, composition, lighting, colors, mood, style, and quality. Must be compatible with Midjourney/DALL-E style generators. Use the theme "${settings.theme}" as the visual style. If a channel character is featured, incorporate their visual prompt. In English.
 6. **animationPrompt**: A cinematic image-to-video prompt describing: camera movement, character motion, facial expressions, background movement, environmental effects, transitions, lighting changes, and motion style. Compatible with Google Veo, Runway, Kling, PixVerse, Pika, Luma. In English.
 7. **notes** containing:
    - "emotion": The primary emotion conveyed
@@ -192,8 +273,8 @@ Video topic: ${project.topic}
 Scene title: ${scene.title}
 Scene goal: ${scene.goal}
 Visual theme: ${project.settings.theme}
-
-Generate a detailed AI image prompt describing: environment, characters, camera angle, composition, lighting, colors, mood, style, and quality. Use the "${project.settings.theme}" visual style. Make it compatible with Midjourney/DALL-E.
+${buildNicheContext(niche)}
+Generate a detailed AI image prompt describing: environment, characters, camera angle, composition, lighting, colors, mood, style, and quality. Use the "${project.settings.theme}" visual style. If a channel character is featured in this scene, incorporate their visual prompt. Make it compatible with Midjourney/DALL-E.
 Return ONLY valid JSON with a single key "imagePrompt" containing the prompt text. No markdown fences.`;
   }
   if (regenField === 'animationPrompt') {
@@ -202,8 +283,8 @@ Video topic: ${project.topic}
 Scene title: ${scene.title}
 Scene goal: ${scene.goal}
 Visual theme: ${project.settings.theme}
-
-Generate a cinematic image-to-video prompt describing: camera movement, character motion, facial expressions, background movement, environmental effects, transitions, lighting changes, and motion style. Compatible with Google Veo, Runway, Kling, PixVerse, Pika, Luma.
+${buildNicheContext(niche)}
+Generate a cinematic image-to-video prompt describing: camera movement, character motion, facial expressions, background movement, environmental effects, transitions, lighting changes, and motion style. If a channel character is featured, animate them according to their personality. Compatible with Google Veo, Runway, Kling, PixVerse, Pika, Luma.
 Return ONLY valid JSON with a single key "animationPrompt" containing the prompt text. No markdown fences.`;
   }
 
@@ -336,9 +417,10 @@ export async function generateScript(project: Project, niche?: ChannelNiche | nu
 export async function generatePhase(
   project: Project,
   phase: PhaseInfo,
-  niche?: ChannelNiche | null
+  niche?: ChannelNiche | null,
+  research?: ResearchContext | null,
 ): Promise<{ scenes: Scene[]; metadata?: GeneratedMetadata }> {
-  const prompt = buildPhasePrompt(project, phase, niche);
+  const prompt = buildPhasePrompt(project, phase, niche, research);
 
   const maxRetries = 3;
   let lastError: Error | null = null;
@@ -424,4 +506,133 @@ export async function regenerateScene(
   }
 
   throw new Error('Failed to regenerate scene.');
+}
+
+// ── Research step ──────────────────────────────────────
+// Performs a real research call BEFORE scene generation.
+// Analyzes the user's YouTube channel + recent videos + niche,
+// and returns structured findings (angles, gaps, narrative arc,
+// keywords) that get injected into the scene generation prompt.
+
+export interface YouTubeResearchInput {
+  channelTitle?: string;
+  channelDescription?: string;
+  subscriberCount?: number;
+  videoCount?: number;
+  recentVideos?: Array<{
+    title: string;
+    views?: number;
+    likes?: number;
+    comments?: number;
+    publishedAt?: string;
+  }>;
+}
+
+function buildResearchPrompt(
+  project: Project,
+  niche: ChannelNiche | null | undefined,
+  yt: YouTubeResearchInput | null | undefined,
+): string {
+  const { topic, description, settings } = project;
+  let ytSection = '';
+  if (yt && (yt.channelTitle || (yt.recentVideos && yt.recentVideos.length > 0))) {
+    ytSection = '\n## User\'s YouTube Channel (real data)\n';
+    if (yt.channelTitle) ytSection += `- Channel Title: ${yt.channelTitle}\n`;
+    if (yt.channelDescription) ytSection += `- Channel Description: ${yt.channelDescription.slice(0, 600)}\n`;
+    if (typeof yt.subscriberCount === 'number') ytSection += `- Subscribers: ${yt.subscriberCount.toLocaleString()}\n`;
+    if (typeof yt.videoCount === 'number') ytSection += `- Total Videos: ${yt.videoCount.toLocaleString()}\n`;
+    if (yt.recentVideos && yt.recentVideos.length > 0) {
+      ytSection += `\n### Recent Videos (analyze titles, view counts, what worked):\n`;
+      yt.recentVideos.slice(0, 10).forEach((v, i) => {
+        const views = typeof v.views === 'number' ? v.views.toLocaleString() : '?';
+        const likes = typeof v.likes === 'number' ? v.likes.toLocaleString() : '?';
+        ytSection += `${i + 1}. "${v.title}" — ${views} views, ${likes} likes`;
+        if (v.publishedAt) ytSection += ` (${new Date(v.publishedAt).toLocaleDateString()})`;
+        ytSection += `\n`;
+      });
+    }
+    ytSection += '\nIMPORTANT: Use this real channel data to inform your research. Identify which of their past videos/topics performed well and why. Find gaps their audience would respond to.\n';
+  }
+
+  return `You are a YouTube content strategist. Analyze the user's channel, niche, and the topic they want to make a video about, then return structured research findings that will guide scene generation.
+
+## Video Plan
+- Topic: ${topic}
+- Description: ${description || 'N/A'}
+- Target Language: ${settings.language}
+- Writing Style: ${settings.writingStyle}
+- Target Audience: ${settings.targetAudience}
+${buildNicheContext(niche)}
+${ytSection}
+
+## Your Task
+Produce a focused research summary that will be consumed by a downstream AI scriptwriter. Be specific and actionable — generic platitudes are not useful.
+
+Return ONLY valid JSON (no markdown, no fences) with these exact fields:
+{
+  "channelSummary": "2-4 sentences summarizing this channel's identity, niche fit, and what their audience expects.",
+  "angles": ["3-6 specific angles or hooks the script should leverage for THIS topic. Each angle = 1 sentence."],
+  "contentGaps": ["3-5 content gaps the audience has that this video could fill. Each gap = 1 sentence."],
+  "narrativeArc": "1-2 sentences describing the suggested narrative arc (e.g. 'Open with a counterintuitive hook, build evidence through 3 case studies, end with a practical CTA').",
+  "keywords": ["6-10 SEO keywords to weave into narration and description naturally"],
+  "notes": "Any other important notes for the scriptwriter (tone, things to avoid, references to competitor videos, etc.)"
+}
+
+CRITICAL RULES:
+- Return ONLY JSON. No prose before or after.
+- All text must be in ${settings.language} except keywords which can be in English.
+- Be specific to THIS topic and THIS channel — do not give generic advice.`;
+}
+
+/**
+ * Run the research step. Returns null on failure (the wizard should
+ * continue with scene generation even if research fails — research is
+ * an enhancement, not a blocker).
+ */
+export async function generateResearch(
+  project: Project,
+  niche: ChannelNiche | null | undefined,
+  yt: YouTubeResearchInput | null | undefined,
+): Promise<ResearchContext | null> {
+  const prompt = buildResearchPrompt(project, niche, yt);
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const text = await callServer(prompt, 8192);
+
+      // Parse — research response is JSON, but be defensive about fences
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (fence) parsed = JSON.parse(fence[1].trim());
+        else {
+          const s = text.indexOf('{');
+          const e = text.lastIndexOf('}');
+          if (s !== -1 && e > s) parsed = JSON.parse(text.slice(s, e + 1));
+          else throw new Error('Cannot parse research response');
+        }
+      }
+
+      const toArray = (v: unknown): string[] =>
+        Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean).slice(0, 12) : [];
+
+      return {
+        channelSummary: String(parsed.channelSummary || '').slice(0, 1200),
+        angles: toArray(parsed.angles),
+        contentGaps: toArray(parsed.contentGaps),
+        narrativeArc: String(parsed.narrativeArc || '').slice(0, 600),
+        keywords: toArray(parsed.keywords),
+        notes: String(parsed.notes || '').slice(0, 1200),
+      };
+    } catch (err) {
+      if (attempt === 1) {
+        console.warn('[generateResearch] failed twice, returning null:', err);
+        return null;
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+  return null;
 }

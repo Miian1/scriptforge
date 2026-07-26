@@ -1,5 +1,14 @@
 import { create } from 'zustand';
 
+export interface AuthChannelCharacter {
+  id: string;
+  name: string;
+  role: string;
+  description: string;
+  visualPrompt: string;
+  personalityPrompt: string;
+}
+
 export interface AuthUser {
   id: string;
   name: string;
@@ -32,6 +41,7 @@ export interface AuthUser {
     channelDescription: string;
     channelCategory: string;
     channelUrl: string;
+    characters: AuthChannelCharacter[];
   };
 }
 

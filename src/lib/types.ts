@@ -2,12 +2,13 @@ export type VideoTheme = 'realistic' | 'anime' | 'cinematic' | 'cartoon' | '3d-r
 export type WritingStyle = 'conversational' | 'professional' | 'dramatic' | 'educational' | 'storytelling' | 'humorous';
 export type TargetAudience = 'beginners' | 'general' | 'intermediate' | 'experts' | 'kids' | 'teens';
 export type VideoLanguage = 'english' | 'spanish' | 'french' | 'german' | 'portuguese' | 'japanese' | 'korean' | 'chinese' | 'hindi' | 'arabic';
-export type VideoDuration = 'short' | 'medium' | 'long';
+export type VideoDuration = 'short' | 'medium' | 'long' | 'custom';
 export type GenerationStatus = 'draft' | 'generating' | 'completed' | 'error';
 export type AppView = 'dashboard' | 'create-project' | 'editor' | 'settings' | 'about';
 
 export interface ProjectSettings {
   duration: VideoDuration;
+  customVideoDuration?: number; // seconds — used when duration === 'custom'
   theme: VideoTheme;
   language: VideoLanguage;
   writingStyle: WritingStyle;
@@ -15,6 +16,8 @@ export interface ProjectSettings {
   sceneLength: number;
   totalScenes: number;
   scenesPerPhase: number;
+  /** 'niche' = use saved channel niche settings; 'custom' = manual override */
+  productionMode?: 'niche' | 'custom';
 }
 
 export interface CharacterDesign {
@@ -105,13 +108,33 @@ export const DURATION_LABELS: Record<VideoDuration, string> = {
   short: 'Short (2 min)',
   medium: 'Medium (8 min)',
   long: 'Long (25 min)',
+  custom: 'Custom duration...',
 };
 
 export const DURATION_SECONDS: Record<VideoDuration, number> = {
   short: 120,
   medium: 480,
   long: 1500,
+  custom: 0, // placeholder — actual value comes from settings.customVideoDuration
 };
+
+/**
+ * Resolve the actual video duration in seconds for a project's settings.
+ * Falls back to the standard presets if `custom` is selected but no
+ * customVideoDuration is provided.
+ */
+export function resolveVideoDurationSeconds(settings: {
+  duration: VideoDuration;
+  customVideoDuration?: number;
+}): number {
+  if (settings.duration === 'custom') {
+    const custom = Number(settings.customVideoDuration);
+    if (custom > 0) return custom;
+    // Fallback to medium if custom was selected without a value
+    return DURATION_SECONDS.medium;
+  }
+  return DURATION_SECONDS[settings.duration];
+}
 
 export const SCENES_PER_PHASE = 10;
 

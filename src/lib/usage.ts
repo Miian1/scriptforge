@@ -1,4 +1,4 @@
-import type { UserPlan, IDailyUsage, IChannelNiche } from './models/User';
+import type { UserPlan, IDailyUsage, IChannelNiche, IChannelCharacter } from './models/User';
 
 // ── Plan Limits ────────────────────────────────────────
 
@@ -48,7 +48,7 @@ export function formatUserResponse(user: {
   planSource?: 'stripe' | 'manual' | null;
   isVerified: boolean;
   youtube?: { connected?: boolean } | null;
-  channelNiche?: IChannelNiche | null;
+  channelNiche?: IChannelNiche & { characters?: IChannelCharacter[] } | null;
   dailyUsage?: IDailyUsage;
   stripe?: { customerId?: string; subscriptionId?: string; currentPeriodEnd?: number; cancelAtPeriodEnd?: boolean } | null;
 }) {
@@ -85,7 +85,7 @@ export function formatUserResponse(user: {
       : 0;
   }
 
-  // Channel niche
+  // Channel niche (including channel characters)
   const niche = user.channelNiche;
   const channelNiche = niche
     ? {
@@ -98,6 +98,16 @@ export function formatUserResponse(user: {
         channelDescription: niche.channelDescription || '',
         channelCategory: niche.channelCategory || '',
         channelUrl: niche.channelUrl || '',
+        characters: Array.isArray(niche.characters)
+          ? niche.characters.map((c) => ({
+              id: c.id || '',
+              name: c.name || '',
+              role: c.role || '',
+              description: c.description || '',
+              visualPrompt: c.visualPrompt || '',
+              personalityPrompt: c.personalityPrompt || '',
+            }))
+          : [],
       }
     : {
         visualTheme: '',
@@ -109,6 +119,7 @@ export function formatUserResponse(user: {
         channelDescription: '',
         channelCategory: '',
         channelUrl: '',
+        characters: [],
       };
 
   return {

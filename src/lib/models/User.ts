@@ -43,6 +43,15 @@ export interface ICustomPlan {
   customDays: number;     // admin-set days for custom plans
 }
 
+export interface IChannelCharacter {
+  id: string;                   // client-generated uuid for stable React keys
+  name: string;                 // e.g. "Dr. Nova", "The Curious Kid"
+  role: string;                 // e.g. "Host", "Subject-matter expert", "Recurring guest"
+  description: string;          // metadata: appearance, vibe, backstory, traits
+  visualPrompt: string;         // ready-to-use image prompt snippet for this character
+  personalityPrompt: string;    // speaking-style cues the AI should mimic in narration
+}
+
 export interface IChannelNiche {
   visualTheme: string;      // e.g. "Cinematic dark tones with neon accents"
   writingStyle: string;     // e.g. "Casual, energetic, uses humor and pop culture refs"
@@ -53,6 +62,7 @@ export interface IChannelNiche {
   channelDescription: string; // YouTube channel about/description
   channelCategory: string;   // e.g. "Technology", "Education", "Entertainment"
   channelUrl: string;       // YouTube channel URL
+  characters: IChannelCharacter[]; // recurring channel characters the AI should use in scenes
 }
 
 export interface INotification {
@@ -108,6 +118,15 @@ const StripeSchema = new Schema<IStripeInfo>({
   cancelAtPeriodEnd: { type: Boolean, default: false },
 });
 
+const ChannelCharacterSchema = new Schema<IChannelCharacter>({
+  id: { type: String, required: true, default: () => Math.random().toString(36).slice(2) + Date.now().toString(36) },
+  name: { type: String, required: true, trim: true, maxlength: 100 },
+  role: { type: String, default: '', trim: true, maxlength: 100 },
+  description: { type: String, default: '', trim: true, maxlength: 2000 },
+  visualPrompt: { type: String, default: '', trim: true, maxlength: 2000 },
+  personalityPrompt: { type: String, default: '', trim: true, maxlength: 2000 },
+});
+
 const ChannelNicheSchema = new Schema<IChannelNiche>({
   visualTheme: { type: String, default: '' },
   writingStyle: { type: String, default: '' },
@@ -118,6 +137,7 @@ const ChannelNicheSchema = new Schema<IChannelNiche>({
   channelDescription: { type: String, default: '' },
   channelCategory: { type: String, default: '' },
   channelUrl: { type: String, default: '' },
+  characters: { type: [ChannelCharacterSchema], default: () => [] },
 });
 
 const CustomPlanSchema = new Schema<ICustomPlan>({

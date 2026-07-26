@@ -22,10 +22,15 @@ export interface IProject extends Document {
   tags: string[];
   settings: {
     duration: string;
+    customVideoDuration?: number;
     theme: string;
     language: string;
     writingStyle: string;
     targetAudience: string;
+    sceneLength?: number;
+    totalScenes?: number;
+    scenesPerPhase?: number;
+    productionMode?: 'niche' | 'custom';
   };
   status: 'draft' | 'generating' | 'completed' | 'error';
   scoreHistory: IScoreEntry[];
@@ -43,6 +48,7 @@ const ProjectSchema = new Schema<IProject>(
     tags: { type: [String], default: [] },
     settings: {
       duration: { type: String, default: 'medium' },
+      customVideoDuration: { type: Number, default: 0 }, // seconds — used when duration === 'custom'
       theme: { type: String, default: 'cinematic' },
       language: { type: String, default: 'english' },
       writingStyle: { type: String, default: 'conversational' },
@@ -50,6 +56,7 @@ const ProjectSchema = new Schema<IProject>(
       sceneLength: { type: Number, default: 8 },
       totalScenes: { type: Number, default: 60 },
       scenesPerPhase: { type: Number, default: 10 },
+      productionMode: { type: String, enum: ['niche', 'custom'], default: 'custom' },
     },
     status: { type: String, enum: ['draft', 'generating', 'completed', 'error'], default: 'draft' },
     scoreHistory: [{

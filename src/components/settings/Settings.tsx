@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Shield, ShieldCheck, Youtube, Unplug, Loader2, ExternalLink, CheckCircle2, AlertTriangle, Palette, Pen, Eye, Globe, Users, FileText, Radio, Edit3 } from 'lucide-react';
+import { Settings, Shield, ShieldCheck, Youtube, Unplug, Loader2, ExternalLink, CheckCircle2, AlertTriangle, Palette, Pen, Eye, Globe, Users, FileText, Radio, Edit3, Plus, Trash2, UserCircle, Sparkles } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import type { AppSettings } from '@/lib/types';
 
@@ -22,7 +22,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { useAuthStore } from '@/lib/auth-store';
+import { useAuthStore, type AuthChannelCharacter } from '@/lib/auth-store';
 import { useAppStore } from '@/lib/store';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -90,6 +90,7 @@ interface NicheFormData {
   channelDescription: string;
   channelCategory: string;
   channelUrl: string;
+  characters: AuthChannelCharacter[];
 }
 
 const EMPTY_NICHE: NicheFormData = {
@@ -102,6 +103,7 @@ const EMPTY_NICHE: NicheFormData = {
   channelDescription: '',
   channelCategory: '',
   channelUrl: '',
+  characters: [],
 };
 
 export default function SettingsPage() {
@@ -212,6 +214,16 @@ export default function SettingsPage() {
       channelDescription: currentNiche?.channelDescription || '',
       channelCategory: currentNiche?.channelCategory || '',
       channelUrl: currentNiche?.channelUrl || '',
+      characters: Array.isArray(currentNiche?.characters)
+        ? currentNiche.characters.map((c) => ({
+            id: c.id || `char_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            name: c.name || '',
+            role: c.role || '',
+            description: c.description || '',
+            visualPrompt: c.visualPrompt || '',
+            personalityPrompt: c.personalityPrompt || '',
+          }))
+        : [],
     });
     setNicheOpen(true);
   };
@@ -242,6 +254,40 @@ export default function SettingsPage() {
 
   const updateNicheField = (key: keyof NicheFormData, value: string) => {
     setNicheForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  // ── Channel Characters helpers ──
+  // Each character is a recurring persona the AI can use when generating
+  // scene image prompts, narration, and animation prompts.
+  const addCharacter = () => {
+    setNicheForm((prev) => ({
+      ...prev,
+      characters: [
+        ...prev.characters,
+        {
+          id: `char_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          name: '',
+          role: '',
+          description: '',
+          visualPrompt: '',
+          personalityPrompt: '',
+        },
+      ],
+    }));
+  };
+
+  const updateCharacter = (id: string, patch: Partial<AuthChannelCharacter>) => {
+    setNicheForm((prev) => ({
+      ...prev,
+      characters: prev.characters.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+    }));
+  };
+
+  const removeCharacter = (id: string) => {
+    setNicheForm((prev) => ({
+      ...prev,
+      characters: prev.characters.filter((c) => c.id !== id),
+    }));
   };
 
   return (
@@ -689,6 +735,134 @@ export default function SettingsPage() {
                 value={nicheForm.description}
                 onChange={(e) => updateNicheField('description', e.target.value)}
               />
+            </div>
+
+            <Separator />
+
+            {/* ── Channel Characters ── */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <UserCircle className="size-4 text-primary" />
+                  Channel Characters
+                  {nicheForm.characters.length > 0 && (
+                    <Badge variant="secondary" className="text-[10px]">
+                      {nicheForm.characters.length}
+                    </Badge>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={addCharacter}
+                  disabled={nicheForm.characters.length >= 30}
+                  className="h-7 text-xs gap-1"
+                >
+                  <Plus className="size-3" />
+                  Add Character
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Define recurring characters (hosts, narrators, experts, animated mascots) that
+                the AI can reference when generating scene image prompts, narration voice, and
+                animation. Each character&apos;s visual prompt and personality will be matched
+                to your channel style automatically.
+              </p>
+
+              {nicheForm.characters.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border p-4 text-center">
+                  <UserCircle className="size-6 mx-auto text-muted-foreground/40 mb-1.5" />
+                  <p className="text-xs text-muted-foreground">
+                    No characters yet. Add a host, a narrator, or a recurring guest persona.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {nicheForm.characters.map((char, idx) => (
+                    <div
+                      key={char.id}
+                      className="rounded-lg border bg-card/50 p-3 space-y-2.5"
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="shrink-0 mt-1.5 size-6 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center">
+                          {idx + 1}
+                        </div>
+                        <div className="flex-1 grid gap-2 sm:grid-cols-2">
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Name</Label>
+                            <Input
+                              placeholder="e.g. Dr. Nova, The Curious Kid"
+                              value={char.name}
+                              onChange={(e) => updateCharacter(char.id, { name: e.target.value })}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Role</Label>
+                            <Input
+                              placeholder="e.g. Host, Narrator, Expert, Mascot"
+                              value={char.role}
+                              onChange={(e) => updateCharacter(char.id, { role: e.target.value })}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => removeCharacter(char.id)}
+                          className="shrink-0 size-7 text-muted-foreground hover:text-destructive"
+                          aria-label="Remove character"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                          <FileText className="size-2.5" /> Description / Metadata
+                        </Label>
+                        <Textarea
+                          placeholder="Appearance, age, vibe, backstory, signature traits, outfit, accent..."
+                          rows={2}
+                          value={char.description}
+                          onChange={(e) => updateCharacter(char.id, { description: e.target.value })}
+                          className="text-xs"
+                        />
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                            <Eye className="size-2.5" /> Visual Prompt
+                          </Label>
+                          <Textarea
+                            placeholder="e.g. 30-year-old woman with curly hair, lab coat, warm smile, cinematic lighting"
+                            rows={2}
+                            value={char.visualPrompt}
+                            onChange={(e) => updateCharacter(char.id, { visualPrompt: e.target.value })}
+                            className="text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                            <Sparkles className="size-2.5" /> Personality Prompt
+                          </Label>
+                          <Textarea
+                            placeholder="e.g. speaks with enthusiasm, asks rhetorical questions, uses analogies from everyday life"
+                            rows={2}
+                            value={char.personalityPrompt}
+                            onChange={(e) => updateCharacter(char.id, { personalityPrompt: e.target.value })}
+                            className="text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
