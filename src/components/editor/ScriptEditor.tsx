@@ -25,10 +25,7 @@ import {
   ListMusic,
   ChevronDown,
   ChevronRight,
-  Crown,
-  Lock,
 } from 'lucide-react';
-import Link from 'next/link';
 import {
   DndContext,
   closestCenter,
@@ -733,30 +730,24 @@ export default function ScriptEditor() {
                 </TooltipTrigger>
                 <TooltipContent>Export script as JSON</TooltipContent>
               </Tooltip>
+              {canUseVoice && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      if (!canUseVoice) return;
-                      setVoiceDialogOpen(true);
-                    }}
-                    disabled={scenes.length === 0 || !canUseVoice}
+                    onClick={() => setVoiceDialogOpen(true)}
+                    disabled={scenes.length === 0}
                     className="gap-1.5"
                   >
                     <Volume2 className="size-3.5" />
-                    <span className="hidden sm:inline">
-                      {canUseVoice ? 'Generate All Audio' : 'Voice (Pro)'}
-                    </span>
+                    <span className="hidden sm:inline">Generate All Audio</span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>
-                  {canUseVoice
-                    ? 'Generate voice for all narration'
-                    : 'Voice generation is a Pro-only feature'}
-                </TooltipContent>
+                <TooltipContent>Generate voice for all narration</TooltipContent>
               </Tooltip>
+              )}
+              {canUseVoice && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -771,6 +762,7 @@ export default function ScriptEditor() {
                 </TooltipTrigger>
                 <TooltipContent>Browse saved audio files</TooltipContent>
               </Tooltip>
+              )}
             </div>
           )}
         </div>
@@ -981,35 +973,6 @@ export default function ScriptEditor() {
           </DialogHeader>
 
           <div className="space-y-4 mt-2">
-            {/* ── Pro gate inside dialog ──
-                If a free user somehow opens this dialog, show an upgrade
-                prompt instead of the batch generation UI. */}
-            {!canUseVoice ? (
-              <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-orange-500/5 p-4">
-                <div className="flex items-start gap-3">
-                  <div className="shrink-0 rounded-lg bg-amber-500/10 p-2 ring-1 ring-amber-500/20">
-                    <Lock className="size-4 text-amber-600 dark:text-amber-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-semibold mb-1">
-                      Voice Generation is a Pro feature
-                    </h4>
-                    <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
-                      Generate lifelike AI voice-overs for all your scenes at
-                      once. Upgrade to Pro to unlock batch voice generation
-                      with 30+ studio voices.
-                    </p>
-                    <Button asChild size="sm" className="h-7 text-xs gap-1.5">
-                      <Link href="/plans">
-                        <Crown className="size-3" />
-                        Upgrade to Pro
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <>
             {/* Voice selector for all scenes */}
             <div className="space-y-3">
               <VoiceGenerator
@@ -1167,8 +1130,6 @@ export default function ScriptEditor() {
                 </>
               )}
             </Button>
-              </>
-            )}
           </div>
         </DialogContent>
       </Dialog>

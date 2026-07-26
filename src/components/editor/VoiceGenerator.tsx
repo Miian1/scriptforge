@@ -19,12 +19,9 @@ import {
   ChevronDown,
   X,
   CheckCircle2,
-  Crown,
-  Lock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
-import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -450,49 +447,12 @@ export default function VoiceGenerator({
   const hasAudio = !!audioUrl;
   const noText = !text.trim();
 
-  // ── Free-plan upgrade prompt ──
-  // Replaces the entire voice generator UI for non-Pro users.
+  // ── Free-plan: hide voice generation entirely ──
+  // Free users see NOTHING for voice generation — no UI, no upgrade
+  // prompt, no "Pro" badge. The whole component is hidden.
+  // Admins/managers bypass (staff accounts).
   if (!isProOrStaff) {
-    return (
-      <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-orange-500/5 p-4">
-        <div className="flex items-start gap-3">
-          <div className="shrink-0 rounded-lg bg-amber-500/10 p-2 ring-1 ring-amber-500/20">
-            <Lock className="size-4 text-amber-600 dark:text-amber-400" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <Volume2 className="size-3.5 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                {label}
-              </span>
-              <Badge variant="outline" className="ml-auto gap-1 text-[10px] border-amber-500/40 text-amber-600 dark:text-amber-400">
-                <Crown className="size-2.5" />
-                Pro
-              </Badge>
-            </div>
-            <h4 className="text-sm font-semibold mb-1">
-              Voice Generation is a Pro feature
-            </h4>
-            <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
-              Convert your script narration into lifelike AI voice-overs with
-              30+ studio-grade voices, styles, and accents. Upgrade to Pro to
-              unlock the full voice generator.
-            </p>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button asChild size="sm" className="h-7 text-xs gap-1.5">
-                <Link href="/plans">
-                  <Crown className="size-3" />
-                  Upgrade to Pro
-                </Link>
-              </Button>
-              <span className="text-[10px] text-muted-foreground">
-                Includes 100 AI generations / day
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
