@@ -39,6 +39,19 @@ export async function PUT(req: Request) {
     const body = await req.json();
     const { tools } = body;
 
+    // Accept both shapes for resilience:
+    //   { youtube: false }                  (flat boolean — legacy/client shape)
+    //   { youtube: { enabled: false } }     (nested object — DB shape)
+    // Without this, a flat `false` would be read as `false?.enabled` → undefined → `?? true`
+    // which silently re-enables the tool on every save.
+    const yt = tools?.youtube;
+    const youtubeEnabled =
+      typeof yt === 'boolean'
+        ? yt
+        : typeof yt?.enabled === 'boolean'
+          ? yt.enabled
+          : true;
+
     await connectDB();
 
     // Upsert: find existing or create new
@@ -46,7 +59,7 @@ export async function PUT(req: Request) {
       {},
       {
         tools: {
-          youtube: { enabled: tools?.youtube?.enabled ?? true },
+          youtube: { enabled: youtubeEnabled },
         },
       },
       { new: true, upsert: true }

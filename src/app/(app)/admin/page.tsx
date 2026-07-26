@@ -91,7 +91,9 @@ export default function AdminPage() {
   const [notifMessage, setNotifMessage] = useState('');
   const [notifType, setNotifType] = useState<'info' | 'warning' | 'urgent'>('info');
 
-  // Tools config state
+  // Tools config state — flat booleans only, e.g. { youtube: true }
+  // The DB stores { youtube: { enabled: true } }, so we normalize on read
+  // to keep the <Switch checked={toolsConfig.youtube}> working correctly.
   const [toolsConfig, setToolsConfig] = useState({ youtube: true });
   const [toolsLoading, setToolsLoading] = useState(false);
   const [toolsSaving, setToolsSaving] = useState(false);
@@ -355,7 +357,17 @@ export default function AdminPage() {
       const res = await fetch('/api/admin/config');
       if (res.ok) {
         const data = await res.json();
-        setToolsConfig(data.config?.tools || { youtube: true });
+        // API returns { tools: { youtube: { enabled: true } } } — flatten to { youtube: true }
+        // so the <Switch checked={toolsConfig.youtube}> reads a boolean, not an object.
+        const t = data.config?.tools;
+        const normalizeTool = (val: unknown): boolean => {
+          if (typeof val === 'boolean') return val;
+          if (val && typeof val === 'object' && 'enabled' in val) {
+            return Boolean((val as { enabled: boolean }).enabled);
+          }
+          return true; // default enabled when missing
+        };
+        setToolsConfig({ youtube: normalizeTool(t?.youtube) });
       }
     } catch {
       // silent
@@ -371,25 +383,42 @@ export default function AdminPage() {
   }, [user, fetchToolsConfig]);
 
   const handleToggleTool = async (tool: 'youtube') => {
-    const newValue = !toolsConfig[tool];
-    const updated = { ...toolsConfig, [tool]: newValue };
-    setToolsConfig(updated);
+    const previousValue = toolsConfig[tool];
+    const newValue = !previousValue;
+    // Optimistically flip the UI
+    setToolsConfig((prev) => ({ ...prev, [tool]: newValue }));
     setToolsSaving(true);
     try {
       const res = await fetch('/api/admin/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tools: updated }),
+        // Send the nested { enabled: boolean } shape the DB expects.
+        // (The API also tolerates a flat boolean, but sending the canonical
+        // shape avoids any ambiguity and future-proofs against regressions.)
+        body: JSON.stringify({ tools: { [tool]: { enabled: newValue } } }),
       });
       if (res.ok) {
-        toast.success(`${tool === 'youtube' ? 'YouTube' : tool} ${newValue ? 'enabled' : 'disabled'}`);
+        const data = await res.json();
+        // Re-sync from the authoritative server response so the UI reflects
+        // what was actually persisted (avoids drift if the API coerced).
+        const persisted = data.config?.tools?.[tool];
+        const persistedEnabled =
+          typeof persisted === 'boolean'
+            ? persisted
+            : typeof persisted?.enabled === 'boolean'
+              ? persisted.enabled
+              : newValue;
+        setToolsConfig((prev) => ({ ...prev, [tool]: persistedEnabled }));
+        toast.success(
+          `${tool === 'youtube' ? 'YouTube' : tool} ${persistedEnabled ? 'enabled' : 'disabled'}`
+        );
       } else {
         // Revert on failure
-        setToolsConfig(toolsConfig);
+        setToolsConfig((prev) => ({ ...prev, [tool]: previousValue }));
         toast.error('Failed to update tool setting');
       }
     } catch {
-      setToolsConfig(toolsConfig);
+      setToolsConfig((prev) => ({ ...prev, [tool]: previousValue }));
       toast.error('Network error');
     } finally {
       setToolsSaving(false);
