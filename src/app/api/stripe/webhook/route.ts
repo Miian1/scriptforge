@@ -140,6 +140,7 @@ export async function POST(req: NextRequest) {
         await User.findByIdAndUpdate(userId, {
           plan: 'pro',
           planExpiresAt,
+          planSource: 'stripe',
           stripe: {
             customerId,
             subscriptionId,
@@ -299,13 +300,17 @@ export async function POST(req: NextRequest) {
           // Always sync these fields from Stripe
           const update: Record<string, unknown> = {
             'stripe.cancelAtPeriodEnd': cancelAtEnd,
-            'stripe.currentPeriodEnd': periodEndMs,
             'stripe.subscriptionId': subscription.id,
           };
 
-          // Update planExpiresAt if we have a valid period end
-          if (periodEndMs) {
+          // Only overwrite currentPeriodEnd / planExpiresAt if we got a real
+          // value from Stripe. Otherwise preserve the existing DB value to
+          // avoid wiping a valid expiry when retrieve() returns an unexpanded
+          // latest_invoice.
+          if (periodEndMs > 0) {
+            update['stripe.currentPeriodEnd'] = periodEndMs;
             update.planExpiresAt = periodEndMs;
+            update.planSource = 'stripe';
           }
 
           // If subscription status is no longer active, downgrade immediately
@@ -317,6 +322,7 @@ export async function POST(req: NextRequest) {
           ) {
             update.plan = 'free';
             update.planExpiresAt = 0;
+            update.planSource = null;
             update.isCustomPlan = false;
             update.customPlan = { isCustom: false, customLabel: '', customDays: 0 };
             update.stripe = {
@@ -357,6 +363,7 @@ export async function POST(req: NextRequest) {
         await User.findByIdAndUpdate(userId, {
           plan: 'free',
           planExpiresAt: 0,
+          planSource: null,
           isCustomPlan: false,
           customPlan: { isCustom: false, customLabel: '', customDays: 0 },
           stripe: {
@@ -372,6 +379,7 @@ export async function POST(req: NextRequest) {
           await User.findByIdAndUpdate(user._id, {
             plan: 'free',
             planExpiresAt: 0,
+            planSource: null,
             isCustomPlan: false,
             customPlan: { isCustom: false, customLabel: '', customDays: 0 },
             stripe: {

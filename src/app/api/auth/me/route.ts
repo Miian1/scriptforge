@@ -19,6 +19,32 @@ export async function GET() {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // ── Sync planExpiresAt with stripe.currentPeriodEnd ──
+    // If user has a Stripe subscription, the canonical expiry is
+    // stripe.currentPeriodEnd (Stripe sets it on every renewal). If our local
+    // planExpiresAt is missing or drifted, sync it now so the admin panel and
+    // user UI always show the correct countdown. This is the fix for the
+    // “0 days left” bug where the webhook updated currentPeriodEnd but
+    // planExpiresAt was stale.
+    if (
+      user.plan === 'pro' &&
+      user.stripe?.subscriptionId &&
+      user.stripe?.currentPeriodEnd &&
+      user.stripe.currentPeriodEnd > 0
+    ) {
+      const spe = user.stripe.currentPeriodEnd;
+      const pea = user.planExpiresAt || 0;
+      if (pea === 0 || Math.abs(pea - spe) > 24 * 60 * 60 * 1000) {
+        await User.findByIdAndUpdate(user._id, {
+          planExpiresAt: spe,
+          planSource: 'stripe',
+        });
+        user.planExpiresAt = spe;
+        user.planSource = 'stripe';
+        console.log(`[Auth/Me] Synced planExpiresAt=${new Date(spe).toISOString()} from stripe.currentPeriodEnd for user ${user._id}`);
+      }
+    }
+
     // ── Auto-downgrade safety net ──
     // If the user is Pro with a Stripe subscription, check if the billing
     // period has expired and the DB wasn't updated (e.g., webhook missed).
@@ -49,6 +75,7 @@ export async function GET() {
             await User.findByIdAndUpdate(user._id, {
               plan: 'free',
               planExpiresAt: 0,
+              planSource: null,
               isCustomPlan: false,
               customPlan: { isCustom: false, customLabel: '', customDays: 0 },
               stripe: {
@@ -103,6 +130,7 @@ export async function GET() {
       await User.findByIdAndUpdate(user._id, {
         plan: 'free',
         planExpiresAt: 0,
+        planSource: null,
         isCustomPlan: false,
         customPlan: { isCustom: false, customLabel: '', customDays: 0 },
         stripe: {
@@ -128,6 +156,7 @@ export async function GET() {
       await User.findByIdAndUpdate(user._id, {
         plan: 'free',
         planExpiresAt: 0,
+        planSource: null,
         isCustomPlan: false,
         customPlan: { isCustom: false, customLabel: '', customDays: 0 },
       });

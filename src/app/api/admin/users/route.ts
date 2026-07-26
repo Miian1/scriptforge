@@ -22,9 +22,30 @@ export async function GET() {
 
     const formatted = users.map((u) => {
       const planExpiresAt = u.planExpiresAt || 0;
-      const daysLeft = u.plan === 'pro' && planExpiresAt > 0
-        ? Math.max(0, Math.ceil((planExpiresAt - now) / (1000 * 60 * 60 * 24)))
+      const stripePeriodEnd = u.stripe?.currentPeriodEnd || 0;
+
+      // For Stripe Pro users, fall back to stripe.currentPeriodEnd if
+      // planExpiresAt is missing or stale. This fixes the “0 days left” bug
+      // where the webhook updated stripe.currentPeriodEnd but planExpiresAt
+      // wasn’t kept in sync.
+      let effectiveExpiry = planExpiresAt;
+      if (u.plan === 'pro' && stripePeriodEnd > 0) {
+        if (planExpiresAt === 0 || Math.abs(planExpiresAt - stripePeriodEnd) > 24 * 60 * 60 * 1000) {
+          effectiveExpiry = stripePeriodEnd;
+        }
+      }
+
+      const daysLeft = u.plan === 'pro' && effectiveExpiry > 0
+        ? Math.max(0, Math.ceil((effectiveExpiry - now) / (1000 * 60 * 60 * 24)))
         : 0;
+
+      // Determine plan source label for UI:
+      //   - 'stripe' if they have a real Stripe subscription
+      //   - 'manual' if Pro but no Stripe (admin upgraded)
+      //   - null if Free
+      const planSource = u.plan === 'pro'
+        ? (u.stripe?.subscriptionId ? 'stripe' : (u.planSource || 'manual'))
+        : null;
 
       return {
         id: u._id.toString(),
@@ -33,10 +54,11 @@ export async function GET() {
         provider: u.provider || 'email',
         role: u.role || 'user',
         plan: u.plan || 'free',
+        planSource,
         isVerified: u.isVerified || false,
         isCustomPlan: u.isCustomPlan || false,
         customPlan: u.customPlan || { isCustom: false, customLabel: '', customDays: 0 },
-        planExpiresAt,
+        planExpiresAt: effectiveExpiry,
         planDaysLeft: daysLeft,
         stripe: u.stripe || { customerId: '', subscriptionId: '', currentPeriodEnd: 0, cancelAtPeriodEnd: false },
         dailyUsage: u.dailyUsage || { date: '', projectsCreated: 0, aiGenerations: 0 },

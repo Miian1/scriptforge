@@ -39,8 +39,12 @@ export async function PUT(
       // If downgrading to free, clear everything
       if (plan === 'free') {
         update.planExpiresAt = 0;
+        update.planSource = null;
         update.isCustomPlan = false;
         update.customPlan = { isCustom: false, customLabel: '', customDays: 0 };
+      } else if (plan === 'pro' && user.plan !== 'pro') {
+        // Upgrading free → pro via admin = manual source
+        update.planSource = 'manual';
       }
     }
 
@@ -56,6 +60,8 @@ export async function PUT(
         : Date.now();
       update.planExpiresAt = base + body.addDays * 24 * 60 * 60 * 1000;
       if (user.plan !== 'pro') update.plan = 'pro';
+      // Admin adding days = manual upgrade (unless they’re already Stripe)
+      if (!user.stripe?.subscriptionId) update.planSource = 'manual';
     }
 
     // ── Reduce days from existing expiry ──
@@ -63,11 +69,13 @@ export async function PUT(
       if (user.planExpiresAt && user.planExpiresAt > Date.now()) {
         const reduced = user.planExpiresAt - reduceDays * 24 * 60 * 60 * 1000;
         // Don't go below now
-        update.planExpiresAt = Math.max(Date.now(), reduced);
+        const newExpiry = Math.max(Date.now(), reduced);
+        update.planExpiresAt = newExpiry;
         // If reduced to 0 or below now, downgrade to free
-        if (update.planExpiresAt <= Date.now()) {
+        if (newExpiry <= Date.now()) {
           update.plan = 'free';
           update.planExpiresAt = 0;
+          update.planSource = null;
           update.isCustomPlan = false;
           update.customPlan = { isCustom: false, customLabel: '', customDays: 0 };
         }
@@ -79,11 +87,14 @@ export async function PUT(
       if (setDays <= 0) {
         update.plan = 'free';
         update.planExpiresAt = 0;
+        update.planSource = null;
         update.isCustomPlan = false;
         update.customPlan = { isCustom: false, customLabel: '', customDays: 0 };
       } else {
         update.planExpiresAt = Date.now() + setDays * 24 * 60 * 60 * 1000;
         if (user.plan !== 'pro') update.plan = 'pro';
+        // Admin setting days = manual source (unless already Stripe)
+        if (!user.stripe?.subscriptionId) update.planSource = 'manual';
       }
     }
 
@@ -106,6 +117,8 @@ export async function PUT(
         update.planExpiresAt = Date.now() + newCustomPlan.customDays * 24 * 60 * 60 * 1000;
         update.plan = 'pro'; // custom plans always have pro access
         update.isCustomPlan = true;
+        // Custom plans created via admin = manual source (unless Stripe)
+        if (!user.stripe?.subscriptionId) update.planSource = 'manual';
       }
     }
 
@@ -125,8 +138,15 @@ export async function PUT(
 
     const now = Date.now();
     const expiry = updatedUser.planExpiresAt || 0;
-    const daysLeft = updatedUser.plan === 'pro' && expiry > 0
-      ? Math.max(0, Math.ceil((expiry - now) / (1000 * 60 * 60 * 24)))
+    const stripePeriodEnd = updatedUser.stripe?.currentPeriodEnd || 0;
+    let effectiveExpiry = expiry;
+    if (updatedUser.plan === 'pro' && stripePeriodEnd > 0) {
+      if (expiry === 0 || Math.abs(expiry - stripePeriodEnd) > 24 * 60 * 60 * 1000) {
+        effectiveExpiry = stripePeriodEnd;
+      }
+    }
+    const daysLeft = updatedUser.plan === 'pro' && effectiveExpiry > 0
+      ? Math.max(0, Math.ceil((effectiveExpiry - now) / (1000 * 60 * 60 * 24)))
       : 0;
 
     return NextResponse.json({
@@ -137,8 +157,9 @@ export async function PUT(
         email: updatedUser.email,
         role: updatedUser.role,
         plan: updatedUser.plan,
-        planExpiresAt: expiry,
+        planExpiresAt: effectiveExpiry,
         planDaysLeft: daysLeft,
+        planSource: updatedUser.planSource || null,
         isCustomPlan: updatedUser.isCustomPlan,
         customPlan: updatedUser.customPlan,
       },

@@ -8,6 +8,7 @@ export interface AuthUser {
   plan: 'free' | 'pro';
   planExpiresAt: number;
   planDaysLeft: number;
+  planSource: 'stripe' | 'manual' | null;
   isVerified: boolean;
   youtubeConnected: boolean;
   dailyUsage: {

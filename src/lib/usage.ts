@@ -45,6 +45,7 @@ export function formatUserResponse(user: {
   role: string;
   plan?: string;
   planExpiresAt?: number;
+  planSource?: 'stripe' | 'manual' | null;
   isVerified: boolean;
   youtube?: { connected?: boolean } | null;
   channelNiche?: IChannelNiche | null;
@@ -56,8 +57,23 @@ export function formatUserResponse(user: {
     ? resetIfNewDay(user.dailyUsage, plan)
     : { date: getTodayKey(), projectsCreated: 0, aiGenerations: 0 };
 
-  // Calculate plan days left
-  const planExpiresAt = (user.planExpiresAt as number) || 0;
+  // ── Calculate plan expiry & days left ──
+  // For Stripe subscriptions, `stripe.currentPeriodEnd` is the source of truth
+  // (Stripe sets it on every renewal). If `planExpiresAt` is missing or stale,
+  // fall back to `stripe.currentPeriodEnd` so the UI shows the correct countdown.
+  const stripePeriodEnd = user.stripe?.currentPeriodEnd || 0;
+  let planExpiresAt = (user.planExpiresAt as number) || 0;
+
+  // If this is a Stripe Pro user and planExpiresAt is missing/stale, use the
+  // stripe currentPeriodEnd value instead.
+  if (plan === 'pro' && stripePeriodEnd > 0) {
+    // If planExpiresAt is 0, or differs from stripe by more than 1 day,
+    // trust stripe.currentPeriodEnd (it's the billing truth).
+    if (planExpiresAt === 0 || Math.abs(planExpiresAt - stripePeriodEnd) > 24 * 60 * 60 * 1000) {
+      planExpiresAt = stripePeriodEnd;
+    }
+  }
+
   let planDaysLeft = 0;
   if (plan === 'pro' && planExpiresAt > 0) {
     const diff = planExpiresAt - Date.now();
@@ -98,6 +114,7 @@ export function formatUserResponse(user: {
     plan,
     planExpiresAt,
     planDaysLeft,
+    planSource: user.planSource || null,
     isVerified: user.isVerified,
     youtubeConnected: user.youtube?.connected === true,
     channelNiche,

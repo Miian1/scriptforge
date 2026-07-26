@@ -6,6 +6,12 @@ export type AuthProvider = 'email' | 'google';
 export type UserPlan = 'free' | 'pro';
 export type CustomPlanType = boolean;
 
+// Tracks HOW the user got their current Pro plan.
+//   'stripe' — upgraded via Stripe checkout
+//   'manual' — upgraded by admin (Easypaisa/JazzCash or admin-granted)
+//   null/undefined — free user, no Pro access yet
+export type PlanSource = 'stripe' | 'manual' | null;
+
 export interface IDailyUsage {
   date: string;           // 'YYYY-MM-DD'
   projectsCreated: number;
@@ -61,6 +67,7 @@ export interface IUser extends Document {
   role: UserRole;
   plan: UserPlan;
   planExpiresAt: number;       // ms timestamp — when the 30-day Pro period ends
+  planSource?: PlanSource;     // how Pro was obtained: 'stripe' | 'manual' | null
   isCustomPlan: boolean;
   customPlan: ICustomPlan;
   isVerified: boolean;
@@ -139,6 +146,7 @@ const UserSchema = new Schema<IUser>(
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
     plan: { type: String, enum: ['free', 'pro'], default: 'free' },
     planExpiresAt: { type: Number, default: 0 },
+    planSource: { type: String, enum: ['stripe', 'manual', null], default: null },
     isCustomPlan: { type: Boolean, default: false },
     isVerified: { type: Boolean, default: false },
     verificationToken: { type: String, default: null },

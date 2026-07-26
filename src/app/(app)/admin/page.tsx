@@ -8,7 +8,8 @@ import {
   Edit3, Trash2, X, Check, Clock, Star, UserCog,
   AlertTriangle, RefreshCw, Plus, Minus, CalendarDays, Settings, Eye, Bell, Send,
   Wrench, Youtube, ToggleLeft, ToggleRight, Save,
-  BrainCircuit, Mic, MessageSquare, Sparkles, Trash
+  BrainCircuit, Mic, MessageSquare, Sparkles, Trash,
+  CreditCard, Banknote, UserPlus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -38,6 +39,7 @@ interface AdminUser {
   provider: string;
   role: string;
   plan: string;
+  planSource: 'stripe' | 'manual' | null;
   isVerified: boolean;
   isCustomPlan: boolean;
   customPlan: { isCustom: boolean; customLabel: string; customDays: number };
@@ -120,6 +122,16 @@ export default function AdminPage() {
   const [editRole, setEditRole] = useState('user');
   const [daysEditMode, setDaysEditMode] = useState<DaysEditMode>('add');
   const [daysValue, setDaysValue] = useState(0);
+
+  // Create user dialog state
+  const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserPlan, setNewUserPlan] = useState<'free' | 'pro'>('free');
+  const [newUserDays, setNewUserDays] = useState(30);
+  const [newUserRole, setNewUserRole] = useState<'user' | 'admin'>('user');
 
   // Redirect non-admin
   useEffect(() => {
@@ -274,6 +286,52 @@ export default function AdminPage() {
       toast.error('Network error. Please try again.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ── Create user (admin-created, no email verification) ──
+  const handleCreateUser = async () => {
+    if (!newUserEmail.trim() || !newUserPassword) {
+      toast.error('Email and password are required');
+      return;
+    }
+    if (newUserPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    setCreatingUser(true);
+    try {
+      const res = await fetch('/api/admin/users/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newUserName.trim() || undefined,
+          email: newUserEmail.trim(),
+          password: newUserPassword,
+          plan: newUserPlan,
+          days: newUserPlan === 'pro' ? newUserDays : undefined,
+          role: newUserRole,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message || `Account created for ${newUserEmail}`);
+        // Reset form
+        setNewUserName('');
+        setNewUserEmail('');
+        setNewUserPassword('');
+        setNewUserPlan('free');
+        setNewUserDays(30);
+        setNewUserRole('user');
+        setCreateUserOpen(false);
+        fetchUsers();
+      } else {
+        toast.error(data.error || 'Failed to create user');
+      }
+    } catch {
+      toast.error('Network error. Please try again.');
+    } finally {
+      setCreatingUser(false);
     }
   };
 
@@ -914,12 +972,24 @@ export default function AdminPage() {
       {/* Users Table */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Users className="size-4" />
-            All Users
-            <Badge variant="secondary" className="text-[10px]">{filteredUsers.length}</Badge>
-          </CardTitle>
-          <CardDescription>Click edit to change plans, add/reduce days, or set custom plans</CardDescription>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="size-4" />
+                All Users
+                <Badge variant="secondary" className="text-[10px]">{filteredUsers.length}</Badge>
+              </CardTitle>
+              <CardDescription>Click edit to change plans, add/reduce days, or set custom plans</CardDescription>
+            </div>
+            <Button
+              size="sm"
+              className="gap-2"
+              onClick={() => setCreateUserOpen(true)}
+            >
+              <Plus className="size-4" />
+              Create User
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
@@ -982,8 +1052,22 @@ export default function AdminPage() {
                             </>
                           )}
                         </div>
-                        {u.stripe?.subscriptionId && (
-                          <span className="text-[10px] text-muted-foreground">Stripe</span>
+                        {u.plan === 'pro' && (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              'text-[9px] px-1.5 py-0 h-4 mt-0.5 gap-0.5',
+                              u.planSource === 'stripe'
+                                ? 'border-blue-500/30 text-blue-600 dark:text-blue-400'
+                                : 'border-amber-500/30 text-amber-600 dark:text-amber-400'
+                            )}
+                          >
+                            {u.planSource === 'stripe' ? (
+                              <><CreditCard className="size-2.5" /> Stripe</>
+                            ) : (
+                              <><Banknote className="size-2.5" /> Manual</>
+                            )}
+                          </Badge>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -1508,6 +1592,173 @@ export default function AdminPage() {
             >
               {sendingNotif ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
               Send
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ══════════════════════════════════════════════════════ */}
+      {/* ── Create User Dialog ── */}
+      {/* Admin creates a new user account. No email verification is sent. */}
+      {/* ══════════════════════════════════════════════════════ */}
+      <Dialog open={createUserOpen} onOpenChange={setCreateUserOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="size-4" />
+              Create User Account
+            </DialogTitle>
+            <DialogDescription>
+              Create a new account directly. No email verification is sent —
+              the user can log in immediately with the credentials you set.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Name */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Name (optional)</label>
+              <Input
+                placeholder="e.g. John Doe"
+                value={newUserName}
+                onChange={(e) => setNewUserName(e.target.value)}
+                maxLength={100}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                If left blank, the email username will be used.
+              </p>
+            </div>
+
+            {/* Email */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email *</label>
+              <Input
+                type="email"
+                placeholder="user@example.com"
+                value={newUserEmail}
+                onChange={(e) => setNewUserEmail(e.target.value)}
+              />
+            </div>
+
+            {/* Password */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Password *</label>
+              <Input
+                type="password"
+                placeholder="At least 6 characters"
+                value={newUserPassword}
+                onChange={(e) => setNewUserPassword(e.target.value)}
+              />
+            </div>
+
+            <Separator />
+
+            {/* Plan */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Plan</label>
+              <Select value={newUserPlan} onValueChange={(v) => setNewUserPlan(v as 'free' | 'pro')}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="free">
+                    <div className="flex items-center gap-2">
+                      <Zap className="size-3.5 text-muted-foreground" />
+                      Free
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="pro">
+                    <div className="flex items-center gap-2">
+                      <Crown className="size-3.5 text-primary" />
+                      Pro (manual)
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {newUserPlan === 'pro' && (
+                <p className="text-[11px] text-muted-foreground">
+                  Source will be marked as <span className="font-medium text-amber-600 dark:text-amber-400">Manual</span>{' '}
+                  (admin/Easypaisa upgrade).
+                </p>
+              )}
+            </div>
+
+            {/* Days (only when Pro) */}
+            {newUserPlan === 'pro' && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <CalendarDays className="size-3.5 text-primary" />
+                  Pro Duration (days)
+                </label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="size-8"
+                    onClick={() => setNewUserDays(Math.max(1, newUserDays - 7))}
+                  >
+                    <Minus className="size-3" />
+                  </Button>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={newUserDays}
+                    onChange={(e) => setNewUserDays(Math.max(1, Math.min(365, parseInt(e.target.value) || 30)))}
+                    className="w-24 text-center"
+                  />
+                  <span className="text-xs text-muted-foreground">days</span>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="size-8"
+                    onClick={() => setNewUserDays(Math.min(365, newUserDays + 7))}
+                  >
+                    <Plus className="size-3" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[7, 14, 30, 60, 90].map((d) => (
+                    <Button
+                      key={d}
+                      variant="ghost"
+                      size="sm"
+                      className="text-[11px] h-7 px-2"
+                      onClick={() => setNewUserDays(d)}
+                    >
+                      {d}d
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <Separator />
+
+            {/* Role */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Role</label>
+              <Select value={newUserRole} onValueChange={(v) => setNewUserRole(v as 'user' | 'admin')}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setCreateUserOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleCreateUser}
+              disabled={creatingUser || !newUserEmail.trim() || !newUserPassword}
+              className="gap-2"
+            >
+              {creatingUser ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
+              Create Account
             </Button>
           </DialogFooter>
         </DialogContent>

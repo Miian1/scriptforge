@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Check, Zap, Crown, ArrowLeft, Loader2, CreditCard, MessageCircle, Banknote, Phone, AlertTriangle, CalendarClock, RefreshCw, ShieldCheck, Mail, Sparkles } from 'lucide-react';
+import { Check, Zap, Crown, ArrowLeft, Loader2, CreditCard, MessageCircle, Banknote, Phone, AlertTriangle, CalendarClock, RefreshCw, ShieldCheck, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -17,8 +17,7 @@ import { cn } from '@/lib/utils';
 const ADMIN_WHATSAPP = '9203177730490';
 const ADMIN_EMAIL = 'info@khiizar.com';
 const WHATSAPP_LINK = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent('Hi! I want to upgrade to ScriptForge Pro plan via Easypaisa/JazzCash. Please share the payment details.')}`;
-const WHATSAPP_CUSTOM_LINK = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent('Hi! I am interested in a custom plan for ScriptForge. Can we discuss the details?')}`;
-const EMAIL_LINK = `mailto:${ADMIN_EMAIL}?subject=${encodeURIComponent('ScriptForge Custom Plan Inquiry')}&body=${encodeURIComponent('Hi! I am interested in a custom plan for ScriptForge. Please share the available options and pricing.')}`;
+const EMAIL_LINK = `mailto:${ADMIN_EMAIL}?subject=${encodeURIComponent('ScriptForge Pro Plan Inquiry')}&body=${encodeURIComponent('Hi! I am interested in upgrading to ScriptForge Pro. Please share the payment details.')}`;
 
 const FREE_FEATURES = [
   '1 project (one-time)',
@@ -312,7 +311,7 @@ export default function PlansPage() {
       </Card>
 
       {/* Pricing Cards */}
-      <div id="pricing" className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div id="pricing" className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
         {/* Free Plan */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -454,88 +453,7 @@ export default function PlansPage() {
           </Card>
         </motion.div>
 
-        {/* Custom Plan */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <Card className="h-full relative border-dashed border-2 border-primary/30 hover:border-primary/50 transition-colors">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-primary/10 border border-primary/30 text-primary text-xs font-medium flex items-center gap-1">
-              <Sparkles className="size-3" />
-              Custom
-            </div>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Sparkles className="size-5 text-primary" />
-                <CardTitle className="text-lg">Custom Plan</CardTitle>
-              </div>
-              <CardDescription>Tailored for your needs</CardDescription>
-              <div className="pt-2">
-                <span className="text-3xl font-bold text-primary">Custom</span>
-                <span className="text-muted-foreground text-sm">/pricing</span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-lg bg-muted/50 p-3 space-y-2.5">
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  Need a plan that fits your specific requirements? Whether you need
-                  more AI generations, team access, or a different billing cycle —
-                  we can create a custom plan just for you.
-                </p>
-                <ul className="space-y-2">
-                  {[
-                    'Custom AI generation limits',
-                    'Team / agency billing',
-                    'Annual discounts',
-                    'Dedicated support',
-                  ].map((f, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm">
-                      <Check className="size-4 text-primary shrink-0 mt-0.5" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="pt-2 space-y-2">
-                <a
-                  href={WHATSAPP_CUSTOM_LINK}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block"
-                >
-                  <Button className="w-full gap-2" style={{ backgroundColor: '#25D366', color: '#fff', borderColor: '#25D366' }}>
-                    <MessageCircle className="size-4" />
-                    Chat on WhatsApp
-                  </Button>
-                </a>
-                <a
-                  href={EMAIL_LINK}
-                  className="block"
-                >
-                  <Button variant="outline" className="w-full gap-2">
-                    <Mail className="size-4" />
-                    Send Email
-                  </Button>
-                </a>
-              </div>
-
-              <Separator />
-
-              <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <Phone className="size-3.5 shrink-0" />
-                  <span>WhatsApp: +92 317 7730490</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Mail className="size-3.5 shrink-0" />
-                  <span>{ADMIN_EMAIL}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+        {/* Custom Plan card removed — only Free + Pro are offered now */}
       </div>
     </div>
   );
