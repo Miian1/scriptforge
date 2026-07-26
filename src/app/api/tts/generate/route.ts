@@ -5,21 +5,24 @@
 // Returns: audio/wav binary stream (with audioPath and audioRecordId in headers)
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
 import { SceneModel } from '@/lib/models/Scene';
 import { GeneratedAudioModel } from '@/lib/models/GeneratedAudio';
 import { generateSpeech, stripStageDirections, GEMINI_TTS_VOICES } from '@/lib/gemini-tts';
 import { getActiveModelId } from '@/lib/get-active-model';
+import { requirePro } from '@/lib/require-pro';
 import { writeFile, mkdir, unlink } from 'fs/promises';
 import { join } from 'path';
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    // ── Pro-plan gate ──
+    // Voice generation is a Pro-only feature. Free users get 403.
+    const guard = await requirePro();
+    if (!guard.ok || !guard.userId) {
+      return NextResponse.json({ error: guard.error || 'Access denied' }, { status: guard.status });
     }
+    const userId = guard.userId;
 
     const body = await req.json();
     const {
@@ -89,9 +92,9 @@ export async function POST(req: NextRequest) {
 
         // Upsert GeneratedAudio record (replace if exists for same scene)
         const audioDoc = await GeneratedAudioModel.findOneAndUpdate(
-          { userId: session.userId, sceneId },
+          { userId, sceneId },
           {
-            userId: session.userId,
+            userId,
             projectId,
             sceneId,
             sceneNumber: sceneNumber || 0,
