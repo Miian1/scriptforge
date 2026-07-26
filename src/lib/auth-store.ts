@@ -4,7 +4,7 @@ export interface AuthUser {
   id: string;
   name: string;
   email: string;
-  role: 'user' | 'admin';
+  role: 'user' | 'admin' | 'manager';
   plan: 'free' | 'pro';
   planExpiresAt: number;
   planDaysLeft: number;

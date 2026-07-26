@@ -1,7 +1,13 @@
 import mongoose, { Schema, type Document } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
-export type UserRole = 'user' | 'admin';
+// UserRole:
+//   'user'    — standard end user (signs up themselves, requires email verification)
+//   'admin'   — full superuser (created via DB seed or promoted by another admin)
+//   'manager' — limited staff role created from the admin panel (no email
+//               verification, can edit plans and send notifications, CANNOT
+//               delete users or change roles)
+export type UserRole = 'user' | 'admin' | 'manager';
 export type AuthProvider = 'email' | 'google';
 export type UserPlan = 'free' | 'pro';
 export type CustomPlanType = boolean;
@@ -143,7 +149,7 @@ const UserSchema = new Schema<IUser>(
     password: { type: String, minlength: 6, select: false },
     googleId: { type: String, unique: true, sparse: true, index: true },
     provider: { type: String, enum: ['email', 'google'], default: 'email' },
-    role: { type: String, enum: ['user', 'admin'], default: 'user' },
+    role: { type: String, enum: ['user', 'admin', 'manager'], default: 'user' },
     plan: { type: String, enum: ['free', 'pro'], default: 'free' },
     planExpiresAt: { type: Number, default: 0 },
     planSource: { type: String, enum: ['stripe', 'manual', null], default: null },

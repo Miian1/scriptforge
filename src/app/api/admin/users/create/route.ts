@@ -6,7 +6,8 @@ import { getSession } from '@/lib/auth';
 // POST /api/admin/users/create
 // Admin creates a new user account with email + password.
 // These accounts are pre-verified (isVerified=true) — no email verification
-// is sent. Useful for accounts created via Easypaisa/JazzCash offline payment.
+// is sent. Useful for accounts created via Easypaisa/JazzCash offline payment,
+// OR for creating staff 'manager' accounts that can access the Manager Panel.
 //
 // Body: { name?, email, password, plan?, days?, role? }
 //   - name (optional, defaults to email username)
@@ -14,7 +15,7 @@ import { getSession } from '@/lib/auth';
 //   - password (required, min 6 chars)
 //   - plan (optional, 'free' | 'pro', defaults to 'free')
 //   - days (optional, number of days for Pro if plan=pro, defaults to 30)
-//   - role (optional, 'user' | 'admin', defaults to 'user')
+//   - role (optional, 'user' | 'admin' | 'manager', defaults to 'user')
 export async function POST(req: NextRequest) {
   try {
     const session = await getSession();
@@ -50,7 +51,8 @@ export async function POST(req: NextRequest) {
 
     const normalizedEmail = email.toLowerCase().trim();
     const userName = (name?.trim() || normalizedEmail.split('@')[0]).slice(0, 100);
-    const userRole = role === 'admin' ? 'admin' : 'user';
+    const userRole: 'user' | 'admin' | 'manager' =
+      role === 'admin' ? 'admin' : role === 'manager' ? 'manager' : 'user';
     const userPlan = plan === 'pro' ? 'pro' : 'free';
     const daysNum = typeof days === 'number' && days > 0 ? Math.min(days, 365) : 30;
 

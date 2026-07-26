@@ -77,7 +77,12 @@ export function formatUserResponse(user: {
   let planDaysLeft = 0;
   if (plan === 'pro' && planExpiresAt > 0) {
     const diff = planExpiresAt - Date.now();
-    planDaysLeft = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+    // Use Math.max(1, ...) so the UI shows at least "1 day left" when the
+    // period is still valid (even if it ends later today). Only returns 0
+    // when the expiry has fully passed.
+    planDaysLeft = diff > 0
+      ? Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)))
+      : 0;
   }
 
   // Channel niche

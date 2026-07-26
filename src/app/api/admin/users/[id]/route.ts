@@ -123,7 +123,7 @@ export async function PUT(
     }
 
     // ── Role ──
-    if (role && ['user', 'admin'].includes(role)) {
+    if (role && ['user', 'admin', 'manager'].includes(role)) {
       update.role = role;
     }
 
@@ -145,8 +145,10 @@ export async function PUT(
         effectiveExpiry = stripePeriodEnd;
       }
     }
-    const daysLeft = updatedUser.plan === 'pro' && effectiveExpiry > 0
-      ? Math.max(0, Math.ceil((effectiveExpiry - now) / (1000 * 60 * 60 * 24)))
+    // Days-left: at least 1 if the period hasn't ended yet, 0 only when fully expired.
+    const diff = effectiveExpiry - now;
+    const daysLeft = updatedUser.plan === 'pro' && diff > 0
+      ? Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)))
       : 0;
 
     return NextResponse.json({

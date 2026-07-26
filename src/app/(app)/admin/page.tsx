@@ -116,9 +116,6 @@ export default function AdminPage() {
 
   // Edit form state
   const [editPlan, setEditPlan] = useState('free');
-  const [editIsCustom, setEditIsCustom] = useState(false);
-  const [editCustomLabel, setEditCustomLabel] = useState('');
-  const [editCustomDays, setEditCustomDays] = useState(0);
   const [editRole, setEditRole] = useState('user');
   const [daysEditMode, setDaysEditMode] = useState<DaysEditMode>('add');
   const [daysValue, setDaysValue] = useState(0);
@@ -131,12 +128,13 @@ export default function AdminPage() {
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserPlan, setNewUserPlan] = useState<'free' | 'pro'>('free');
   const [newUserDays, setNewUserDays] = useState(30);
-  const [newUserRole, setNewUserRole] = useState<'user' | 'admin'>('user');
+  const [newUserRole, setNewUserRole] = useState<'user' | 'admin' | 'manager'>('user');
 
-  // Redirect non-admin
+  // Redirect non-admin (managers have their own /manager panel)
   useEffect(() => {
     if (user && user.role !== 'admin') {
-      router.push('/dashboard');
+      // Managers get redirected to their own panel; everyone else to dashboard
+      router.push(user.role === 'manager' ? '/manager' : '/dashboard');
     }
   }, [user, router]);
 
@@ -174,16 +172,13 @@ export default function AdminPage() {
   // Stats
   const totalUsers = users.length;
   const proUsers = users.filter((u) => u.plan === 'pro').length;
-  const customUsers = users.filter((u) => u.isCustomPlan).length;
+  const manualProUsers = users.filter((u) => u.plan === 'pro' && u.planSource === 'manual').length;
   const expiredUsers = users.filter((u) => u.plan === 'pro' && u.planDaysLeft <= 0).length;
 
   // Open edit dialog
   const openEdit = (u: AdminUser) => {
     setEditUser(u);
     setEditPlan(u.plan);
-    setEditIsCustom(u.isCustomPlan);
-    setEditCustomLabel(u.customPlan?.customLabel || '');
-    setEditCustomDays(u.customPlan?.customDays || 0);
     setEditRole(u.role);
     setDaysEditMode('add');
     setDaysValue(0);
@@ -193,11 +188,6 @@ export default function AdminPage() {
   const previewDaysLeft = (): number => {
     if (!editUser) return 0;
     if (editPlan === 'free') return 0;
-
-    // If custom is ON and has custom days, those take priority
-    if (editIsCustom && editCustomDays > 0) {
-      return editCustomDays;
-    }
 
     // Base expiry
     let baseExpiry = editUser.planExpiresAt && editUser.planExpiresAt > Date.now()
@@ -214,17 +204,12 @@ export default function AdminPage() {
     }
 
     const diff = baseExpiry - Date.now();
-    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+    return diff > 0 ? Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24))) : 0;
   };
 
   const previewExpiryDate = (): string => {
     if (!editUser) return '—';
     if (editPlan === 'free') return 'N/A';
-
-    if (editIsCustom && editCustomDays > 0) {
-      const d = new Date(Date.now() + editCustomDays * 24 * 60 * 60 * 1000);
-      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    }
 
     let baseExpiry = editUser.planExpiresAt && editUser.planExpiresAt > Date.now()
       ? editUser.planExpiresAt
@@ -250,23 +235,18 @@ export default function AdminPage() {
       const body: Record<string, unknown> = {
         plan: editPlan,
         role: editRole,
-        isCustomPlan: editIsCustom,
-        customPlan: {
-          isCustom: editIsCustom,
-          customLabel: editCustomLabel,
-          customDays: editCustomDays,
-        },
+        // Clear any prior custom-plan status when admin saves — only Free/Pro supported now.
+        isCustomPlan: false,
+        customPlan: { isCustom: false, customLabel: '', customDays: 0 },
       };
 
-      // Days operations (only when not custom, since custom takes priority)
-      if (!editIsCustom || editCustomDays <= 0) {
-        if (daysEditMode === 'add' && daysValue > 0) {
-          body.addDays = daysValue;
-        } else if (daysEditMode === 'reduce' && daysValue > 0) {
-          body.reduceDays = daysValue;
-        } else if (daysEditMode === 'set') {
-          body.setDays = daysValue;
-        }
+      // Days operations
+      if (daysEditMode === 'add' && daysValue > 0) {
+        body.addDays = daysValue;
+      } else if (daysEditMode === 'reduce' && daysValue > 0) {
+        body.reduceDays = daysValue;
+      } else if (daysEditMode === 'set') {
+        body.setDays = daysValue;
       }
 
       const res = await fetch(`/api/admin/users/${editUser.id}`, {
@@ -646,7 +626,7 @@ export default function AdminPage() {
         {[
           { label: 'Total Users', value: totalUsers, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/5' },
           { label: 'Pro Users', value: proUsers, icon: Crown, color: 'text-primary', bg: 'bg-primary/5' },
-          { label: 'Custom Plans', value: customUsers, icon: Star, color: 'text-amber-500', bg: 'bg-amber-500/5' },
+          { label: 'Manual Pro', value: manualProUsers, icon: Banknote, color: 'text-amber-500', bg: 'bg-amber-500/5' },
           { label: 'Expired Plans', value: expiredUsers, icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-500/5' },
         ].map((stat) => (
           <Card key={stat.label}>
@@ -1009,7 +989,7 @@ export default function AdminPage() {
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">User</th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Plan</th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Days Left</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Custom</th>
+                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Source</th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Usage</th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Joined</th>
                     <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Actions</th>
@@ -1090,18 +1070,22 @@ export default function AdminPage() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {u.isCustomPlan ? (
-                          <div className="flex flex-col gap-0.5">
-                            <Badge className="text-[10px] gap-1 w-fit" variant="outline">
-                              <Star className="size-2.5" />
-                              {u.customPlan?.customLabel || 'Custom'}
-                            </Badge>
-                            {u.customPlan?.customDays > 0 && (
-                              <span className="text-[10px] text-muted-foreground">
-                                {u.customPlan.customDays}d plan
-                              </span>
+                        {u.plan === 'pro' ? (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              'text-[10px] gap-1 w-fit capitalize',
+                              u.planSource === 'stripe'
+                                ? 'border-blue-500/30 bg-blue-500/5 text-blue-600 dark:text-blue-400'
+                                : 'border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400'
                             )}
-                          </div>
+                          >
+                            {u.planSource === 'stripe' ? (
+                              <><CreditCard className="size-2.5" />Stripe</>
+                            ) : (
+                              <><Banknote className="size-2.5" />Manual</>
+                            )}
+                          </Badge>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
@@ -1318,96 +1302,7 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {/* ── Custom Plan Toggle ── */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Star className="size-3.5 text-amber-500" />
-                  Custom Plan
-                </label>
-                <div className="flex items-center gap-3">
-                  <Button
-                    variant={editIsCustom ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => { setEditIsCustom(true); if (editPlan !== 'pro') setEditPlan('pro'); }}
-                  >
-                    <Check className="size-3 mr-1" />
-                    Yes
-                  </Button>
-                  <Button
-                    variant={!editIsCustom ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setEditIsCustom(false)}
-                  >
-                    <X className="size-3 mr-1" />
-                    No
-                  </Button>
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  When enabled, custom plan days take priority over regular add/reduce/set days.
-                </p>
-              </div>
-
-              {/* ── Custom Plan Details ── */}
-              <AnimatePresence>
-                {editIsCustom && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="space-y-3 overflow-hidden"
-                  >
-                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-3">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400">
-                        <Star className="size-3.5" />
-                        Custom Plan Configuration
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Plan Label</label>
-                        <Input
-                          placeholder="e.g. Team Plan, Agency Plan, VIP"
-                          value={editCustomLabel}
-                          onChange={(e) => setEditCustomLabel(e.target.value)}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Custom Duration (days)</label>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="size-8"
-                            onClick={() => setEditCustomDays(Math.max(0, editCustomDays - 1))}
-                          >
-                            <Minus className="size-3" />
-                          </Button>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={365}
-                            value={editCustomDays}
-                            onChange={(e) => setEditCustomDays(Math.max(0, parseInt(e.target.value) || 0))}
-                            className="w-24 text-center"
-                          />
-                          <span className="text-xs text-muted-foreground">days</span>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="size-8"
-                            onClick={() => setEditCustomDays(Math.min(365, editCustomDays + 1))}
-                          >
-                            <Plus className="size-3" />
-                          </Button>
-                        </div>
-                        <p className="text-[11px] text-amber-600/70 dark:text-amber-400/70">
-                          This will set the plan expiry to exactly this many days from now, overriding any other day changes.
-                        </p>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {/* Custom Plan UI has been removed — only Free and Pro plans are supported now. */}
 
               {/* ── Live Preview ── */}
               {editPlan === 'pro' && (
@@ -1433,15 +1328,6 @@ export default function AdminPage() {
                     <span className="text-muted-foreground">Expires On</span>
                     <span className="text-xs font-medium">{previewExpiryDate()}</span>
                   </div>
-                  {editIsCustom && editCustomDays > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Custom</span>
-                      <Badge variant="outline" className="text-[10px] gap-1">
-                        <Star className="size-2.5" />
-                        {editCustomLabel || 'Custom'} ({editCustomDays}d)
-                      </Badge>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -1456,6 +1342,7 @@ export default function AdminPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="manager">Manager</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1738,13 +1625,14 @@ export default function AdminPage() {
             {/* Role */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Role</label>
-              <Select value={newUserRole} onValueChange={(v) => setNewUserRole(v as 'user' | 'admin')}>
+              <Select value={newUserRole} onValueChange={(v) => setNewUserRole(v as 'user' | 'admin' | 'manager')}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="user">User</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="manager">Manager (staff — can edit plans & send notifications)</SelectItem>
+                  <SelectItem value="admin">Admin (full access)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -3,20 +3,26 @@ import { getSession } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models/User';
 
+// POST /api/manager/notify
+// Manager sends a notification to a single standard user.
+//   - Manager can only notify users with role='user' (not admins or other managers)
+//   - Same payload shape as /api/admin/notify
 export async function POST(req: NextRequest) {
   try {
-    // Auth check — both admin and manager roles can send notifications
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (session.role !== 'admin' && session.role !== 'manager') {
-      return NextResponse.json({ error: 'Admin or manager access required' }, { status: 403 });
+    if (session.role !== 'manager') {
+      return NextResponse.json({ error: 'Manager access required' }, { status: 403 });
     }
 
     const body = await req.json();
     const { userId, title, message, type } = body;
 
     if (!userId || !title || !message) {
-      return NextResponse.json({ error: 'userId, title, and message are required' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'userId, title, and message are required' },
+        { status: 400 }
+      );
     }
 
     await connectDB();
@@ -24,6 +30,14 @@ export async function POST(req: NextRequest) {
     const user = await User.findById(userId);
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // Scope check: managers can only notify standard users
+    if (user.role !== 'user') {
+      return NextResponse.json(
+        { error: 'Managers can only notify standard user accounts.' },
+        { status: 403 }
+      );
     }
 
     const notification = {
@@ -43,8 +57,9 @@ export async function POST(req: NextRequest) {
     await User.updateOne({ _id: userId }, { $set: { notifications: notifs } });
 
     return NextResponse.json({ success: true, notification });
-  } catch (error: any) {
-    console.error('Admin notify error:', error);
-    return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal error';
+    console.error('[Manager Notify Error]', message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

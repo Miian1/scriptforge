@@ -14,6 +14,7 @@ import {
   Crown,
   PlusCircle,
   ShieldCheck,
+  UserCog,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePathname, useRouter } from 'next/navigation';
@@ -46,6 +47,13 @@ const NAV_ITEMS = [
 const ADMIN_NAV_ITEMS = [
   { path: '/about', label: 'About', icon: Info, primary: false, tool: null },
   { path: '/admin', label: 'Admin Panel', icon: ShieldCheck, primary: false, tool: null },
+];
+
+// Manager-only nav items — visible only to users with role='manager'.
+// Managers can edit plans (Free/Pro) and send notifications but CANNOT delete users.
+const MANAGER_NAV_ITEMS = [
+  { path: '/about', label: 'About', icon: Info, primary: false, tool: null },
+  { path: '/manager', label: 'Manager Panel', icon: UserCog, primary: false, tool: null },
 ];
 
 // ── Sidebar Palette (theme-aware) ─────────────────────
@@ -275,6 +283,7 @@ function DesktopSidebar() {
   useEffect(() => { loadTools(); }, [loadTools]);
 
   const adminNavItems: typeof ADMIN_NAV_ITEMS = userRole === 'admin' ? ADMIN_NAV_ITEMS : [];
+  const managerNavItems: typeof MANAGER_NAV_ITEMS = userRole === 'manager' ? MANAGER_NAV_ITEMS : [];
   const allNavItems = [
     ...NAV_ITEMS.filter((item) => {
       // Filter out items whose tool is disabled
@@ -288,6 +297,7 @@ function DesktopSidebar() {
       return true;
     }),
     ...adminNavItems,
+    ...managerNavItems,
   ];
 
   return (
@@ -359,6 +369,9 @@ function DesktopSidebar() {
                 {userRole === 'admin' && (
                   <span className="shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded bg-primary/20 text-primary">Admin</span>
                 )}
+                {userRole === 'manager' && (
+                  <span className="shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">Manager</span>
+                )}
               </div>
             </motion.div>
           )}
@@ -379,6 +392,7 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
   const { tools } = useAppStore();
 
   const adminNavItems: typeof ADMIN_NAV_ITEMS = userRole === 'admin' ? ADMIN_NAV_ITEMS : [];
+  const managerNavItems: typeof MANAGER_NAV_ITEMS = userRole === 'manager' ? MANAGER_NAV_ITEMS : [];
   const allNavItems = [
     ...NAV_ITEMS.filter((item) => {
       // Admins always see tool-dependent items (e.g. YouTube), even when disabled
@@ -390,6 +404,7 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
       return true;
     }),
     ...adminNavItems,
+    ...managerNavItems,
   ];
 
   return (

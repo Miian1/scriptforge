@@ -9,7 +9,7 @@ const TOKEN_MAX_AGE = 7 * 24 * 60 * 60; // 7 days in seconds
 export interface TokenPayload {
   userId: string;
   email: string;
-  role: 'user' | 'admin';
+  role: 'user' | 'admin' | 'manager';
 }
 
 export async function signToken(payload: TokenPayload): Promise<string> {
@@ -26,7 +26,7 @@ export async function verifyToken(token: string): Promise<TokenPayload | null> {
     return {
       userId: (payload.userId as string) || '',
       email: (payload.email as string) || '',
-      role: (payload.role as 'user' | 'admin') || 'user',
+      role: (payload.role as 'user' | 'admin' | 'manager') || 'user',
     };
   } catch {
     return null;
