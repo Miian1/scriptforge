@@ -92,7 +92,12 @@ function SidebarNavItem({
         sidebar.text, sidebar.hover,
         isActive && `${sidebar.active} ${sidebar.text} font-medium`
       )}
-      onClick={onClick}
+      onClick={(e) => {
+        // Stop propagation so the parent sidebar's "expand on click" handler
+        // doesn't fire when the user clicks a nav item while collapsed.
+        e.stopPropagation();
+        onClick();
+      }}
     >
       <IconSlot>
         <Icon className="size-4 shrink-0" />
@@ -193,7 +198,12 @@ function LogoutButton({ collapsed }: { collapsed: boolean }) {
   const button = (
     <Button
       variant="ghost"
-      onClick={handleLogout}
+      onClick={(e) => {
+        // Stop propagation so the parent sidebar's "expand on click" handler
+        // doesn't fire when the user clicks the logout button while collapsed.
+        e.stopPropagation();
+        handleLogout();
+      }}
       className={cn(
         'h-10 w-full rounded-lg justify-start pl-0 text-destructive hover:text-destructive hover:bg-destructive/10',
       )}

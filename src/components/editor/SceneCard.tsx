@@ -358,9 +358,11 @@ interface SceneCardProps {
   scene: Scene;
   project: Project;
   totalScenes: number;
+  /** When provided, syncs the scene's collapse state with parent (phase-level toggle). */
+  externalOpen?: boolean;
 }
 
-export default function SceneCard({ scene, project, totalScenes }: SceneCardProps) {
+export default function SceneCard({ scene, project, totalScenes, externalOpen }: SceneCardProps) {
   const [open, setOpen] = useState(true);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(scene.title);
@@ -391,6 +393,13 @@ export default function SceneCard({ scene, project, totalScenes }: SceneCardProp
   useEffect(() => {
     setTitleDraft(scene.title);
   }, [scene.title]);
+
+  // Sync open state from parent (phase-level collapse/expand)
+  useEffect(() => {
+    if (externalOpen !== undefined) {
+      setOpen(externalOpen);
+    }
+  }, [externalOpen]);
 
   // Focus title input when editing
   useEffect(() => {

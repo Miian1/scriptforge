@@ -23,6 +23,8 @@ import {
   Zap,
   Volume2,
   ListMusic,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import {
   DndContext,
@@ -391,6 +393,9 @@ export default function ScriptEditor() {
 
   // Audio library dialog state
   const [audioLibraryOpen, setAudioLibraryOpen] = useState(false);
+
+  // Phase-level collapse state: phase number -> collapsed?
+  const [collapsedPhases, setCollapsedPhases] = useState<Record<number, boolean>>({});
   const [batchSceneAudio, setBatchSceneAudio] = useState<Record<string, string>>({});
 
   const project = projects.find((p) => p.id === activeProjectId) ?? null;
@@ -796,16 +801,31 @@ export default function ScriptEditor() {
 
                 {/* Scenes grouped by phase */}
                 <div className="space-y-6">
-                  {phases.map(({ phase, scenes: phaseScenes }) => (
+                  {phases.map(({ phase, scenes: phaseScenes }) => {
+                    const isPhaseCollapsed = !!collapsedPhases[phase];
+                    return (
                     <div key={`phase-${phase}`}>
                       {/* Phase header */}
                       <div className="flex items-center gap-2 mb-3">
-                        <div className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-1.5">
+                        {/* Phase collapse/expand toggle */}
+                        <button
+                          onClick={() =>
+                            setCollapsedPhases((prev) => ({ ...prev, [phase]: !prev[phase] }))
+                          }
+                          className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-1.5 hover:bg-primary/15 transition-colors"
+                          aria-label={isPhaseCollapsed ? `Expand Phase ${phase}` : `Collapse Phase ${phase}`}
+                          title={isPhaseCollapsed ? `Expand Phase ${phase}` : `Collapse Phase ${phase}`}
+                        >
+                          {isPhaseCollapsed ? (
+                            <ChevronRight className="size-3.5 text-primary" />
+                          ) : (
+                            <ChevronDown className="size-3.5 text-primary" />
+                          )}
                           <Layers className="size-3.5 text-primary" />
                           <span className="text-sm font-semibold text-primary">
                             Phase {phase}
                           </span>
-                        </div>
+                        </button>
                         <span className="text-xs text-muted-foreground">
                           Scenes {phaseScenes[0]?.sceneNumber}–{phaseScenes[phaseScenes.length - 1]?.sceneNumber}
                           {' '}({phaseScenes.length} scenes)
@@ -836,6 +856,7 @@ export default function ScriptEditor() {
                                   scene={scene}
                                   project={project}
                                   totalScenes={totalScenes}
+                                  externalOpen={!isPhaseCollapsed}
                                 />
                               ))}
                             </AnimatePresence>
@@ -843,7 +864,8 @@ export default function ScriptEditor() {
                         </SortableContext>
                       </DndContext>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* ---- Bottom actions ---- */}
