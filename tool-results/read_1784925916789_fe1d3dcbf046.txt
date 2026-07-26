@@ -1,0 +1,825 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+     4→import { motion } from 'framer-motion';
+     5→import { Film, ArrowLeft, Sparkles, Check, AlertCircle, RefreshCw, Layers, Clock, Calculator } from 'lucide-react';
+     6→import { toast } from 'sonner';
+     7→import { z } from 'zod';
+     8→import { useForm } from 'react-hook-form';
+     9→import { zodResolver } from '@hookform/resolvers/zod';
+    10→
+    11→import { useAppStore } from '@/lib/store';
+    12→import { generatePhase, type ChannelNiche } from '@/lib/gemini';
+    13→import type { Project, VideoTheme, WritingStyle, TargetAudience, VideoLanguage, VideoDuration } from '@/lib/types';
+    14→import { useAuthStore } from '@/lib/auth-store';
+    15→import {
+    16→  DURATION_LABELS,
+    17→  DURATION_SECONDS,
+    18→  SCENES_PER_PHASE,
+    19→  THEME_LABELS,
+    20→  STYLE_LABELS,
+    21→  AUDIENCE_LABELS,
+    22→  LANGUAGE_LABELS,
+    23→} from '@/lib/types';
+    24→import { useRouter } from 'next/navigation';
+    25→
+    26→import { Button } from '@/components/ui/button';
+    27→import { Input } from '@/components/ui/input';
+    28→import { Textarea } from '@/components/ui/textarea';
+    29→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    30→import { Separator } from '@/components/ui/separator';
+    31→import { Badge } from '@/components/ui/badge';
+    32→import {
+    33→  Form,
+    34→  FormControl,
+    35→  FormField,
+    36→  FormItem,
+    37→  FormLabel,
+    38→  FormMessage,
+    39→} from '@/components/ui/form';
+    40→import {
+    41→  Select,
+    42→  SelectContent,
+    43→  SelectItem,
+    44→  SelectTrigger,
+    45→  SelectValue,
+    46→} from '@/components/ui/select';
+    47→
+    48→// ─── Schema ───────────────────────────────────────────────────────────────────
+    49→
+    50→const formSchema = z.object({
+    51→  title: z.string().min(1, 'Title is required').max(100),
+    52→  topic: z.string().min(1, 'Topic is required').max(200),
+    53→  description: z.string().max(1000).optional().default(''),
+    54→  duration: z.enum(['short', 'medium', 'long']),
+    55→  sceneLengthMode: z.enum(['default', 'custom']),
+    56→  customSceneLength: z.number().min(3).max(60).optional().default(undefined),
+    57→  theme: z.enum(['realistic', 'anime', 'cinematic', 'cartoon', '3d-render', 'watercolor', 'pixel-art']),
+    58→  language: z.enum(['english', 'spanish', 'french', 'german', 'portuguese', 'japanese', 'korean', 'chinese', 'hindi', 'arabic']),
+    59→  writingStyle: z.enum(['conversational', 'professional', 'dramatic', 'educational', 'storytelling', 'humorous']),
+    60→  targetAudience: z.enum(['beginners', 'general', 'intermediate', 'experts', 'kids', 'teens']),
+    61→});
+    62→
+    63→type FormValues = z.infer<typeof formSchema>;
+    64→
+    65→// ─── Generation Stages ────────────────────────────────────────────────────────
+    66→
+    67→const GENERATION_STAGES = [
+    68→  { active: 'Researching topic...', completed: 'Research complete' },
+    69→  { active: 'Building story structure...', completed: 'Story structured' },
+    70→  { active: 'Generating Phase 1 scenes...', completed: 'Phase 1 generated' },
+    71→  { active: 'Finalizing...', completed: 'Finalized' },
+    72→] as const;
+    73→
+    74→const STAGE_INTERVAL_MS = 5000;
+    75→
+    76→// ─── Component ────────────────────────────────────────────────────────────────
+    77→
+    78→export default function CreateProject() {
+    79→  const router = useRouter();
+    80→  const {
+    81→    addProject,
+    82→    setActiveProjectId,
+    83→    addScenes,
+    84→    updateProject,
+    85→    loadScenes,
+    86→  } = useAppStore();
+    87→
+    88→  // Phase: 'form' | 'generating' | 'error'
+    89→  const [phase, setPhase] = useState<'form' | 'generating' | 'error'>('form');
+    90→  const [currentStage, setCurrentStage] = useState(-1);
+    91→  const [errorMessage, setErrorMessage] = useState('');
+    92→  const [elapsed, setElapsed] = useState(0);
+    93→  const stageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    94→  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    95→  const projectIdRef = useRef<string | null>(null);
+    96→  const formValuesRef = useRef<FormValues | null>(null);
+    97→
+    98→  const form = useForm<FormValues>({
+    99→    resolver: zodResolver(formSchema),
+   100→    defaultValues: {
+   101→      title: '',
+   102→      topic: '',
+   103→      description: '',
+   104→      duration: 'medium',
+   105→      sceneLengthMode: 'default',
+   106→      customSceneLength: undefined,
+   107→      theme: 'cinematic',
+   108→      language: 'english',
+   109→      writingStyle: 'conversational',
+   110→      targetAudience: 'general',
+   111→    },
+   112→  });
+   113→
+   114→  // Watch duration and scene length for calculations
+   115→  const watchDuration = form.watch('duration');
+   116→  const watchSceneLengthMode = form.watch('sceneLengthMode');
+   117→  const watchCustomSceneLength = form.watch('customSceneLength');
+   118→
+   119→  // Computed scene length
+   120→  const sceneLength = watchSceneLengthMode === 'custom' && watchCustomSceneLength
+   121→    ? watchCustomSceneLength
+   122→    : 8;
+   123→
+   124→  // Computed totals
+   125→  const totalSeconds = DURATION_SECONDS[watchDuration as VideoDuration];
+   126→  const totalScenes = Math.ceil(totalSeconds / sceneLength);
+   127→  const totalPhases = Math.ceil(totalScenes / SCENES_PER_PHASE);
+   128→  const firstPhaseScenes = Math.min(SCENES_PER_PHASE, totalScenes);
+   129→
+   130→  // Cleanup timers on unmount
+   131→  useEffect(() => {
+   132→    return () => {
+   133→      if (stageTimerRef.current) clearInterval(stageTimerRef.current);
+   134→      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+   135→    };
+   136→  }, []);
+   137→
+   138→  const advanceStage = useCallback(() => {
+   139→    setCurrentStage((prev) => {
+   140→      if (prev >= GENERATION_STAGES.length - 1) return prev;
+   141→      return prev + 1;
+   142→    });
+   143→  }, []);
+   144→
+   145→  const startGeneration = useCallback(async (values: FormValues) => {
+   146→    const now = Date.now();
+   147→    const sLen = values.sceneLengthMode === 'custom' && values.customSceneLength
+   148→      ? values.customSceneLength
+   149→      : 8;
+   150→    const totalSec = DURATION_SECONDS[values.duration as VideoDuration];
+   151→    const tScenes = Math.ceil(totalSec / sLen);
+   152→    const tPhases = Math.ceil(tScenes / SCENES_PER_PHASE);
+   153→
+   154→    const project: Project = {
+   155→      id: '',
+   156→      title: values.title,
+   157→      topic: values.topic,
+   158→      description: values.description ?? '',
+   159→      thumbnailPrompt: '',
+   160→      tags: [],
+   161→      settings: {
+   162→        duration: values.duration as VideoDuration,
+   163→        theme: values.theme as VideoTheme,
+   164→        language: values.language as VideoLanguage,
+   165→        writingStyle: values.writingStyle as WritingStyle,
+   166→        targetAudience: values.targetAudience as TargetAudience,
+   167→        sceneLength: sLen,
+   168→        totalScenes: tScenes,
+   169→        scenesPerPhase: SCENES_PER_PHASE,
+   170→      },
+   171→      status: 'generating',
+   172→      scoreHistory: [],
+   173→      createdAt: now,
+   174→      updatedAt: now,
+   175→    };
+   176→
+   177→    // Save project to MongoDB and get the real ID back
+   178→    const mongoId = await addProject(project);
+   179→    setActiveProjectId(mongoId);
+   180→    projectIdRef.current = mongoId;
+   181→
+   182→    // Switch to generating phase
+   183→    setPhase('generating');
+   184→    setCurrentStage(0);
+   185→    setElapsed(0);
+   186→    stageTimerRef.current = setInterval(advanceStage, STAGE_INTERVAL_MS);
+   187→    elapsedTimerRef.current = setInterval(() => setElapsed((t) => t + 1), 1000);
+   188→
+   189→    try {
+   190→      const realProject = useAppStore.getState().projects.find((p) => p.id === mongoId);
+   191→      const projectToGenerate = realProject || { ...project, id: mongoId };
+   192→
+   193→      // Get channel niche from auth store
+   194→      const channelNiche = useAuthStore.getState().user?.channelNiche as ChannelNiche | undefined;
+   195→
+   196→      // Generate Phase 1 only
+   197→      const phase1ScenesCount = Math.min(SCENES_PER_PHASE, tScenes);
+   198→      const result = await generatePhase(projectToGenerate, {
+   199→        phaseNumber: 1,
+   200→        totalPhases: tPhases,
+   201→        sceneStart: 1,
+   202→        sceneEnd: phase1ScenesCount,
+   203→        previousPhaseTitles: [],
+   204→      }, channelNiche || null);
+   205→
+   206→      const scenesWithCorrectId = result.scenes.map((s) => ({ ...s, projectId: mongoId }));
+   207→
+   208→      // Save AI-generated metadata
+   209→      if (result.metadata) {
+   210→        await updateProject(mongoId, {
+   211→          description: result.metadata.videoDescription || projectToGenerate.description || '',
+   212→          thumbnailPrompt: result.metadata.thumbnailPrompt || '',
+   213→          tags: result.metadata.tags || [],
+   214→        });
+   215→      }
+   216→
+   217→      // Advance to "saving" stage
+   218→      setCurrentStage(GENERATION_STAGES.length - 1);
+   219→
+   220→      // Save scenes to DB
+   221→      await addScenes(scenesWithCorrectId);
+   222→      await updateProject(mongoId, { status: 'completed' });
+   223→
+   224→      // Brief pause
+   225→      await new Promise((r) => setTimeout(r, 800));
+   226→
+   227→      // Clean up timers
+   228→      if (stageTimerRef.current) clearInterval(stageTimerRef.current);
+   229→      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+   230→
+   231→      // Pre-load scenes into store, then redirect to editor
+   232→      await loadScenes(mongoId);
+   233→      router.push(`/project/${mongoId}`);
+   234→    } catch (error) {
+   235→      if (stageTimerRef.current) clearInterval(stageTimerRef.current);
+   236→      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+   237→
+   238→      const message = error instanceof Error ? error.message : 'An unexpected error occurred';
+   239→      setErrorMessage(message);
+   240→      await updateProject(mongoId, { status: 'error' });
+   241→      setPhase('error');
+   242→    }
+   243→  }, [addProject, setActiveProjectId, advanceStage, addScenes, updateProject, loadScenes, router]);
+   244→
+   245→  const onRetry = useCallback(() => {
+   246→    if (formValuesRef.current) {
+   247→      setPhase('form');
+   248→      setCurrentStage(-1);
+   249→      setElapsed(0);
+   250→      setErrorMessage('');
+   251→    }
+   252→  }, []);
+   253→
+   254→  const onSubmit = useCallback((values: FormValues) => {
+   255→    formValuesRef.current = values;
+   256→    startGeneration(values);
+   257→  }, [startGeneration]);
+   258→
+   259→  const onBackToDashboard = useCallback(() => {
+   260→    router.push('/dashboard');
+   261→  }, [router]);
+   262→
+   263→  const descriptionValue = form.watch('description') ?? '';
+   264→
+   265→  const formatTime = (s: number) => {
+   266→    const m = Math.floor(s / 60);
+   267→    const sec = s % 60;
+   268→    return `${m}:${sec.toString().padStart(2, '0')}`;
+   269→  };
+   270→
+   271→  // ─── ERROR VIEW ──────────────────────────────────────────────────────────
+   272→  if (phase === 'error') {
+   273→    return (
+   274→      <div className="flex min-h-full items-center justify-center px-4 py-8 md:py-12">
+   275→        <motion.div
+   276→          initial={{ opacity: 0, scale: 0.95 }}
+   277→          animate={{ opacity: 1, scale: 1 }}
+   278→          transition={{ duration: 0.4 }}
+   279→          className="w-full max-w-md text-center space-y-6"
+   280→        >
+   281→          <motion.div
+   282→            initial={{ scale: 0 }}
+   283→            animate={{ scale: 1 }}
+   284→            transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.1 }}
+   285→            className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10"
+   286→          >
+   287→            <AlertCircle className="h-8 w-8 text-destructive" />
+   288→          </motion.div>
+   289→
+   290→          <div className="space-y-2">
+   291→            <h2 className="text-2xl font-bold tracking-tight">Generation Failed</h2>
+   292→            <p className="text-sm text-muted-foreground">
+   293→              {errorMessage || 'Something went wrong. Please try again.'}
+   294→            </p>
+   295→          </div>
+   296→
+   297→          <div className="flex flex-col gap-3">
+   298→            <Button
+   299→              size="lg"
+   300→              onClick={onRetry}
+   301→              className="w-full text-base font-semibold gap-2"
+   302→            >
+   303→              <RefreshCw className="h-4 w-4" />
+   304→              Try Again
+   305→            </Button>
+   306→            <Button
+   307→              variant="outline"
+   308→              onClick={onBackToDashboard}
+   309→              className="w-full"
+   310→            >
+   311→              Back to Dashboard
+   312→            </Button>
+   313→          </div>
+   314→        </motion.div>
+   315→      </div>
+   316→    );
+   317→  }
+   318→
+   319→  // ─── GENERATING VIEW ─────────────────────────────────────────────────────
+   320→  if (phase === 'generating') {
+   321→    return (
+   322→      <div className="flex min-h-full items-center justify-center px-4 py-8 md:py-12">
+   323→        <motion.div
+   324→          initial={{ opacity: 0, y: 20 }}
+   325→          animate={{ opacity: 1, y: 0 }}
+   326→          transition={{ duration: 0.4, ease: 'easeOut' }}
+   327→          className="w-full max-w-lg space-y-8"
+   328→        >
+   329→          {/* Header */}
+   330→          <div className="text-center space-y-2">
+   331→            <motion.div
+   332→              animate={{ scale: [1, 1.08, 1] }}
+   333→              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+   334→              className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10"
+   335→            >
+   336→              <Sparkles className="h-7 w-7 text-primary" />
+   337→            </motion.div>
+   338→            <h2 className="text-2xl font-bold tracking-tight">Generating Phase 1</h2>
+   339→            <p className="text-sm text-muted-foreground">
+   340→              {formValuesRef.current?.title && `Crafting first ${SCENES_PER_PHASE} scenes for "${formValuesRef.current.title}"`}
+   341→            </p>
+   342→          </div>
+   343→
+   344→          {/* Elapsed time */}
+   345→          <div className="text-center">
+   346→            <span className="text-xs text-muted-foreground font-mono">
+   347→              Elapsed {formatTime(elapsed)}
+   348→            </span>
+   349→          </div>
+   350→
+   351→          {/* Progress bar */}
+   352→          <div className="relative h-2 w-full overflow-hidden rounded-full bg-primary/20">
+   353→            <div className="absolute inset-0 animate-indeterminate-progress rounded-full bg-primary" />
+   354→          </div>
+   355→
+   356→          {/* Stages */}
+   357→          <div className="space-y-3">
+   358→            {GENERATION_STAGES.map((stage, index) => {
+   359→              const isCompleted = index < currentStage;
+   360→              const isActive = index === currentStage;
+   361→
+   362→              return (
+   363→                <motion.div
+   364→                  key={index}
+   365→                  initial={{ opacity: 0, x: -10 }}
+   366→                  animate={{ opacity: 1, x: 0 }}
+   367→                  transition={{ delay: index * 0.05 }}
+   368→                  className="flex items-center gap-3 text-sm rounded-lg px-3 py-2 transition-colors"
+   369→                  style={{
+   370→                    backgroundColor: isActive ? 'hsl(var(--primary) / 0.06)' : 'transparent',
+   371→                  }}
+   372→                >
+   373→                  <div className="flex h-6 w-6 shrink-0 items-center justify-center">
+   374→                    {isCompleted ? (
+   375→                      <motion.div
+   376→                        initial={{ scale: 0 }}
+   377→                        animate={{ scale: 1 }}
+   378→                        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+   379→                      >
+   380→                        <Check className="h-4 w-4 text-emerald-500" />
+   381→                      </motion.div>
+   382→                    ) : isActive ? (
+   383→                      <motion.div
+   384→                        className="h-2.5 w-2.5 rounded-full bg-primary"
+   385→                        animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }}
+   386→                        transition={{ repeat: Infinity, duration: 1.2 }}
+   387→                      />
+   388→                    ) : (
+   389→                      <div className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30" />
+   390→                    )}
+   391→                  </div>
+   392→                  <span
+   393→                    className={
+   394→                      isCompleted
+   395→                        ? 'text-emerald-600 dark:text-emerald-400'
+   396→                        : isActive
+   397→                          ? 'font-medium text-foreground'
+   398→                          : 'text-muted-foreground'
+   399→                    }
+   400→                  >
+   401→                    {isCompleted ? stage.completed : stage.active}
+   402→                  </span>
+   403→                </motion.div>
+   404→              );
+   405→            })}
+   406→          </div>
+   407→
+   408→          {/* Tip */}
+   409→          <p className="text-center text-xs text-muted-foreground/60">
+   410→            Generating Phase 1 of {totalPhases}. Remaining phases can be generated from the editor.
+   411→          </p>
+   412→        </motion.div>
+   413→
+   414→        {/* Indeterminate progress bar animation */}
+   415→        <style jsx global>{`
+   416→          @keyframes indeterminate-progress {
+   417→            0% { transform: translateX(-100%); width: 40%; }
+   418→            50% { transform: translateX(100%); width: 60%; }
+   419→            100% { transform: translateX(200%); width: 40%; }
+   420→          }
+   421→          .animate-indeterminate-progress {
+   422→            animation: indeterminate-progress 1.8s ease-in-out infinite;
+   423→          }
+   424→        `}</style>
+   425→      </div>
+   426→    );
+   427→  }
+   428→
+   429→  // ─── FORM VIEW (default) ─────────────────────────────────────────────────
+   430→  return (
+   431→    <motion.div
+   432→      initial={{ opacity: 0, y: 20 }}
+   433→      animate={{ opacity: 1, y: 0 }}
+   434→      transition={{ duration: 0.4, ease: 'easeOut' }}
+   435→      className="flex min-h-full items-start justify-center px-4 py-8 md:items-center md:py-12"
+   436→    >
+   437→      <Card className="w-full max-w-2xl shadow-lg">
+   438→        <CardHeader className="pb-6">
+   439→          <div className="flex items-center gap-3">
+   440→            <Button
+   441→              variant="ghost"
+   442→              size="icon"
+   443→              onClick={() => router.push('/dashboard')}
+   444→              className="shrink-0"
+   445→              aria-label="Back to dashboard"
+   446→            >
+   447→              <ArrowLeft className="h-5 w-5" />
+   448→            </Button>
+   449→            <div className="flex items-center gap-3">
+   450→              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+   451→                <Film className="h-5 w-5 text-primary" />
+   452→              </div>
+   453→              <div>
+   454→                <CardTitle className="text-xl font-semibold tracking-tight">
+   455→                  Create New Project
+   456→                </CardTitle>
+   457→                <p className="mt-0.5 text-sm text-muted-foreground">
+   458→                  Transform your video idea into a production script
+   459→                </p>
+   460→              </div>
+   461→            </div>
+   462→          </div>
+   463→        </CardHeader>
+   464→
+   465→        <CardContent className="px-6 pb-8">
+   466→          <Form {...form}>
+   467→            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+   468→              {/* ── Basic Information ────────────────────────────────── */}
+   469→              <section>
+   470→                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+   471→                  Basic Information
+   472→                </h2>
+   473→
+   474→                <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+   475→                  <FormField
+   476→                    control={form.control}
+   477→                    name="title"
+   478→                    render={({ field }) => (
+   479→                      <FormItem>
+   480→                        <FormLabel>Project Title</FormLabel>
+   481→                        <FormControl>
+   482→                          <Input
+   483→                            placeholder="e.g. The Future of Renewable Energy"
+   484→                            {...field}
+   485→                          />
+   486→                        </FormControl>
+   487→                        <FormMessage />
+   488→                      </FormItem>
+   489→                    )}
+   490→                  />
+   491→
+   492→                  <FormField
+   493→                    control={form.control}
+   494→                    name="topic"
+   495→                    render={({ field }) => (
+   496→                      <FormItem>
+   497→                        <FormLabel>Video Topic</FormLabel>
+   498→                        <FormControl>
+   499→                          <Input
+   500→                            placeholder="e.g. How solar panels are changing the world"
+   501→                            {...field}
+   502→                          />
+   503→                        </FormControl>
+   504→                        <FormMessage />
+   505→                      </FormItem>
+   506→                    )}
+   507→                  />
+   508→
+   509→                  <FormField
+   510→                    control={form.control}
+   511→                    name="description"
+   512→                    render={({ field }) => (
+   513→                      <FormItem>
+   514→                        <div className="flex items-center justify-between">
+   515→                          <FormLabel>Description</FormLabel>
+   516→                          <span className="text-xs text-muted-foreground">
+   517→                            {descriptionValue.length}/1000
+   518→                          </span>
+   519→                        </div>
+   520→                        <FormControl>
+   521→                          <Textarea
+   522→                            placeholder="Add any extra details, context, or specific requirements for the video..."
+   523→                            rows={3}
+   524→                            maxLength={1000}
+   525→                            {...field}
+   526→                            value={field.value ?? ''}
+   527→                          />
+   528→                        </FormControl>
+   529→                        <FormMessage />
+   530→                      </FormItem>
+   531→                    )}
+   532→                  />
+   533→                </div>
+   534→              </section>
+   535→
+   536→              <Separator />
+   537→
+   538→              {/* ── Video Structure ──────────────────────────────────── */}
+   539→              <section>
+   540→                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+   541→                  Video Structure
+   542→                </h2>
+   543→
+   544→                <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+   545→                  <div className="grid gap-4 sm:grid-cols-2">
+   546→                    <FormField
+   547→                      control={form.control}
+   548→                      name="duration"
+   549→                      render={({ field }) => (
+   550→                        <FormItem>
+   551→                          <FormLabel>Video Duration</FormLabel>
+   552→                          <Select
+   553→                            onValueChange={field.onChange}
+   554→                            defaultValue={field.value}
+   555→                          >
+   556→                            <FormControl>
+   557→                              <SelectTrigger>
+   558→                                <SelectValue placeholder="Select duration" />
+   559→                              </SelectTrigger>
+   560→                            </FormControl>
+   561→                            <SelectContent>
+   562→                              {(Object.entries(DURATION_LABELS) as [VideoDuration, string][]).map(
+   563→                                ([value, label]) => (
+   564→                                  <SelectItem key={value} value={value}>
+   565→                                    {label}
+   566→                                  </SelectItem>
+   567→                                )
+   568→                              )}
+   569→                            </SelectContent>
+   570→                          </Select>
+   571→                          <FormMessage />
+   572→                        </FormItem>
+   573→                      )}
+   574→                    />
+   575→
+   576→                    <FormField
+   577→                      control={form.control}
+   578→                      name="sceneLengthMode"
+   579→                      render={({ field }) => (
+   580→                        <FormItem>
+   581→                          <FormLabel>Scene Length</FormLabel>
+   582→                          <Select
+   583→                            onValueChange={field.onChange}
+   584→                            defaultValue={field.value}
+   585→                          >
+   586→                            <FormControl>
+   587→                              <SelectTrigger>
+   588→                                <SelectValue placeholder="Select scene length" />
+   589→                              </SelectTrigger>
+   590→                            </FormControl>
+   591→                            <SelectContent>
+   592→                              <SelectItem value="default">8 seconds (default)</SelectItem>
+   593→                              <SelectItem value="custom">Custom length...</SelectItem>
+   594→                            </SelectContent>
+   595→                          </Select>
+   596→                          <FormMessage />
+   597→                        </FormItem>
+   598→                      )}
+   599→                    />
+   600→                  </div>
+   601→
+   602→                  {/* Custom scene length input */}
+   603→                  {watchSceneLengthMode === 'custom' && (
+   604→                    <motion.div
+   605→                      initial={{ opacity: 0, height: 0 }}
+   606→                      animate={{ opacity: 1, height: 'auto' }}
+   607→                      exit={{ opacity: 0, height: 0 }}
+   608→                    >
+   609→                      <FormField
+   610→                        control={form.control}
+   611→                        name="customSceneLength"
+   612→                        render={({ field }) => (
+   613→                          <FormItem>
+   614→                            <FormLabel>Custom Scene Length (seconds)</FormLabel>
+   615→                            <FormControl>
+   616→                              <Input
+   617→                                type="number"
+   618→                                min={3}
+   619→                                max={60}
+   620→                                placeholder="e.g. 10"
+   621→                                value={field.value ?? ''}
+   622→                                onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+   623→                              />
+   624→                            </FormControl>
+   625→                            <p className="text-xs text-muted-foreground mt-1">
+   626→                              Each scene&apos;s narration will be tailored to this length.
+   627→                            </p>
+   628→                            <FormMessage />
+   629→                          </FormItem>
+   630→                        )}
+   631→                      />
+   632→                    </motion.div>
+   633→                  )}
+   634→
+   635→                  {/* Calculation Preview */}
+   636→                  <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-4 space-y-3">
+   637→                    <div className="flex items-center gap-2 text-sm font-medium">
+   638→                      <Calculator className="size-4 text-primary" />
+   639→                      Script Breakdown
+   640→                    </div>
+   641→                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   642→                      <div className="space-y-1">
+   643→                        <p className="text-xs text-muted-foreground">Scene Length</p>
+   644→                        <p className="text-sm font-semibold">{sceneLength}s</p>
+   645→                      </div>
+   646→                      <div className="space-y-1">
+   647→                        <p className="text-xs text-muted-foreground">Total Scenes</p>
+   648→                        <p className="text-sm font-semibold">{totalScenes}</p>
+   649→                      </div>
+   650→                      <div className="space-y-1">
+   651→                        <p className="text-xs text-muted-foreground">Phases</p>
+   652→                        <p className="text-sm font-semibold">{totalPhases}</p>
+   653→                      </div>
+   654→                      <div className="space-y-1">
+   655→                        <p className="text-xs text-muted-foreground">Scenes/Phase</p>
+   656→                        <p className="text-sm font-semibold">{SCENES_PER_PHASE}</p>
+   657→                      </div>
+   658→                    </div>
+   659→                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+   660→                      <Layers className="size-3.5" />
+   661→                      <span>
+   662→                        Phase 1 generates {firstPhaseScenes} scenes. Remaining {totalPhases - 1 > 0
+   663→                          ? `${totalPhases - 1} phase${totalPhases - 1 > 1 ? 's' : ''} can be generated from the editor`
+   664→                          : 'no additional phases needed'}
+   665→                      </span>
+   666→                    </div>
+   667→                  </div>
+   668→                </div>
+   669→              </section>
+   670→
+   671→              <Separator />
+   672→
+   673→              {/* ── Production Settings ──────────────────────────────── */}
+   674→              <section>
+   675→                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+   676→                  Production Settings
+   677→                </h2>
+   678→
+   679→                <div className="rounded-lg border bg-muted/30 p-4">
+   680→                  <div className="grid gap-4 sm:grid-cols-2">
+   681→                    <FormField
+   682→                      control={form.control}
+   683→                      name="theme"
+   684→                      render={({ field }) => (
+   685→                        <FormItem>
+   686→                          <FormLabel>Visual Theme</FormLabel>
+   687→                          <Select
+   688→                            onValueChange={field.onChange}
+   689→                            defaultValue={field.value}
+   690→                          >
+   691→                            <FormControl>
+   692→                              <SelectTrigger>
+   693→                                <SelectValue placeholder="Select theme" />
+   694→                              </SelectTrigger>
+   695→                            </FormControl>
+   696→                            <SelectContent>
+   697→                              {(Object.entries(THEME_LABELS) as [VideoTheme, string][]).map(
+   698→                                ([value, label]) => (
+   699→                                  <SelectItem key={value} value={value}>
+   700→                                    {label}
+   701→                                  </SelectItem>
+   702→                                )
+   703→                              )}
+   704→                            </SelectContent>
+   705→                          </Select>
+   706→                          <FormMessage />
+   707→                        </FormItem>
+   708→                      )}
+   709→                    />
+   710→
+   711→                    <FormField
+   712→                      control={form.control}
+   713→                      name="language"
+   714→                      render={({ field }) => (
+   715→                        <FormItem>
+   716→                          <FormLabel>Language</FormLabel>
+   717→                          <Select
+   718→                            onValueChange={field.onChange}
+   719→                            defaultValue={field.value}
+   720→                          >
+   721→                            <FormControl>
+   722→                              <SelectTrigger>
+   723→                                <SelectValue placeholder="Select language" />
+   724→                              </SelectTrigger>
+   725→                            </FormControl>
+   726→                            <SelectContent>
+   727→                              {(Object.entries(LANGUAGE_LABELS) as [VideoLanguage, string][]).map(
+   728→                                ([value, label]) => (
+   729→                                  <SelectItem key={value} value={value}>
+   730→                                    {label}
+   731→                                  </SelectItem>
+   732→                                )
+   733→                              )}
+   734→                            </SelectContent>
+   735→                          </Select>
+   736→                          <FormMessage />
+   737→                        </FormItem>
+   738→                      )}
+   739→                    />
+   740→
+   741→                    <FormField
+   742→                      control={form.control}
+   743→                      name="writingStyle"
+   744→                      render={({ field }) => (
+   745→                        <FormItem>
+   746→                          <FormLabel>Writing Style</FormLabel>
+   747→                          <Select
+   748→                            onValueChange={field.onChange}
+   749→                            defaultValue={field.value}
+   750→                          >
+   751→                            <FormControl>
+   752→                              <SelectTrigger>
+   753→                                <SelectValue placeholder="Select style" />
+   754→                              </SelectTrigger>
+   755→                            </FormControl>
+   756→                            <SelectContent>
+   757→                              {(Object.entries(STYLE_LABELS) as [WritingStyle, string][]).map(
+   758→                                ([value, label]) => (
+   759→                                  <SelectItem key={value} value={value}>
+   760→                                    {label}
+   761→                                  </SelectItem>
+   762→                                )
+   763→                              )}
+   764→                            </SelectContent>
+   765→                          </Select>
+   766→                          <FormMessage />
+   767→                        </FormItem>
+   768→                      )}
+   769→                    />
+   770→
+   771→                    <FormField
+   772→                      control={form.control}
+   773→                      name="targetAudience"
+   774→                      render={({ field }) => (
+   775→                        <FormItem>
+   776→                          <FormLabel>Target Audience</FormLabel>
+   777→                          <Select
+   778→                            onValueChange={field.onChange}
+   779→                            defaultValue={field.value}
+   780→                          >
+   781→                            <FormControl>
+   782→                              <SelectTrigger>
+   783→                                <SelectValue placeholder="Select audience" />
+   784→                              </SelectTrigger>
+   785→                            </FormControl>
+   786→                            <SelectContent>
+   787→                              {(Object.entries(AUDIENCE_LABELS) as [TargetAudience, string][]).map(
+   788→                                ([value, label]) => (
+   789→                                  <SelectItem key={value} value={value}>
+   790→                                    {label}
+   791→                                  </SelectItem>
+   792→                                )
+   793→                              )}
+   794→                            </SelectContent>
+   795→                          </Select>
+   796→                          <FormMessage />
+   797→                        </FormItem>
+   798→                      )}
+   799→                    />
+   800→                  </div>
+   801→                </div>
+   802→              </section>
+   803→
+   804→              {/* ── Generate Button ──────────────────────────────────── */}
+   805→              <div className="pt-2">
+   806→                <Button
+   807→                  type="submit"
+   808→                  size="lg"
+   809→                  className="w-full text-base font-semibold"
+   810→                >
+   811→                  <Sparkles className="mr-2 h-5 w-5" />
+   812→                  Generate Script (Phase 1 of {totalPhases})
+   813→                </Button>
+   814→                <p className="text-center text-xs text-muted-foreground mt-2">
+   815→                  <Clock className="inline size-3 mr-1" />
+   816→                  Only Phase 1 ({firstPhaseScenes} scenes) is generated now. You can generate remaining phases from the editor.
+   817→                </p>
+   818→              </div>
+   819→            </form>
+   820→          </Form>
+   821→        </CardContent>
+   822→      </Card>
+   823→    </motion.div>
+   824→  );
+   825→}

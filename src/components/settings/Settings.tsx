@@ -293,18 +293,21 @@ export default function SettingsPage() {
       )}
 
       {/* ══════════════════════════════════════════════════════ */}
-      {/* YouTube Channel Section — only visible when YouTube tool is enabled */}
+      {/* Channel Niche & Style — ALWAYS visible, even when YouTube is disabled */}
+      {/* The niche is a per-user setting used by AI script generation and */}
+      {/* does not require a connected YouTube channel. */}
       {/* ══════════════════════════════════════════════════════ */}
-      {tools && tools.youtube && (
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
-                <Youtube className="size-5 text-red-500" />
-                YouTube Channel
+                <Palette className="size-5 text-primary" />
+                Channel Niche &amp; Style
               </CardTitle>
-              <CardDescription>Connect your channel and configure niche settings</CardDescription>
+              <CardDescription>
+                Define your channel&apos;s visual theme, writing style, audience, and language so AI generates scripts tailored to your brand
+              </CardDescription>
             </div>
             {hasNiche && (
               <Badge variant="outline" className="text-[10px] gap-1 text-primary border-primary/30">
@@ -315,81 +318,11 @@ export default function SettingsPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Connection Status */}
-          {ytConnected ? (
-            <>
-              <div className="flex items-center gap-3 rounded-lg border border-green-500/20 bg-green-500/5 p-4">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-green-500/10">
-                  <CheckCircle2 className="size-5 text-green-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">Channel Connected</p>
-                  {ytChannelName && (
-                    <p className="text-sm text-muted-foreground truncate">{ytChannelName}</p>
-                  )}
-                </div>
-                <a
-                  href="https://studio.youtube.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0"
-                >
-                  <Button variant="ghost" size="sm" className="gap-1.5 text-xs">
-                    <ExternalLink className="size-3.5" />
-                    YouTube Studio
-                  </Button>
-                </a>
-              </div>
-              <Button
-                variant="outline"
-                onClick={handleDisconnectYouTube}
-                disabled={ytLoading}
-                className="w-full gap-2 text-destructive hover:text-destructive"
-              >
-                {ytLoading ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Unplug className="size-4" />
-                )}
-                Disconnect YouTube Channel
-              </Button>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-500/10">
-                  <AlertTriangle className="size-5 text-amber-500" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Not Connected</p>
-                  <p className="text-xs text-muted-foreground">
-                    Connect your YouTube channel to view stats, manage videos, and use AI features
-                  </p>
-                </div>
-              </div>
-              <Button
-                onClick={handleConnectYouTube}
-                disabled={ytLoading}
-                className="w-full gap-2"
-              >
-                {ytLoading ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Youtube className="size-4" />
-                )}
-                Connect YouTube Channel
-              </Button>
-            </>
-          )}
-
-          <Separator />
-
-          {/* Channel Niche Preview + Edit Button */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <Palette className="size-4 text-primary" />
-                Channel Niche & Style
+                Niche Profile
               </div>
               <Button
                 variant="outline"
@@ -480,6 +413,93 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ══════════════════════════════════════════════════════ */}
+      {/* YouTube Channel Connection — only visible when YouTube tool is enabled */}
+      {/* Admins always see this section (for testing/management), even if disabled. */}
+      {/* ══════════════════════════════════════════════════════ */}
+      {(isAdmin || (tools && tools.youtube)) && (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Youtube className="size-5 text-red-500" />
+                YouTube Channel
+              </CardTitle>
+              <CardDescription>Connect your channel to view stats and manage videos</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Connection Status */}
+          {ytConnected ? (
+            <>
+              <div className="flex items-center gap-3 rounded-lg border border-green-500/20 bg-green-500/5 p-4">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-green-500/10">
+                  <CheckCircle2 className="size-5 text-green-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">Channel Connected</p>
+                  {ytChannelName && (
+                    <p className="text-sm text-muted-foreground truncate">{ytChannelName}</p>
+                  )}
+                </div>
+                <a
+                  href="https://studio.youtube.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0"
+                >
+                  <Button variant="ghost" size="sm" className="gap-1.5 text-xs">
+                    <ExternalLink className="size-3.5" />
+                    YouTube Studio
+                  </Button>
+                </a>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleDisconnectYouTube}
+                disabled={ytLoading}
+                className="w-full gap-2 text-destructive hover:text-destructive"
+              >
+                {ytLoading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Unplug className="size-4" />
+                )}
+                Disconnect YouTube Channel
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-500/10">
+                  <AlertTriangle className="size-5 text-amber-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Not Connected</p>
+                  <p className="text-xs text-muted-foreground">
+                    Connect your YouTube channel to view stats, manage videos, and use AI features
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={handleConnectYouTube}
+                disabled={ytLoading}
+                className="w-full gap-2"
+              >
+                {ytLoading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Youtube className="size-4" />
+                )}
+                Connect YouTube Channel
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
       )}

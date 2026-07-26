@@ -279,7 +279,9 @@ function DesktopSidebar() {
     ...NAV_ITEMS.filter((item) => {
       // Filter out items whose tool is disabled
       // When tools is null (loading), only show items with no tool requirement
+      // Admins always see tool-dependent items (e.g. YouTube), even when disabled
       if (item.tool) {
+        if (userRole === 'admin') return true;
         if (!tools) return false; // not loaded yet — hide tool-dependent items
         if (!tools[item.tool]) return false; // tool is disabled
       }
@@ -379,7 +381,9 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
   const adminNavItems: typeof ADMIN_NAV_ITEMS = userRole === 'admin' ? ADMIN_NAV_ITEMS : [];
   const allNavItems = [
     ...NAV_ITEMS.filter((item) => {
+      // Admins always see tool-dependent items (e.g. YouTube), even when disabled
       if (item.tool) {
+        if (userRole === 'admin') return true;
         if (!tools) return false;
         if (!tools[item.tool]) return false;
       }
@@ -481,11 +485,14 @@ function BottomNavBar() {
   const pathname = usePathname();
   const router = useRouter();
   const { tools } = useAppStore();
+  const userRole = useAuthStore((s) => s.user?.role);
 
   // Only show main nav items in bottom bar (not admin-only items like About)
   // Also filter out disabled tools — when tools is null, hide tool-dependent items
+  // Admins always see tool-dependent items (e.g. YouTube), even when disabled
   const bottomItems = NAV_ITEMS.filter((item) => {
     if (item.tool) {
+      if (userRole === 'admin') return true;
       if (!tools) return false;
       if (!tools[item.tool]) return false;
     }

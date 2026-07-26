@@ -1,0 +1,638 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import { useEffect, useState, useCallback } from 'react';
+     4→     4→import { useRouter } from 'next/navigation';
+     5→     5→import { motion, AnimatePresence } from 'framer-motion';
+     6→     6→import {
+     7→     7→  ShieldCheck, Users, Crown, Zap, Search, Loader2, ChevronDown,
+     8→     8→  Edit3, Trash2, X, Check, Clock, Star, Eye, UserCog,
+     9→     9→  AlertTriangle, RefreshCw, Plus, Minus
+    10→    10→} from 'lucide-react';
+    11→    11→import { Button } from '@/components/ui/button';
+    12→    12→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+    13→    13→import { Input } from '@/components/ui/input';
+    14→    14→import { Badge } from '@/components/ui/badge';
+    15→    15→import { Separator } from '@/components/ui/separator';
+    16→    16→import {
+    17→    17→  Dialog,
+    18→    18→  DialogContent,
+    19→    19→  DialogHeader,
+    20→    20→  DialogTitle,
+    21→    21→  DialogDescription,
+    22→    22→  DialogFooter,
+    23→    23→} from '@/components/ui/dialog';
+    24→    24→import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+    25→    25→import { useAuthStore } from '@/lib/auth-store';
+    26→    26→import { toast } from 'sonner';
+    27→    27→import { cn } from '@/lib/utils';
+    28→    28→
+    29→    29→interface AdminUser {
+    30→    30→  id: string;
+    31→    31→  name: string;
+    32→    32→  email: string;
+    33→    33→  provider: string;
+    34→    34→  role: string;
+    35→    35→  plan: string;
+    36→    36→  isVerified: boolean;
+    37→    37→  isCustomPlan: boolean;
+    38→    38→  customPlan: { isCustom: boolean; customLabel: string; customDays: number };
+    39→    39→  planExpiresAt: number;
+    40→    40→  planDaysLeft: number;
+    41→    41→  stripe: { customerId: string; subscriptionId: string; currentPeriodEnd: number; cancelAtPeriodEnd: boolean };
+    42→    42→  dailyUsage: { date: string; projectsCreated: number; aiGenerations: number };
+    43→    43→  createdAt: string;
+    44→    44→  updatedAt: string;
+    45→    45→}
+    46→    46→
+    47→    47→function formatDate(timestamp: string | number): string {
+    48→    48→  if (!timestamp) return '—';
+    49→    49→  const date = new Date(typeof timestamp === 'number' ? timestamp : timestamp);
+    50→    50→  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    51→    51→}
+    52→    52→
+    53→    53→export default function AdminPage() {
+    54→    54→  const router = useRouter();
+    55→    55→  const user = useAuthStore((s) => s.user);
+    56→    56→  const [users, setUsers] = useState<AdminUser[]>([]);
+    57→    57→  const [loading, setLoading] = useState(true);
+    58→    58→  const [search, setSearch] = useState('');
+    59→    59→  const [editUser, setEditUser] = useState<AdminUser | null>(null);
+    60→    60→  const [saving, setSaving] = useState(false);
+    61→    61→  const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
+    62→    62→  const [deleting, setDeleting] = useState(false);
+    63→    63→
+    64→    64→  // Edit form state
+    65→    65→  const [editPlan, setEditPlan] = useState('free');
+    66→    66→  const [editAddDays, setEditAddDays] = useState(0);
+    67→    67→  const [editIsCustom, setEditIsCustom] = useState(false);
+    68→    68→  const [editCustomLabel, setEditCustomLabel] = useState('');
+    69→    69→  const [editCustomDays, setEditCustomDays] = useState(0);
+    70→    70→  const [editRole, setEditRole] = useState('user');
+    71→    71→
+    72→    72→  // Redirect non-admin
+    73→    73→  useEffect(() => {
+    74→    74→    if (user && user.role !== 'admin') {
+    75→    75→      router.push('/dashboard');
+    76→    76→    }
+    77→    77→  }, [user, router]);
+    78→    78→
+    79→    79→  const fetchUsers = useCallback(async () => {
+    80→    80→    setLoading(true);
+    81→    81→    try {
+    82→    82→      const res = await fetch('/api/admin/users');
+    83→    83→      if (res.ok) {
+    84→    84→        const data = await res.json();
+    85→    85→        setUsers(data.users || []);
+    86→    86→      } else {
+    87→    87→        const data = await res.json();
+    88→    88→        toast.error(data.error || 'Failed to load users');
+    89→    89→      }
+    90→    90→    } catch {
+    91→    91→      toast.error('Network error. Please try again.');
+    92→    92→    } finally {
+    93→    93→      setLoading(false);
+    94→    94→    }
+    95→    95→  }, []);
+    96→    96→
+    97→    97→  useEffect(() => {
+    98→    98→    if (user?.role === 'admin') {
+    99→    99→      fetchUsers();
+   100→   100→    }
+   101→   101→  }, [user, fetchUsers]);
+   102→   102→
+   103→   103→  // Filter users by search
+   104→   104→  const filteredUsers = users.filter((u) => {
+   105→   105→    if (!search.trim()) return true;
+   106→   106→    const q = search.toLowerCase();
+   107→   107→    return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+   108→   108→  });
+   109→   109→
+   110→   110→  // Stats
+   111→   111→  const totalUsers = users.length;
+   112→   112→  const proUsers = users.filter((u) => u.plan === 'pro').length;
+   113→   113→  const customUsers = users.filter((u) => u.isCustomPlan).length;
+   114→   114→  const expiredUsers = users.filter((u) => u.plan === 'pro' && u.planDaysLeft <= 0).length;
+   115→   115→
+   116→   116→  // Open edit dialog
+   117→   117→  const openEdit = (u: AdminUser) => {
+   118→   118→    setEditUser(u);
+   119→   119→    setEditPlan(u.plan);
+   120→   120→    setEditAddDays(0);
+   121→   121→    setEditIsCustom(u.isCustomPlan);
+   122→   122→    setEditCustomLabel(u.customPlan?.customLabel || '');
+   123→   123→    setEditCustomDays(u.customPlan?.customDays || 0);
+   124→   124→    setEditRole(u.role);
+   125→   125→  };
+   126→   126→
+   127→   127→  // Save user
+   128→   128→  const handleSave = async () => {
+   129→   129→    if (!editUser) return;
+   130→   130→    setSaving(true);
+   131→   131→    try {
+   132→   132→      const body: Record<string, unknown> = {
+   133→   133→        plan: editPlan,
+   134→   134→        role: editRole,
+   135→   135→        isCustomPlan: editIsCustom,
+   136→   136→        customPlan: {
+   137→   137→          isCustom: editIsCustom,
+   138→   138→          customLabel: editCustomLabel,
+   139→   139→          customDays: editCustomDays,
+   140→   140→        },
+   141→   141→      };
+   142→   142→      if (editAddDays > 0) {
+   143→   143→        body.addDays = editAddDays;
+   144→   144→      }
+   145→   145→
+   146→   146→      const res = await fetch(`/api/admin/users/${editUser.id}`, {
+   147→   147→        method: 'PUT',
+   148→   148→        headers: { 'Content-Type': 'application/json' },
+   149→   149→        body: JSON.stringify(body),
+   150→   150→      });
+   151→   151→      const data = await res.json();
+   152→   152→      if (res.ok) {
+   153→   153→        toast.success(`Updated ${editUser.name} successfully`);
+   154→   154→        setEditUser(null);
+   155→   155→        fetchUsers();
+   156→   156→      } else {
+   157→   157→        toast.error(data.error || 'Failed to update user');
+   158→   158→      }
+   159→   159→    } catch {
+   160→   160→      toast.error('Network error. Please try again.');
+   161→   161→    } finally {
+   162→   162→      setSaving(false);
+   163→   163→    }
+   164→   164→  };
+   165→   165→
+   166→   166→  // Delete user
+   167→   167→  const handleDelete = async () => {
+   168→   168→    if (!deleteUser) return;
+   169→   169→    setDeleting(true);
+   170→   170→    try {
+   171→   171→      const res = await fetch(`/api/admin/users/${deleteUser.id}`, { method: 'DELETE' });
+   172→   172→      const data = await res.json();
+   173→   173→      if (res.ok) {
+   174→   174→        toast.success(`Deleted ${deleteUser.email}`);
+   175→   175→        setDeleteUser(null);
+   176→   176→        fetchUsers();
+   177→   177→      } else {
+   178→   178→        toast.error(data.error || 'Failed to delete user');
+   179→   179→      }
+   180→   180→    } catch {
+   181→   181→      toast.error('Network error. Please try again.');
+   182→   182→    } finally {
+   183→   183→      setDeleting(false);
+   184→   184→    }
+   185→   185→  };
+   186→   186→
+   187→   187→  // Quick add 30 days
+   188→   188→  const quickAddDays = async (u: AdminUser, days: number) => {
+   189→   189→    try {
+   190→   190→      const res = await fetch(`/api/admin/users/${u.id}`, {
+   191→   191→        method: 'PUT',
+   192→   192→        headers: { 'Content-Type': 'application/json' },
+   193→   193→        body: JSON.stringify({ addDays: days }),
+   194→   194→      });
+   195→   195→      const data = await res.json();
+   196→   196→      if (res.ok) {
+   197→   197→        toast.success(`Added ${days} days to ${u.name}`);
+   198→   198→        fetchUsers();
+   199→   199→      } else {
+   200→   200→        toast.error(data.error || 'Failed to add days');
+   201→   201→      }
+   202→   202→    } catch {
+   203→   203→      toast.error('Network error');
+   204→   204→    }
+   205→   205→  };
+   206→   206→
+   207→   207→  if (!user || user.role !== 'admin') return null;
+   208→   208→
+   209→   209→  return (
+   210→   210→    <div className="max-w-6xl mx-auto space-y-6">
+   211→   211→      {/* Header */}
+   212→   212→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+   213→   213→        <div className="flex items-center gap-3">
+   214→   214→          <Button variant="ghost" size="icon" onClick={() => router.push('/dashboard')} className="shrink-0">
+   215→   215→            <ChevronDown className="h-5 w-5 rotate-90" />
+   216→   216→          </Button>
+   217→   217→          <div>
+   218→   218→            <div className="flex items-center gap-2">
+   219→   219→              <ShieldCheck className="size-5 text-primary" />
+   220→   220→              <h1 className="text-2xl font-bold tracking-tight">Admin Panel</h1>
+   221→   221→            </div>
+   222→   222→            <p className="text-sm text-muted-foreground">Manage users, plans, and subscriptions</p>
+   223→   223→          </div>
+   224→   224→        </div>
+   225→   225→        <Button variant="outline" className="gap-2" onClick={fetchUsers} disabled={loading}>
+   226→   226→          <RefreshCw className={cn('size-4', loading && 'animate-spin')} />
+   227→   227→          Refresh
+   228→   228→        </Button>
+   229→   229→      </div>
+   230→   230→
+   231→   231→      {/* Stats Cards */}
+   232→   232→      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   233→   233→        {[
+   234→   234→          { label: 'Total Users', value: totalUsers, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/5' },
+   235→   235→          { label: 'Pro Users', value: proUsers, icon: Crown, color: 'text-primary', bg: 'bg-primary/5' },
+   236→   236→          { label: 'Custom Plans', value: customUsers, icon: Star, color: 'text-amber-500', bg: 'bg-amber-500/5' },
+   237→   237→          { label: 'Expired Plans', value: expiredUsers, icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-500/5' },
+   238→   238→        ].map((stat) => (
+   239→   239→          <Card key={stat.label}>
+   240→   240→            <CardContent className="pt-4 pb-3 px-4">
+   241→   241→              <div className="flex items-center justify-between">
+   242→   242→                <div>
+   243→   243→                  <p className="text-xs text-muted-foreground">{stat.label}</p>
+   244→   244→                  <p className="text-2xl font-bold mt-0.5">{stat.value}</p>
+   245→   245→                </div>
+   246→   246→                <div className={cn('size-9 rounded-lg flex items-center justify-center', stat.bg)}>
+   247→   247→                  <stat.icon className={cn('size-4', stat.color)} />
+   248→   248→                </div>
+   249→   249→              </div>
+   250→   250→            </CardContent>
+   251→   251→          </Card>
+   252→   252→        ))}
+   253→   253→      </div>
+   254→   254→
+   255→   255→      {/* Search */}
+   256→   256→      <Card>
+   257→   257→        <CardContent className="pt-4">
+   258→   258→          <div className="relative">
+   259→   259→            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+   260→   260→            <Input
+   261→   261→              type="search"
+   262→   262→              placeholder="Search by name or email..."
+   263→   263→              className="pl-10 h-10"
+   264→   264→              value={search}
+   265→   265→              onChange={(e) => setSearch(e.target.value)}
+   266→   266→            />
+   267→   267→          </div>
+   268→   268→        </CardContent>
+   269→   269→      </Card>
+   270→   270→
+   271→   271→      {/* Users Table */}
+   272→   272→      <Card>
+   273→   273→        <CardHeader className="pb-3">
+   274→   274→          <CardTitle className="text-base flex items-center gap-2">
+   275→   275→            <Users className="size-4" />
+   276→   276→            All Users
+   277→   277→            <Badge variant="secondary" className="text-[10px]">{filteredUsers.length}</Badge>
+   278→   278→          </CardTitle>
+   279→   279→          <CardDescription>Click edit to change plans, add days, or set custom plans</CardDescription>
+   280→   280→        </CardHeader>
+   281→   281→        <CardContent className="p-0">
+   282→   282→          {loading ? (
+   283→   283→            <div className="flex items-center justify-center py-12">
+   284→   284→              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+   285→   285→              <span className="ml-2 text-sm text-muted-foreground">Loading users...</span>
+   286→   286→            </div>
+   287→   287→          ) : filteredUsers.length === 0 ? (
+   288→   288→            <div className="text-center py-12 text-sm text-muted-foreground">
+   289→   289→              {search ? 'No users match your search.' : 'No users found.'}
+   290→   290→            </div>
+   291→   291→          ) : (
+   292→   292→            <div className="overflow-x-auto">
+   293→   293→              <table className="w-full text-sm">
+   294→   294→                <thead>
+   295→   295→                  <tr className="border-b bg-muted/30">
+   296→   296→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">User</th>
+   297→   297→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Plan</th>
+   298→   298→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Days Left</th>
+   299→   299→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Custom</th>
+   300→   300→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Usage</th>
+   301→   301→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Joined</th>
+   302→   302→                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Actions</th>
+   303→   303→                  </tr>
+   304→   304→                </thead>
+   305→   305→                <tbody>
+   306→   306→                  {filteredUsers.map((u) => (
+   307→   307→                    <motion.tr
+   308→   308→                      key={u.id}
+   309→   309→                      layout
+   310→   310→                      initial={{ opacity: 0 }}
+   311→   311→                      animate={{ opacity: 1 }}
+   312→   312→                      className="border-b hover:bg-muted/20 transition-colors"
+   313→   313→                    >
+   314→   314→                      <td className="px-4 py-3">
+   315→   315→                        <div className="flex flex-col gap-0.5">
+   316→   316→                          <div className="flex items-center gap-2">
+   317→   317→                            <span className="font-medium text-sm">{u.name}</span>
+   318→   318→                            {u.role === 'admin' && (
+   319→   319→                              <Badge className="text-[9px] px-1.5 py-0 h-4">Admin</Badge>
+   320→   320→                            )}
+   321→   321→                            {!u.isVerified && (
+   322→   322→                              <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4">Unverified</Badge>
+   323→   323→                            )}
+   324→   324→                          </div>
+   325→   325→                          <span className="text-xs text-muted-foreground">{u.email}</span>
+   326→   326→                        </div>
+   327→   327→                      </td>
+   328→   328→                      <td className="px-4 py-3">
+   329→   329→                        <div className="flex items-center gap-1.5">
+   330→   330→                          {u.plan === 'pro' ? (
+   331→   331→                            <>
+   332→   332→                              <Crown className="size-3.5 text-primary" />
+   333→   333→                              <span className="font-medium text-primary">Pro</span>
+   334→   334→                            </>
+   335→   335→                          ) : (
+   336→   336→                            <>
+   337→   337→                              <Zap className="size-3.5 text-muted-foreground" />
+   338→   338→                              <span className="text-muted-foreground">Free</span>
+   339→   339→                            </>
+   340→   340→                          )}
+   341→   341→                        </div>
+   342→   342→                        {u.stripe?.subscriptionId && (
+   343→   343→                          <span className="text-[10px] text-muted-foreground">Stripe</span>
+   344→   344→                        )}
+   345→   345→                      </td>
+   346→   346→                      <td className="px-4 py-3">
+   347→   347→                        {u.plan === 'pro' ? (
+   348→   348→                          <div className="flex items-center gap-1.5">
+   349→   349→                            <span className={cn(
+   350→   350→                              'text-sm font-semibold',
+   351→   351→                              u.planDaysLeft <= 3 ? 'text-red-500' : u.planDaysLeft <= 7 ? 'text-amber-500' : 'text-foreground'
+   352→   352→                            )}>
+   353→   353→                              {u.planDaysLeft}d
+   354→   354→                            </span>
+   355→   355→                            {u.planExpiresAt > 0 && (
+   356→   356→                              <span className="text-[10px] text-muted-foreground">
+   357→   357→                                ({formatDate(u.planExpiresAt)})
+   358→   358→                              </span>
+   359→   359→                            )}
+   360→   360→                          </div>
+   361→   361→                        ) : (
+   362→   362→                          <span className="text-xs text-muted-foreground">—</span>
+   363→   363→                        )}
+   364→   364→                      </td>
+   365→   365→                      <td className="px-4 py-3">
+   366→   366→                        {u.isCustomPlan ? (
+   367→   367→                          <Badge className="text-[10px] gap-1" variant="outline">
+   368→   368→                            <Star className="size-2.5" />
+   369→   369→                            {u.customPlan?.customLabel || 'Custom'}
+   370→   370→                          </Badge>
+   371→   371→                        ) : (
+   372→   372→                          <span className="text-xs text-muted-foreground">—</span>
+   373→   373→                        )}
+   374→   374→                      </td>
+   375→   375→                      <td className="px-4 py-3">
+   376→   376→                        <div className="text-xs text-muted-foreground">
+   377→   377→                          <span>{u.dailyUsage?.projectsCreated ?? 0} proj</span>
+   378→   378→                          <span className="mx-1">·</span>
+   379→   379→                          <span>{u.dailyUsage?.aiGenerations ?? 0} AI</span>
+   380→   380→                        </div>
+   381→   381→                      </td>
+   382→   382→                      <td className="px-4 py-3 text-xs text-muted-foreground">
+   383→   383→                        {formatDate(u.createdAt)}
+   384→   384→                      </td>
+   385→   385→                      <td className="px-4 py-3">
+   386→   386→                        <div className="flex items-center justify-end gap-1">
+   387→   387→                          {/* Quick add 30 days */}
+   388→   388→                          <Button
+   389→   389→                            variant="ghost"
+   390→   390→                            size="icon"
+   391→   391→                            className="size-7"
+   392→   392→                            title="Add 30 days"
+   393→   393→                            onClick={() => quickAddDays(u, 30)}
+   394→   394→                          >
+   395→   395→                            <Plus className="size-3" />
+   396→   396→                          </Button>
+   397→   397→                          {/* Edit */}
+   398→   398→                          <Button
+   399→   399→                            variant="ghost"
+   400→   400→                            size="icon"
+   401→   401→                            className="size-7"
+   402→   402→                            title="Edit user"
+   403→   403→                            onClick={() => openEdit(u)}
+   404→   404→                          >
+   405→   405→                            <Edit3 className="size-3" />
+   406→   406→                          </Button>
+   407→   407→                          {/* Delete */}
+   408→   408→                          <Button
+   409→   409→                            variant="ghost"
+   410→   410→                            size="icon"
+   411→   411→                            className="size-7 text-destructive hover:text-destructive"
+   412→   412→                            title="Delete user"
+   413→   413→                            onClick={() => setDeleteUser(u)}
+   414→   414→                            disabled={u.role === 'admin'}
+   415→   415→                          >
+   416→   416→                            <Trash2 className="size-3" />
+   417→   417→                          </Button>
+   418→   418→                        </div>
+   419→   419→                      </td>
+   420→   420→                    </motion.tr>
+   421→   421→                  ))}
+   422→   422→                </tbody>
+   423→   423→              </table>
+   424→   424→            </div>
+   425→   425→          )}
+   426→   426→        </CardContent>
+   427→   427→      </Card>
+   428→   428→
+   429→   429→      {/* ── Edit User Dialog ── */}
+   430→   430→      <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
+   431→   431→        <DialogContent className="max-w-md">
+   432→   432→          <DialogHeader>
+   433→   433→            <DialogTitle className="flex items-center gap-2">
+   434→   434→              <UserCog className="size-4" />
+   435→   435→              Edit User
+   436→   436→            </DialogTitle>
+   437→   437→            <DialogDescription>
+   438→   438→              Modify plan, add days, or set custom plan for {editUser?.name}
+   439→   439→            </DialogDescription>
+   440→   440→          </DialogHeader>
+   441→   441→
+   442→   442→          {editUser && (
+   443→   443→            <div className="space-y-4 py-2">
+   444→   444→              {/* Current info */}
+   445→   445→              <div className="rounded-lg bg-muted/50 p-3 space-y-1">
+   446→   446→                <div className="flex justify-between text-sm">
+   447→   447→                  <span className="text-muted-foreground">Email</span>
+   448→   448→                  <span className="font-medium text-xs">{editUser.email}</span>
+   449→   449→                </div>
+   450→   450→                <div className="flex justify-between text-sm">
+   451→   451→                  <span className="text-muted-foreground">Current Plan</span>
+   452→   452→                  <span className="font-medium">{editUser.plan === 'pro' ? 'Pro' : 'Free'}</span>
+   453→   453→                </div>
+   454→   454→                <div className="flex justify-between text-sm">
+   455→   455→                  <span className="text-muted-foreground">Days Remaining</span>
+   456→   456→                  <span className={cn('font-semibold', editUser.planDaysLeft <= 3 ? 'text-red-500' : 'text-foreground')}>
+   457→   457→                    {editUser.plan === 'pro' ? `${editUser.planDaysLeft} days` : '—'}
+   458→   458→                  </span>
+   459→   459→                </div>
+   460→   460→              </div>
+   461→   461→
+   462→   462→              <Separator />
+   463→   463→
+   464→   464→              {/* Plan selector */}
+   465→   465→              <div className="space-y-2">
+   466→   466→                <label className="text-sm font-medium">Plan</label>
+   467→   467→                <Select value={editPlan} onValueChange={setEditPlan}>
+   468→   468→                  <SelectTrigger className="w-full">
+   469→   469→                    <SelectValue />
+   470→   470→                  </SelectTrigger>
+   471→   471→                  <SelectContent>
+   472→   472→                    <SelectItem value="free">
+   473→   473→                      <div className="flex items-center gap-2">
+   474→   474→                        <Zap className="size-3.5 text-muted-foreground" />
+   475→   475→                        Free
+   476→   476→                      </div>
+   477→   477→                    </SelectItem>
+   478→   478→                    <SelectItem value="pro">
+   479→   479→                      <div className="flex items-center gap-2">
+   480→   480→                        <Crown className="size-3.5 text-primary" />
+   481→   481→                        Pro
+   482→   482→                      </div>
+   483→   483→                    </SelectItem>
+   484→   484→                  </SelectContent>
+   485→   485→                </Select>
+   486→   486→              </div>
+   487→   487→
+   488→   488→              {/* Add days */}
+   489→   489→              <div className="space-y-2">
+   490→   490→                <label className="text-sm font-medium">Add Days</label>
+   491→   491→                <div className="flex items-center gap-2">
+   492→   492→                  <Button
+   493→   493→                    variant="outline"
+   494→   494→                    size="icon"
+   495→   495→                    className="size-8"
+   496→   496→                    onClick={() => setEditAddDays(Math.max(0, editAddDays - 7))}
+   497→   497→                  >
+   498→   498→                    <Minus className="size-3" />
+   499→   499→                  </Button>
+   500→   500→                  <Input
+   501→   501→                    type="number"
+   502→   502→                    min={0}
+   503→   503→                    max={365}
+   504→   504→                    value={editAddDays}
+   505→   505→                    onChange={(e) => setEditAddDays(Math.max(0, parseInt(e.target.value) || 0))}
+   506→   506→                    className="w-24 text-center"
+   507→   507→                  />
+   508→   508→                  <span className="text-xs text-muted-foreground">days</span>
+   509→   509→                  <Button
+   510→   510→                    variant="outline"
+   511→   511→                    size="icon"
+   512→   512→                    className="size-8"
+   513→   513→                    onClick={() => setEditAddDays(Math.min(365, editAddDays + 7))}
+   514→   514→                  >
+   515→   515→                    <Plus className="size-3" />
+   516→   516→                  </Button>
+   517→   517→                </div>
+   518→   518→                <p className="text-[11px] text-muted-foreground">
+   519→   519→                  Will add to current expiry. Setting to Pro if currently Free.
+   520→   520→                </p>
+   521→   521→              </div>
+   522→   522→
+   523→   523→              {/* Custom plan toggle */}
+   524→   524→              <div className="space-y-2">
+   525→   525→                <label className="text-sm font-medium flex items-center gap-2">
+   526→   526→                  <Star className="size-3.5 text-amber-500" />
+   527→   527→                  Custom Plan
+   528→   528→                </label>
+   529→   529→                <div className="flex items-center gap-3">
+   530→   530→                  <Button
+   531→   531→                    variant={editIsCustom ? 'default' : 'outline'}
+   532→   532→                    size="sm"
+   533→   533→                    onClick={() => setEditIsCustom(true)}
+   534→   534→                  >
+   535→   535→                    <Check className="size-3 mr-1" />
+   536→   536→                    Yes
+   537→   537→                  </Button>
+   538→   538→                  <Button
+   539→   539→                    variant={!editIsCustom ? 'default' : 'outline'}
+   540→   540→                    size="sm"
+   541→   541→                    onClick={() => setEditIsCustom(false)}
+   542→   542→                  >
+   543→   543→                    <X className="size-3 mr-1" />
+   544→   544→                    No
+   545→   545→                  </Button>
+   546→   546→                </div>
+   547→   547→              </div>
+   548→   548→
+   549→   549→              {/* Custom plan details */}
+   550→   550→              <AnimatePresence>
+   551→   551→                {editIsCustom && (
+   552→   552→                  <motion.div
+   553→   553→                    initial={{ opacity: 0, height: 0 }}
+   554→   554→                    animate={{ opacity: 1, height: 'auto' }}
+   555→   555→                    exit={{ opacity: 0, height: 0 }}
+   556→   556→                    className="space-y-3 overflow-hidden"
+   557→   557→                  >
+   558→   558→                    <div className="space-y-2">
+   559→   559→                      <label className="text-xs font-medium">Custom Plan Label</label>
+   560→   560→                      <Input
+   561→   561→                        placeholder="e.g. Team Plan, Agency Plan"
+   562→   562→                        value={editCustomLabel}
+   563→   563→                        onChange={(e) => setEditCustomLabel(e.target.value)}
+   564→   564→                      />
+   565→   565→                    </div>
+   566→   566→                    <div className="space-y-2">
+   567→   567→                      <label className="text-xs font-medium">Custom Duration (days)</label>
+   568→   568→                      <Input
+   569→   569→                        type="number"
+   570→   570→                        min={1}
+   571→   571→                        max={365}
+   572→   572→                        value={editCustomDays}
+   573→   573→                        onChange={(e) => setEditCustomDays(parseInt(e.target.value) || 0)}
+   574→   574→                      />
+   575→   575→                    </div>
+   576→   576→                  </motion.div>
+   577→   577→                )}
+   578→   578→              </AnimatePresence>
+   579→   579→
+   580→   580→              <Separator />
+   581→   581→
+   582→   582→              {/* Role */}
+   583→   583→              <div className="space-y-2">
+   584→   584→                <label className="text-sm font-medium">Role</label>
+   585→   585→                <Select value={editRole} onValueChange={setEditRole}>
+   586→   586→                  <SelectTrigger className="w-full">
+   587→   587→                    <SelectValue />
+   588→   588→                  </SelectTrigger>
+   589→   589→                  <SelectContent>
+   590→   590→                    <SelectItem value="user">User</SelectItem>
+   591→   591→                    <SelectItem value="admin">Admin</SelectItem>
+   592→   592→                  </SelectContent>
+   593→   593→                </Select>
+   594→   594→              </div>
+   595→   595→            </div>
+   596→   596→          )}
+   597→   597→
+   598→   598→          <DialogFooter>
+   599→   599→            <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
+   600→   600→            <Button onClick={handleSave} disabled={saving}>
+   601→   601→              {saving ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+   602→   602→              Save Changes
+   603→   603→            </Button>
+   604→   604→          </DialogFooter>
+   605→   605→        </DialogContent>
+   606→   606→      </Dialog>
+   607→   607→
+   608→   608→      {/* ── Delete Confirm Dialog ── */}
+   609→   609→      <Dialog open={!!deleteUser} onOpenChange={() => setDeleteUser(null)}>
+   610→   610→        <DialogContent className="max-w-sm">
+   611→   611→          <DialogHeader>
+   612→   612→            <DialogTitle className="flex items-center gap-2 text-destructive">
+   613→   613→              <AlertTriangle className="size-4" />
+   614→   614→              Delete User
+   615→   615→            </DialogTitle>
+   616→   616→            <DialogDescription>
+   617→   617→              This action cannot be undone. All data for this user will be permanently deleted.
+   618→   618→            </DialogDescription>
+   619→   619→          </DialogHeader>
+   620→   620→          {deleteUser && (
+   621→   621→            <div className="rounded-lg bg-destructive/5 border border-destructive/20 p-3">
+   622→   622→              <p className="text-sm font-medium">{deleteUser.name}</p>
+   623→   623→              <p className="text-xs text-muted-foreground">{deleteUser.email}</p>
+   624→   624→            </div>
+   625→   625→          )}
+   626→   626→          <DialogFooter>
+   627→   627→            <Button variant="outline" onClick={() => setDeleteUser(null)}>Cancel</Button>
+   628→   628→            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+   629→   629→              {deleting ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+   630→   630→              Delete
+   631→   631→            </Button>
+   632→   632→          </DialogFooter>
+   633→   633→        </DialogContent>
+   634→   634→      </Dialog>
+   635→   635→    </div>
+   636→   636→  );
+   637→   637→}
+   638→   638→

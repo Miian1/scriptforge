@@ -1,0 +1,700 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import { useState, useEffect, useCallback, useRef } from 'react';
+     4→     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→     5→import { Settings, Shield, ShieldCheck, Youtube, Unplug, Loader2, ExternalLink, CheckCircle2, AlertTriangle, Palette, Pen, Eye, Globe, Users, FileText, Radio, Edit3 } from 'lucide-react';
+     6→     6→import { useTheme } from 'next-themes';
+     7→     7→import type { AppSettings } from '@/lib/types';
+     8→     8→
+     9→     9→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+    10→    10→import { Label } from '@/components/ui/label';
+    11→    11→import { Switch } from '@/components/ui/switch';
+    12→    12→import { Button } from '@/components/ui/button';
+    13→    13→import { Input } from '@/components/ui/input';
+    14→    14→import { Textarea } from '@/components/ui/textarea';
+    15→    15→import { Separator } from '@/components/ui/separator';
+    16→    16→import { Badge } from '@/components/ui/badge';
+    17→    17→import {
+    18→    18→  Dialog,
+    19→    19→  DialogContent,
+    20→    20→  DialogHeader,
+    21→    21→  DialogTitle,
+    22→    22→  DialogDescription,
+    23→    23→  DialogFooter,
+    24→    24→} from '@/components/ui/dialog';
+    25→    25→import { useAuthStore } from '@/lib/auth-store';
+    26→    26→import { useAppStore } from '@/lib/store';
+    27→    27→import { toast } from 'sonner';
+    28→    28→import { cn } from '@/lib/utils';
+    29→    29→
+    30→    30→const DEFAULT_SETTINGS: AppSettings = {
+    31→    31→  theme: 'system',
+    32→    32→  autoSave: true,
+    33→    33→};
+    34→    34→
+    35→    35→const SETTINGS_KEY = 'scriptforge_settings';
+    36→    36→
+    37→    37→const THEME_OPTIONS = [
+    38→    38→  { value: 'light' as const, label: 'Light', icon: Sun },
+    39→    39→  { value: 'dark' as const, label: 'Dark', icon: Moon },
+    40→    40→  { value: 'system' as const, label: 'System', icon: Monitor },
+    41→    41→];
+    42→    42→
+    43→    43→function loadSettings(): AppSettings {
+    44→    44→  if (typeof window === 'undefined') return DEFAULT_SETTINGS;
+    45→    45→  try {
+    46→    46→    const raw = localStorage.getItem(SETTINGS_KEY);
+    47→    47→    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    48→    48→  } catch {}
+    49→    49→  return DEFAULT_SETTINGS;
+    50→    50→}
+    51→    51→
+    52→    52→function persistSettings(settings: AppSettings) {
+    53→    53→  if (typeof window === 'undefined') return;
+    54→    54→  try {
+    55→    55→    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    56→    56→  } catch {}
+    57→    57→}
+    58→    58→
+    59→    59→function Sun(props: React.SVGProps<SVGSVGElement>) {
+    60→    60→  return (
+    61→    61→    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    62→    62→      <circle cx="12" cy="12" r="4" /><path d="M12 2v2" /><path d="M12 20v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" /><path d="M2 12h2" /><path d="M20 12h2" /><path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" />
+    63→    63→    </svg>
+    64→    64→  );
+    65→    65→}
+    66→    66→
+    67→    67→function Moon(props: React.SVGProps<SVGSVGElement>) {
+    68→    68→  return (
+    69→    69→    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    70→    70→      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+    71→    71→    </svg>
+    72→    72→  );
+    73→    73→}
+    74→    74→
+    75→    75→function Monitor(props: React.SVGProps<SVGSVGElement>) {
+    76→    76→  return (
+    77→    77→    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    78→    78→      <rect width="20" height="14" x="2" y="3" rx="2" /><line x1="8" x2="16" y1="21" y2="21" /><line x1="12" x2="12" y1="17" y2="21" />
+    79→    79→    </svg>
+    80→    80→  );
+    81→    81→}
+    82→    82→
+    83→    83→interface NicheFormData {
+    84→    84→  visualTheme: string;
+    85→    85→  writingStyle: string;
+    86→    86→  audience: string;
+    87→    87→  language: string;
+    88→    88→  description: string;
+    89→    89→  channelName: string;
+    90→    90→  channelDescription: string;
+    91→    91→  channelCategory: string;
+    92→    92→  channelUrl: string;
+    93→    93→}
+    94→    94→
+    95→    95→const EMPTY_NICHE: NicheFormData = {
+    96→    96→  visualTheme: '',
+    97→    97→  writingStyle: '',
+    98→    98→  audience: '',
+    99→    99→  language: '',
+   100→   100→  description: '',
+   101→   101→  channelName: '',
+   102→   102→  channelDescription: '',
+   103→   103→  channelCategory: '',
+   104→   104→  channelUrl: '',
+   105→   105→};
+   106→   106→
+   107→   107→export default function SettingsPage() {
+   108→   108→  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+   109→   109→  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   110→   110→  const [mounted, setMounted] = useState(false);
+   111→   111→  const { user, checkSession } = useAuthStore();
+   112→   112→  const { setTheme: applyTheme, theme: nextTheme } = useTheme();
+   113→   113→  const { tools, loadTools } = useAppStore();
+   114→   114→
+   115→   115→  const activeTheme = nextTheme ?? 'system';
+   116→   116→  const isAdmin = user?.role === 'admin';
+   117→   117→  const ytConnected = user?.youtubeConnected === true;
+   118→   118→
+   119→   119→  // YouTube connection states
+   120→   120→  const [ytLoading, setYtLoading] = useState(false);
+   121→   121→  const [ytChannelName, setYtChannelName] = useState<string | null>(null);
+   122→   122→
+   123→   123→  // Niche dialog
+   124→   124→  const [nicheOpen, setNicheOpen] = useState(false);
+   125→   125→  const [nicheSaving, setNicheSaving] = useState(false);
+   126→   126→  const [nicheForm, setNicheForm] = useState<NicheFormData>(EMPTY_NICHE);
+   127→   127→
+   128→   128→  // Current niche data (from user object)
+   129→   129→  const currentNiche = user?.channelNiche;
+   130→   130→
+   131→   131→  // Count filled niche fields
+   132→   132→  const filledFields = currentNiche
+   133→   133→    ? [currentNiche.visualTheme, currentNiche.writingStyle, currentNiche.audience, currentNiche.language, currentNiche.description, currentNiche.channelName, currentNiche.channelCategory].filter(Boolean).length
+   134→   134→    : 0;
+   135→   135→
+   136→   136→  const hasNiche = filledFields > 0;
+   137→   137→
+   138→   138→  // Load settings & fetch YouTube channel name
+   139→   139→  useEffect(() => {
+   140→   140→    setMounted(true);
+   141→   141→    setSettings(loadSettings());
+   142→   142→    loadTools();
+   143→   143→    if (ytConnected) {
+   144→   144→      fetch('/api/youtube/channel')
+   145→   145→        .then((r) => r.ok ? r.json() : null)
+   146→   146→        .then((data) => data?.channel?.title && setYtChannelName(data.channel.title))
+   147→   147→        .catch(() => {});
+   148→   148→    }
+   149→   149→  }, [ytConnected, loadTools]);
+   150→   150→
+   151→   151→  const autoPersist = useCallback(
+   152→   152→    (newSettings: AppSettings) => {
+   153→   153→      if (!newSettings.autoSave) return;
+   154→   154→      if (debounceRef.current) clearTimeout(debounceRef.current);
+   155→   155→      debounceRef.current = setTimeout(() => {
+   156→   156→        persistSettings(newSettings);
+   157→   157→      }, 500);
+   158→   158→    },
+   159→   159→    []
+   160→   160→  );
+   161→   161→
+   162→   162→  const updateSettings = useCallback(
+   163→   163→    (partial: Partial<AppSettings>) => {
+   164→   164→      setSettings((prev) => {
+   165→   165→        const next = { ...prev, ...partial };
+   166→   166→        autoPersist(next);
+   167→   167→        return next;
+   168→   168→      });
+   169→   169→    },
+   170→   170→    [autoPersist]
+   171→   171→  );
+   172→   172→
+   173→   173→  const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
+   174→   174→    applyTheme(newTheme);
+   175→   175→    const next = { ...settings, theme: newTheme };
+   176→   176→    setSettings(next);
+   177→   177→    persistSettings(next);
+   178→   178→  };
+   179→   179→
+   180→   180→  const handleConnectYouTube = () => {
+   181→   181→    setYtLoading(true);
+   182→   182→    window.location.href = '/api/youtube/auth';
+   183→   183→  };
+   184→   184→
+   185→   185→  const handleDisconnectYouTube = async () => {
+   186→   186→    setYtLoading(true);
+   187→   187→    try {
+   188→   188→      const res = await fetch('/api/youtube/disconnect', { method: 'POST' });
+   189→   189→      if (res.ok) {
+   190→   190→        setYtChannelName(null);
+   191→   191→        useAuthStore.getState().checkSession();
+   192→   192→        toast.success('YouTube channel disconnected');
+   193→   193→      } else {
+   194→   194→        toast.error('Failed to disconnect');
+   195→   195→      }
+   196→   196→    } catch {
+   197→   197→      toast.error('Failed to disconnect');
+   198→   198→    } finally {
+   199→   199→      setYtLoading(false);
+   200→   200→    }
+   201→   201→  };
+   202→   202→
+   203→   203→  // Open niche editor — pre-fill from current data
+   204→   204→  const openNicheEditor = () => {
+   205→   205→    setNicheForm({
+   206→   206→      visualTheme: currentNiche?.visualTheme || '',
+   207→   207→      writingStyle: currentNiche?.writingStyle || '',
+   208→   208→      audience: currentNiche?.audience || '',
+   209→   209→      language: currentNiche?.language || '',
+   210→   210→      description: currentNiche?.description || '',
+   211→   211→      channelName: currentNiche?.channelName || '',
+   212→   212→      channelDescription: currentNiche?.channelDescription || '',
+   213→   213→      channelCategory: currentNiche?.channelCategory || '',
+   214→   214→      channelUrl: currentNiche?.channelUrl || '',
+   215→   215→    });
+   216→   216→    setNicheOpen(true);
+   217→   217→  };
+   218→   218→
+   219→   219→  // Save niche
+   220→   220→  const handleSaveNiche = async () => {
+   221→   221→    setNicheSaving(true);
+   222→   222→    try {
+   223→   223→      const res = await fetch('/api/channel-niche', {
+   224→   224→        method: 'PUT',
+   225→   225→        headers: { 'Content-Type': 'application/json' },
+   226→   226→        body: JSON.stringify(nicheForm),
+   227→   227→      });
+   228→   228→      const data = await res.json();
+   229→   229→      if (res.ok) {
+   230→   230→        toast.success('Channel niche saved');
+   231→   231→        setNicheOpen(false);
+   232→   232→        checkSession();
+   233→   233→      } else {
+   234→   234→        toast.error(data.error || 'Failed to save');
+   235→   235→      }
+   236→   236→    } catch {
+   237→   237→      toast.error('Network error');
+   238→   238→    } finally {
+   239→   239→      setNicheSaving(false);
+   240→   240→    }
+   241→   241→  };
+   242→   242→
+   243→   243→  const updateNicheField = (key: keyof NicheFormData, value: string) => {
+   244→   244→    setNicheForm((prev) => ({ ...prev, [key]: value }));
+   245→   245→  };
+   246→   246→
+   247→   247→  return (
+   248→   248→    <motion.div
+   249→   249→      initial={{ opacity: 0, y: 20 }}
+   250→   250→      animate={{ opacity: 1, y: 0 }}
+   251→   251→      transition={{ duration: 0.4, ease: 'easeOut' }}
+   252→   252→      className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6"
+   253→   253→    >
+   254→   254→      {/* Header */}
+   255→   255→      <div className="space-y-1">
+   256→   256→        <div className="flex items-center gap-3">
+   257→   257→          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+   258→   258→            <Settings className="h-5 w-5 text-primary" />
+   259→   259→          </div>
+   260→   260→          <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+   261→   261→        </div>
+   262→   262→        <p className="text-muted-foreground">Configure your application preferences</p>
+   263→   263→      </div>
+   264→   264→
+   265→   265→      <Separator />
+   266→   266→
+   267→   267→      {/* Account info */}
+   268→   268→      {user && (
+   269→   269→        <Card>
+   270→   270→          <CardHeader>
+   271→   271→            <CardTitle className="text-lg">Account</CardTitle>
+   272→   272→            <CardDescription>Your account information</CardDescription>
+   273→   273→          </CardHeader>
+   274→   274→          <CardContent className="space-y-2">
+   275→   275→            <div className="grid grid-cols-2 gap-4 text-sm">
+   276→   276→              <div>
+   277→   277→                <p className="text-muted-foreground">Name</p>
+   278→   278→                <p className="font-medium">{user.name}</p>
+   279→   279→              </div>
+   280→   280→              <div>
+   281→   281→                <p className="text-muted-foreground">Email</p>
+   282→   282→                <p className="font-medium">{user.email}</p>
+   283→   283→              </div>
+   284→   284→            </div>
+   285→   285→            <div className="pt-1">
+   286→   286→              <Badge variant={isAdmin ? 'default' : 'secondary'} className="gap-1.5">
+   287→   287→                {isAdmin ? <ShieldCheck className="size-3.5" /> : <Shield className="size-3.5" />}
+   288→   288→                {isAdmin ? 'Admin' : user.plan === 'pro' ? 'Pro' : 'Free'}
+   289→   289→              </Badge>
+   290→   290→            </div>
+   291→   291→          </CardContent>
+   292→   292→        </Card>
+   293→   293→      )}
+   294→   294→
+   295→   295→      {/* ══════════════════════════════════════════════════════ */}
+   296→   296→      {/* YouTube Channel Section — only visible when YouTube tool is enabled */}
+   297→   297→      {/* ══════════════════════════════════════════════════════ */}
+   298→   298→      {tools && tools.youtube && (
+   299→   299→      <Card>
+   300→   300→        <CardHeader>
+   301→   301→          <div className="flex items-center justify-between">
+   302→   302→            <div>
+   303→   303→              <CardTitle className="text-lg flex items-center gap-2">
+   304→   304→                <Youtube className="size-5 text-red-500" />
+   305→   305→                YouTube Channel
+   306→   306→              </CardTitle>
+   307→   307→              <CardDescription>Connect your channel and configure niche settings</CardDescription>
+   308→   308→            </div>
+   309→   309→            {hasNiche && (
+   310→   310→              <Badge variant="outline" className="text-[10px] gap-1 text-primary border-primary/30">
+   311→   311→                <Palette className="size-2.5" />
+   312→   312→                {filledFields} niche fields set
+   313→   313→              </Badge>
+   314→   314→            )}
+   315→   315→          </div>
+   316→   316→        </CardHeader>
+   317→   317→        <CardContent className="space-y-4">
+   318→   318→          {/* Connection Status */}
+   319→   319→          {ytConnected ? (
+   320→   320→            <>
+   321→   321→              <div className="flex items-center gap-3 rounded-lg border border-green-500/20 bg-green-500/5 p-4">
+   322→   322→                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-green-500/10">
+   323→   323→                  <CheckCircle2 className="size-5 text-green-500" />
+   324→   324→                </div>
+   325→   325→                <div className="flex-1 min-w-0">
+   326→   326→                  <p className="text-sm font-medium">Channel Connected</p>
+   327→   327→                  {ytChannelName && (
+   328→   328→                    <p className="text-sm text-muted-foreground truncate">{ytChannelName}</p>
+   329→   329→                  )}
+   330→   330→                </div>
+   331→   331→                <a
+   332→   332→                  href="https://studio.youtube.com"
+   333→   333→                  target="_blank"
+   334→   334→                  rel="noopener noreferrer"
+   335→   335→                  className="shrink-0"
+   336→   336→                >
+   337→   337→                  <Button variant="ghost" size="sm" className="gap-1.5 text-xs">
+   338→   338→                    <ExternalLink className="size-3.5" />
+   339→   339→                    YouTube Studio
+   340→   340→                  </Button>
+   341→   341→                </a>
+   342→   342→              </div>
+   343→   343→              <Button
+   344→   344→                variant="outline"
+   345→   345→                onClick={handleDisconnectYouTube}
+   346→   346→                disabled={ytLoading}
+   347→   347→                className="w-full gap-2 text-destructive hover:text-destructive"
+   348→   348→              >
+   349→   349→                {ytLoading ? (
+   350→   350→                  <Loader2 className="size-4 animate-spin" />
+   351→   351→                ) : (
+   352→   352→                  <Unplug className="size-4" />
+   353→   353→                )}
+   354→   354→                Disconnect YouTube Channel
+   355→   355→              </Button>
+   356→   356→            </>
+   357→   357→          ) : (
+   358→   358→            <>
+   359→   359→              <div className="flex items-center gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
+   360→   360→                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-500/10">
+   361→   361→                  <AlertTriangle className="size-5 text-amber-500" />
+   362→   362→                </div>
+   363→   363→                <div>
+   364→   364→                  <p className="text-sm font-medium">Not Connected</p>
+   365→   365→                  <p className="text-xs text-muted-foreground">
+   366→   366→                    Connect your YouTube channel to view stats, manage videos, and use AI features
+   367→   367→                  </p>
+   368→   368→                </div>
+   369→   369→              </div>
+   370→   370→              <Button
+   371→   371→                onClick={handleConnectYouTube}
+   372→   372→                disabled={ytLoading}
+   373→   373→                className="w-full gap-2"
+   374→   374→              >
+   375→   375→                {ytLoading ? (
+   376→   376→                  <Loader2 className="size-4 animate-spin" />
+   377→   377→                ) : (
+   378→   378→                  <Youtube className="size-4" />
+   379→   379→                )}
+   380→   380→                Connect YouTube Channel
+   381→   381→              </Button>
+   382→   382→            </>
+   383→   383→          )}
+   384→   384→
+   385→   385→          <Separator />
+   386→   386→
+   387→   387→          {/* Channel Niche Preview + Edit Button */}
+   388→   388→          <div className="space-y-3">
+   389→   389→            <div className="flex items-center justify-between">
+   390→   390→              <div className="flex items-center gap-2 text-sm font-semibold">
+   391→   391→                <Palette className="size-4 text-primary" />
+   392→   392→                Channel Niche & Style
+   393→   393→              </div>
+   394→   394→              <Button
+   395→   395→                variant="outline"
+   396→   396→                size="sm"
+   397→   397→                className="gap-1.5"
+   398→   398→                onClick={openNicheEditor}
+   399→   399→              >
+   400→   400→                <Edit3 className="size-3.5" />
+   401→   401→                {hasNiche ? 'Edit Niche' : 'Set Up Niche'}
+   402→   402→              </Button>
+   403→   403→            </div>
+   404→   404→
+   405→   405→            {hasNiche ? (
+   406→   406→              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+   407→   407→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   408→   408→                  {currentNiche?.channelName && (
+   409→   409→                    <div className="space-y-0.5">
+   410→   410→                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+   411→   411→                        <Radio className="size-3" /> Channel
+   412→   412→                      </p>
+   413→   413→                      <p className="text-sm font-medium">{currentNiche.channelName}</p>
+   414→   414→                    </div>
+   415→   415→                  )}
+   416→   416→                  {currentNiche?.channelCategory && (
+   417→   417→                    <div className="space-y-0.5">
+   418→   418→                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+   419→   419→                        <FileText className="size-3" /> Category
+   420→   420→                      </p>
+   421→   421→                      <p className="text-sm font-medium">{currentNiche.channelCategory}</p>
+   422→   422→                    </div>
+   423→   423→                  )}
+   424→   424→                  {currentNiche?.visualTheme && (
+   425→   425→                    <div className="space-y-0.5">
+   426→   426→                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+   427→   427→                        <Eye className="size-3" /> Visual Theme
+   428→   428→                      </p>
+   429→   429→                      <p className="text-sm">{currentNiche.visualTheme}</p>
+   430→   430→                    </div>
+   431→   431→                  )}
+   432→   432→                  {currentNiche?.writingStyle && (
+   433→   433→                    <div className="space-y-0.5">
+   434→   434→                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+   435→   435→                        <Pen className="size-3" /> Writing Style
+   436→   436→                      </p>
+   437→   437→                      <p className="text-sm">{currentNiche.writingStyle}</p>
+   438→   438→                    </div>
+   439→   439→                  )}
+   440→   440→                  {currentNiche?.audience && (
+   441→   441→                    <div className="space-y-0.5">
+   442→   442→                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+   443→   443→                        <Users className="size-3" /> Audience
+   444→   444→                      </p>
+   445→   445→                      <p className="text-sm">{currentNiche.audience}</p>
+   446→   446→                    </div>
+   447→   447→                  )}
+   448→   448→                  {currentNiche?.language && (
+   449→   449→                    <div className="space-y-0.5">
+   450→   450→                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+   451→   451→                        <Globe className="size-3" /> Language
+   452→   452→                      </p>
+   453→   453→                      <p className="text-sm">{currentNiche.language}</p>
+   454→   454→                    </div>
+   455→   455→                  )}
+   456→   456→                </div>
+   457→   457→                {currentNiche?.description && (
+   458→   458→                  <div className="pt-1">
+   459→   459→                    <p className="text-[11px] text-muted-foreground mb-1">Niche Description</p>
+   460→   460→                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">{currentNiche.description}</p>
+   461→   461→                  </div>
+   462→   462→                )}
+   463→   463→              </div>
+   464→   464→            ) : (
+   465→   465→              <div className="rounded-lg border border-dashed bg-muted/20 p-6 text-center">
+   466→   466→                <Palette className="size-8 text-muted-foreground mx-auto mb-2" />
+   467→   467→                <p className="text-sm font-medium">No Channel Niche Set</p>
+   468→   468→                <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+   469→   469→                  Define your channel&apos;s visual theme, writing style, audience, and language so AI generates scripts tailored to your brand.
+   470→   470→                </p>
+   471→   471→                <Button
+   472→   472→                  variant="outline"
+   473→   473→                  size="sm"
+   474→   474→                  className="mt-3 gap-1.5"
+   475→   475→                  onClick={openNicheEditor}
+   476→   476→                >
+   477→   477→                  <Edit3 className="size-3.5" />
+   478→   478→                  Set Up Your Niche
+   479→   479→                </Button>
+   480→   480→              </div>
+   481→   481→            )}
+   482→   482→          </div>
+   483→   483→        </CardContent>
+   484→   484→      </Card>
+   485→   485→      )}
+   486→   486→
+   487→   487→      {/* Appearance */}
+   488→   488→      <Card>
+   489→   489→        <CardHeader>
+   490→   490→          <CardTitle className="text-lg">Appearance</CardTitle>
+   491→   491→          <CardDescription>Customize the look and feel of the application</CardDescription>
+   492→   492→        </CardHeader>
+   493→   493→        <CardContent className="space-y-6">
+   494→   494→          <div className="space-y-3">
+   495→   495→            <Label>Theme</Label>
+   496→   496→            <div className="grid grid-cols-3 gap-2">
+   497→   497→              {THEME_OPTIONS.map((option) => {
+   498→   498→                const Icon = option.icon;
+   499→   499→                const isActive = mounted && activeTheme === option.value;
+   500→   500→                return (
+   501→   501→                  <button
+   502→   502→                    key={option.value}
+   503→   503→                    type="button"
+   504→   504→                    onClick={() => handleThemeChange(option.value)}
+   505→   505→                    className={`flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 text-sm font-medium transition-colors ${
+   506→   506→                      isActive
+   507→   507→                        ? 'border-primary bg-primary/5 text-primary'
+   508→   508→                        : 'border-muted bg-background text-muted-foreground hover:border-muted-foreground/30 hover:bg-muted/50'
+   509→   509→                    }`}
+   510→   510→                  >
+   511→   511→                    <Icon className="h-4 w-4" />
+   512→   512→                    {option.label}
+   513→   513→                  </button>
+   514→   514→                );
+   515→   515→              })}
+   516→   516→            </div>
+   517→   517→          </div>
+   518→   518→
+   519→   519→          <Separator />
+   520→   520→
+   521→   521→          <div className="flex items-center justify-between">
+   522→   522→            <div className="space-y-0.5">
+   523→   523→              <Label htmlFor="auto-save">Auto Save</Label>
+   524→   524→              <p className="text-sm text-muted-foreground">
+   525→   525→                Automatically save changes to local storage
+   526→   526→              </p>
+   527→   527→            </div>
+   528→   528→            <Switch
+   529→   529→              id="auto-save"
+   530→   530→              checked={settings.autoSave}
+   531→   531→              onCheckedChange={(checked) => updateSettings({ autoSave: checked })}
+   532→   532→            />
+   533→   533→          </div>
+   534→   534→        </CardContent>
+   535→   535→      </Card>
+   536→   536→
+   537→   537→      {/* ══════════════════════════════════════════════════════ */}
+   538→   538→      {/* Edit Channel Niche Dialog */}
+   539→   539→      {/* ══════════════════════════════════════════════════════ */}
+   540→   540→      <Dialog open={nicheOpen} onOpenChange={setNicheOpen}>
+   541→   541→        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+   542→   542→          <DialogHeader>
+   543→   543→            <DialogTitle className="flex items-center gap-2">
+   544→   544→              <Palette className="size-4" />
+   545→   545→              Channel Niche & Style
+   546→   546→            </DialogTitle>
+   547→   547→            <DialogDescription>
+   548→   548→              Define your channel&apos;s identity so AI creates content tailored to your brand.
+   549→   549→            </DialogDescription>
+   550→   550→          </DialogHeader>
+   551→   551→
+   552→   552→          <div className="space-y-4 py-2">
+   553→   553→            {/* Channel Details */}
+   554→   554→            <div className="space-y-3">
+   555→   555→              <div className="flex items-center gap-2 text-sm font-semibold">
+   556→   556→                <Radio className="size-3.5 text-red-500" />
+   557→   557→                Channel Details
+   558→   558→              </div>
+   559→   559→
+   560→   560→              <div className="space-y-2">
+   561→   561→                <Label className="text-xs">Channel Name</Label>
+   562→   562→                <Input
+   563→   563→                  placeholder="e.g. TechWithAli"
+   564→   564→                  value={nicheForm.channelName}
+   565→   565→                  onChange={(e) => updateNicheField('channelName', e.target.value)}
+   566→   566→                />
+   567→   567→              </div>
+   568→   568→
+   569→   569→              <div className="space-y-2">
+   570→   570→                <Label className="text-xs">Channel Category</Label>
+   571→   571→                <Input
+   572→   572→                  placeholder="e.g. Technology, Education, Gaming, Cooking"
+   573→   573→                  value={nicheForm.channelCategory}
+   574→   574→                  onChange={(e) => updateNicheField('channelCategory', e.target.value)}
+   575→   575→                />
+   576→   576→              </div>
+   577→   577→
+   578→   578→              <div className="space-y-2">
+   579→   579→                <Label className="text-xs">Channel URL</Label>
+   580→   580→                <Input
+   581→   581→                  placeholder="https://youtube.com/@yourchannel"
+   582→   582→                  value={nicheForm.channelUrl}
+   583→   583→                  onChange={(e) => updateNicheField('channelUrl', e.target.value)}
+   584→   584→                />
+   585→   585→              </div>
+   586→   586→
+   587→   587→              <div className="space-y-2">
+   588→   588→                <Label className="text-xs">Channel Description</Label>
+   589→   589→                <Textarea
+   590→   590→                  placeholder="Describe your YouTube channel, what kind of content you create, your upload schedule, and what makes your channel unique..."
+   591→   591→                  rows={3}
+   592→   592→                  value={nicheForm.channelDescription}
+   593→   593→                  onChange={(e) => updateNicheField('channelDescription', e.target.value)}
+   594→   594→                />
+   595→   595→              </div>
+   596→   596→            </div>
+   597→   597→
+   598→   598→            <Separator />
+   599→   599→
+   600→   600→            {/* Niche & Style */}
+   601→   601→            <div className="space-y-3">
+   602→   602→              <div className="flex items-center gap-2 text-sm font-semibold">
+   603→   603→                <Palette className="size-3.5 text-primary" />
+   604→   604→                Niche & Style
+   605→   605→              </div>
+   606→   606→
+   607→   607→              <div className="space-y-2">
+   608→   608→                <Label className="text-xs flex items-center gap-1">
+   609→   609→                  <Eye className="size-3" /> Visual Theme
+   610→   610→                </Label>
+   611→   611→                <Textarea
+   612→   612→                  placeholder="e.g. Cinematic dark tones with warm lighting, professional thumbnails with bold white text, minimal backgrounds with vibrant accent colors"
+   613→   613→                  rows={2}
+   614→   614→                  value={nicheForm.visualTheme}
+   615→   615→                  onChange={(e) => updateNicheField('visualTheme', e.target.value)}
+   616→   616→                />
+   617→   617→              </div>
+   618→   618→
+   619→   619→              <div className="space-y-2">
+   620→   620→                <Label className="text-xs flex items-center gap-1">
+   621→   621→                  <Pen className="size-3" /> Writing Style
+   622→   622→                </Label>
+   623→   623→                <Textarea
+   624→   624→                  placeholder="e.g. Casual and energetic, uses humor and relatable analogies, speaks directly to the viewer with 'you' language, includes pop culture references"
+   625→   625→                  rows={2}
+   626→   626→                  value={nicheForm.writingStyle}
+   627→   627→                  onChange={(e) => updateNicheField('writingStyle', e.target.value)}
+   628→   628→                />
+   629→   629→              </div>
+   630→   630→
+   631→   631→              <div className="space-y-2">
+   632→   632→                <Label className="text-xs flex items-center gap-1">
+   633→   633→                  <Users className="size-3" /> Target Audience
+   634→   634→                </Label>
+   635→   635→                <Textarea
+   636→   636→                  placeholder="e.g. Tech-savvy millennials and Gen Z viewers aged 18-35 interested in AI tools, productivity, and software development"
+   637→   637→                  rows={2}
+   638→   638→                  value={nicheForm.audience}
+   639→   639→                  onChange={(e) => updateNicheField('audience', e.target.value)}
+   640→   640→                />
+   641→   641→              </div>
+   642→   642→
+   643→   643→              <div className="space-y-2">
+   644→   644→                <Label className="text-xs flex items-center gap-1">
+   645→   645→                  <Globe className="size-3" /> Language
+   646→   646→                </Label>
+   647→   647→                <Input
+   648→   648→                  placeholder="e.g. English (US), Urdu, Hindi, Spanish"
+   649→   649→                  value={nicheForm.language}
+   650→   650→                  onChange={(e) => updateNicheField('language', e.target.value)}
+   651→   651→                />
+   652→   652→              </div>
+   653→   653→            </div>
+   654→   654→
+   655→   655→            <Separator />
+   656→   656→
+   657→   657→            {/* Niche Description (the big one) */}
+   658→   658→            <div className="space-y-2">
+   659→   659→              <Label className="text-xs font-semibold flex items-center gap-1">
+   660→   660→                <FileText className="size-3" /> Detailed Niche Description
+   661→   661→              </Label>
+   662→   662→              <p className="text-[11px] text-muted-foreground">
+   663→   663→                Write as much detail as you want. Describe your niche, content pillars, tone, values, topics you cover, what makes you unique. The AI will use this to generate perfectly tailored scripts.
+   664→   664→              </p>
+   665→   665→              <Textarea
+   666→   666→                placeholder="e.g. My channel focuses on reviewing and demonstrating AI tools for content creators. I cover topics like ChatGPT prompts, AI video generation, automation workflows, and productivity hacks. My content pillars are: 1) Tool Reviews - hands-on testing of new AI tools 2) Tutorials - step-by-step guides 3) News & Trends - covering latest AI developments 4) Comparisons - pitting tools against each other. My tone is friendly yet authoritative. I value practical, actionable content over hype. Viewers come to my channel to learn real skills they can apply immediately..."
+   667→   667→                rows={8}
+   668→   668→                className="min-h-[160px]"
+   669→   669→                value={nicheForm.description}
+   670→   670→                onChange={(e) => updateNicheField('description', e.target.value)}
+   671→   671→              />
+   672→   672→            </div>
+   673→   673→          </div>
+   674→   674→
+   675→   675→          <DialogFooter className="gap-2 sm:gap-0">
+   676→   676→            <Button variant="outline" onClick={() => setNicheOpen(false)}>Cancel</Button>
+   677→   677→            <Button onClick={handleSaveNiche} disabled={nicheSaving}>
+   678→   678→              {nicheSaving ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+   679→   679→              Save Niche
+   680→   680→            </Button>
+   681→   681→          </DialogFooter>
+   682→   682→        </DialogContent>
+   683→   683→      </Dialog>
+   684→   684→
+   685→   685→      {/* ══════════════════════════════════════════════════════ */}
+   686→   686→      {/* Legal Links */}
+   687→   687→      {/* ══════════════════════════════════════════════════════ */}
+   688→   688→      <div className="flex items-center justify-center gap-4 py-4 text-xs text-muted-foreground">
+   689→   689→        <a href="/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+   690→   690→          Privacy Policy
+   691→   691→        </a>
+   692→   692→        <span className="text-border">·</span>
+   693→   693→        <a href="/terms" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+   694→   694→          Terms of Service
+   695→   695→        </a>
+   696→   696→      </div>
+   697→   697→    </motion.div>
+   698→   698→  );
+   699→   699→}
+   700→   700→

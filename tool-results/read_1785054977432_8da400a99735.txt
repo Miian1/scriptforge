@@ -1,0 +1,1489 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import { useEffect, useState, useCallback } from 'react';
+     4→     4→import { useRouter } from 'next/navigation';
+     5→     5→import { motion, AnimatePresence } from 'framer-motion';
+     6→     6→import {
+     7→     7→  ShieldCheck, Users, Crown, Zap, Search, Loader2, ChevronDown,
+     8→     8→  Edit3, Trash2, X, Check, Clock, Star, UserCog,
+     9→     9→  AlertTriangle, RefreshCw, Plus, Minus, CalendarDays, Settings, Eye, Bell, Send,
+    10→    10→  Wrench, Youtube, ToggleLeft, ToggleRight, Save,
+    11→    11→  BrainCircuit, Mic, MessageSquare, Sparkles, Trash
+    12→    12→} from 'lucide-react';
+    13→    13→import { Button } from '@/components/ui/button';
+    14→    14→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+    15→    15→import { Input } from '@/components/ui/input';
+    16→    16→import { Textarea } from '@/components/ui/textarea';
+    17→    17→import { Badge } from '@/components/ui/badge';
+    18→    18→import { Switch } from '@/components/ui/switch';
+    19→    19→import { Separator } from '@/components/ui/separator';
+    20→    20→import {
+    21→    21→  Dialog,
+    22→    22→  DialogContent,
+    23→    23→  DialogHeader,
+    24→    24→  DialogTitle,
+    25→    25→  DialogDescription,
+    26→    26→  DialogFooter,
+    27→    27→} from '@/components/ui/dialog';
+    28→    28→import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+    29→    29→import { Label } from '@/components/ui/label';
+    30→    30→import { useAuthStore } from '@/lib/auth-store';
+    31→    31→import { toast } from 'sonner';
+    32→    32→import { cn } from '@/lib/utils';
+    33→    33→
+    34→    34→interface AdminUser {
+    35→    35→  id: string;
+    36→    36→  name: string;
+    37→    37→  email: string;
+    38→    38→  provider: string;
+    39→    39→  role: string;
+    40→    40→  plan: string;
+    41→    41→  isVerified: boolean;
+    42→    42→  isCustomPlan: boolean;
+    43→    43→  customPlan: { isCustom: boolean; customLabel: string; customDays: number };
+    44→    44→  planExpiresAt: number;
+    45→    45→  planDaysLeft: number;
+    46→    46→  stripe: { customerId: string; subscriptionId: string; currentPeriodEnd: number; cancelAtPeriodEnd: boolean };
+    47→    47→  dailyUsage: { date: string; projectsCreated: number; aiGenerations: number };
+    48→    48→  createdAt: string;
+    49→    49→  updatedAt: string;
+    50→    50→}
+    51→    51→
+    52→    52→function formatDate(timestamp: string | number): string {
+    53→    53→  if (!timestamp) return '—';
+    54→    54→  const date = new Date(typeof timestamp === 'number' ? timestamp : timestamp);
+    55→    55→  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    56→    56→}
+    57→    57→
+    58→    58→function formatExpiryDate(timestamp: number): string {
+    59→    59→  if (!timestamp || timestamp <= 0) return '—';
+    60→    60→  const date = new Date(timestamp);
+    61→    61→  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    62→    62→}
+    63→    63→
+    64→    64→// ── AI Model types ──
+    65→    65→interface AIModelItem {
+    66→    66→  _id: string;
+    67→    67→  name: string;
+    68→    68→  modelId: string;
+    69→    69→  category: 'text' | 'voice';
+    70→    70→  description: string;
+    71→    71→  isActive: boolean;
+    72→    72→  sortOrder: number;
+    73→    73→}
+    74→    74→
+    75→    75→// ── Days editing mode ──
+    76→    76→type DaysEditMode = 'add' | 'reduce' | 'set';
+    77→    77→
+    78→    78→export default function AdminPage() {
+    79→    79→  const router = useRouter();
+    80→    80→  const user = useAuthStore((s) => s.user);
+    81→    81→  const [users, setUsers] = useState<AdminUser[]>([]);
+    82→    82→  const [loading, setLoading] = useState(true);
+    83→    83→  const [search, setSearch] = useState('');
+    84→    84→  const [editUser, setEditUser] = useState<AdminUser | null>(null);
+    85→    85→  const [saving, setSaving] = useState(false);
+    86→    86→  const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
+    87→    87→  const [deleting, setDeleting] = useState(false);
+    88→    88→  const [notifyUser, setNotifyUser] = useState<AdminUser | null>(null);
+    89→    89→  const [sendingNotif, setSendingNotif] = useState(false);
+    90→    90→  const [notifTitle, setNotifTitle] = useState('');
+    91→    91→  const [notifMessage, setNotifMessage] = useState('');
+    92→    92→  const [notifType, setNotifType] = useState<'info' | 'warning' | 'urgent'>('info');
+    93→    93→
+    94→    94→  // Tools config state
+    95→    95→  const [toolsConfig, setToolsConfig] = useState({ youtube: true });
+    96→    96→  const [toolsLoading, setToolsLoading] = useState(false);
+    97→    97→  const [toolsSaving, setToolsSaving] = useState(false);
+    98→    98→
+    99→    99→  // AI Models state
+   100→   100→  const [aiModels, setAiModels] = useState<AIModelItem[]>([]);
+   101→   101→  const [modelsLoading, setModelsLoading] = useState(false);
+   102→   102→  const [modelDialogOpen, setModelDialogOpen] = useState(false);
+   103→   103→  const [editingModel, setEditingModel] = useState<AIModelItem | null>(null);
+   104→   104→  const [modelSaving, setModelSaving] = useState(false);
+   105→   105→  const [modelName, setModelName] = useState('');
+   106→   106→  const [modelId, setModelId] = useState('');
+   107→   107→  const [modelCategory, setModelCategory] = useState<'text' | 'voice'>('text');
+   108→   108→  const [modelDescription, setModelDescription] = useState('');
+   109→   109→  const [modelIsActive, setModelIsActive] = useState(true);
+   110→   110→  const [deletingModel, setDeletingModel] = useState<AIModelItem | null>(null);
+   111→   111→  const [deletingModelLoading, setDeletingModelLoading] = useState(false);
+   112→   112→
+   113→   113→  // Edit form state
+   114→   114→  const [editPlan, setEditPlan] = useState('free');
+   115→   115→  const [editIsCustom, setEditIsCustom] = useState(false);
+   116→   116→  const [editCustomLabel, setEditCustomLabel] = useState('');
+   117→   117→  const [editCustomDays, setEditCustomDays] = useState(0);
+   118→   118→  const [editRole, setEditRole] = useState('user');
+   119→   119→  const [daysEditMode, setDaysEditMode] = useState<DaysEditMode>('add');
+   120→   120→  const [daysValue, setDaysValue] = useState(0);
+   121→   121→
+   122→   122→  // Redirect non-admin
+   123→   123→  useEffect(() => {
+   124→   124→    if (user && user.role !== 'admin') {
+   125→   125→      router.push('/dashboard');
+   126→   126→    }
+   127→   127→  }, [user, router]);
+   128→   128→
+   129→   129→  const fetchUsers = useCallback(async () => {
+   130→   130→    setLoading(true);
+   131→   131→    try {
+   132→   132→      const res = await fetch('/api/admin/users');
+   133→   133→      if (res.ok) {
+   134→   134→        const data = await res.json();
+   135→   135→        setUsers(data.users || []);
+   136→   136→      } else {
+   137→   137→        const data = await res.json();
+   138→   138→        toast.error(data.error || 'Failed to load users');
+   139→   139→      }
+   140→   140→    } catch {
+   141→   141→      toast.error('Network error. Please try again.');
+   142→   142→    } finally {
+   143→   143→      setLoading(false);
+   144→   144→    }
+   145→   145→  }, []);
+   146→   146→
+   147→   147→  useEffect(() => {
+   148→   148→    if (user?.role === 'admin') {
+   149→   149→      fetchUsers();
+   150→   150→    }
+   151→   151→  }, [user, fetchUsers]);
+   152→   152→
+   153→   153→  // Filter users by search
+   154→   154→  const filteredUsers = users.filter((u) => {
+   155→   155→    if (!search.trim()) return true;
+   156→   156→    const q = search.toLowerCase();
+   157→   157→    return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+   158→   158→  });
+   159→   159→
+   160→   160→  // Stats
+   161→   161→  const totalUsers = users.length;
+   162→   162→  const proUsers = users.filter((u) => u.plan === 'pro').length;
+   163→   163→  const customUsers = users.filter((u) => u.isCustomPlan).length;
+   164→   164→  const expiredUsers = users.filter((u) => u.plan === 'pro' && u.planDaysLeft <= 0).length;
+   165→   165→
+   166→   166→  // Open edit dialog
+   167→   167→  const openEdit = (u: AdminUser) => {
+   168→   168→    setEditUser(u);
+   169→   169→    setEditPlan(u.plan);
+   170→   170→    setEditIsCustom(u.isCustomPlan);
+   171→   171→    setEditCustomLabel(u.customPlan?.customLabel || '');
+   172→   172→    setEditCustomDays(u.customPlan?.customDays || 0);
+   173→   173→    setEditRole(u.role);
+   174→   174→    setDaysEditMode('add');
+   175→   175→    setDaysValue(0);
+   176→   176→  };
+   177→   177→
+   178→   178→  // ── Compute preview of what days will be after save ──
+   179→   179→  const previewDaysLeft = (): number => {
+   180→   180→    if (!editUser) return 0;
+   181→   181→    if (editPlan === 'free') return 0;
+   182→   182→
+   183→   183→    // If custom is ON and has custom days, those take priority
+   184→   184→    if (editIsCustom && editCustomDays > 0) {
+   185→   185→      return editCustomDays;
+   186→   186→    }
+   187→   187→
+   188→   188→    // Base expiry
+   189→   189→    let baseExpiry = editUser.planExpiresAt && editUser.planExpiresAt > Date.now()
+   190→   190→      ? editUser.planExpiresAt
+   191→   191→      : Date.now();
+   192→   192→
+   193→   193→    if (daysEditMode === 'add' && daysValue > 0) {
+   194→   194→      baseExpiry = baseExpiry + daysValue * 24 * 60 * 60 * 1000;
+   195→   195→    } else if (daysEditMode === 'reduce' && daysValue > 0) {
+   196→   196→      baseExpiry = Math.max(Date.now(), baseExpiry - daysValue * 24 * 60 * 60 * 1000);
+   197→   197→    } else if (daysEditMode === 'set') {
+   198→   198→      if (daysValue <= 0) return 0;
+   199→   199→      baseExpiry = Date.now() + daysValue * 24 * 60 * 60 * 1000;
+   200→   200→    }
+   201→   201→
+   202→   202→    const diff = baseExpiry - Date.now();
+   203→   203→    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+   204→   204→  };
+   205→   205→
+   206→   206→  const previewExpiryDate = (): string => {
+   207→   207→    if (!editUser) return '—';
+   208→   208→    if (editPlan === 'free') return 'N/A';
+   209→   209→
+   210→   210→    if (editIsCustom && editCustomDays > 0) {
+   211→   211→      const d = new Date(Date.now() + editCustomDays * 24 * 60 * 60 * 1000);
+   212→   212→      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+   213→   213→    }
+   214→   214→
+   215→   215→    let baseExpiry = editUser.planExpiresAt && editUser.planExpiresAt > Date.now()
+   216→   216→      ? editUser.planExpiresAt
+   217→   217→      : Date.now();
+   218→   218→
+   219→   219→    if (daysEditMode === 'add' && daysValue > 0) {
+   220→   220→      baseExpiry = baseExpiry + daysValue * 24 * 60 * 60 * 1000;
+   221→   221→    } else if (daysEditMode === 'reduce' && daysValue > 0) {
+   222→   222→      baseExpiry = Math.max(Date.now(), baseExpiry - daysValue * 24 * 60 * 60 * 1000);
+   223→   223→    } else if (daysEditMode === 'set') {
+   224→   224→      if (daysValue <= 0) return 'N/A';
+   225→   225→      baseExpiry = Date.now() + daysValue * 24 * 60 * 60 * 1000;
+   226→   226→    }
+   227→   227→
+   228→   228→    return new Date(baseExpiry).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+   229→   229→  };
+   230→   230→
+   231→   231→  // Save user
+   232→   232→  const handleSave = async () => {
+   233→   233→    if (!editUser) return;
+   234→   234→    setSaving(true);
+   235→   235→    try {
+   236→   236→      const body: Record<string, unknown> = {
+   237→   237→        plan: editPlan,
+   238→   238→        role: editRole,
+   239→   239→        isCustomPlan: editIsCustom,
+   240→   240→        customPlan: {
+   241→   241→          isCustom: editIsCustom,
+   242→   242→          customLabel: editCustomLabel,
+   243→   243→          customDays: editCustomDays,
+   244→   244→        },
+   245→   245→      };
+   246→   246→
+   247→   247→      // Days operations (only when not custom, since custom takes priority)
+   248→   248→      if (!editIsCustom || editCustomDays <= 0) {
+   249→   249→        if (daysEditMode === 'add' && daysValue > 0) {
+   250→   250→          body.addDays = daysValue;
+   251→   251→        } else if (daysEditMode === 'reduce' && daysValue > 0) {
+   252→   252→          body.reduceDays = daysValue;
+   253→   253→        } else if (daysEditMode === 'set') {
+   254→   254→          body.setDays = daysValue;
+   255→   255→        }
+   256→   256→      }
+   257→   257→
+   258→   258→      const res = await fetch(`/api/admin/users/${editUser.id}`, {
+   259→   259→        method: 'PUT',
+   260→   260→        headers: { 'Content-Type': 'application/json' },
+   261→   261→        body: JSON.stringify(body),
+   262→   262→      });
+   263→   263→      const data = await res.json();
+   264→   264→      if (res.ok) {
+   265→   265→        toast.success(`Updated ${editUser.name} successfully`);
+   266→   266→        setEditUser(null);
+   267→   267→        fetchUsers();
+   268→   268→      } else {
+   269→   269→        toast.error(data.error || 'Failed to update user');
+   270→   270→      }
+   271→   271→    } catch {
+   272→   272→      toast.error('Network error. Please try again.');
+   273→   273→    } finally {
+   274→   274→      setSaving(false);
+   275→   275→    }
+   276→   276→  };
+   277→   277→
+   278→   278→  // Delete user
+   279→   279→  const handleDelete = async () => {
+   280→   280→    if (!deleteUser) return;
+   281→   281→    setDeleting(true);
+   282→   282→    try {
+   283→   283→      const res = await fetch(`/api/admin/users/${deleteUser.id}`, { method: 'DELETE' });
+   284→   284→      const data = await res.json();
+   285→   285→      if (res.ok) {
+   286→   286→        toast.success(`Deleted ${deleteUser.email}`);
+   287→   287→        setDeleteUser(null);
+   288→   288→        fetchUsers();
+   289→   289→      } else {
+   290→   290→        toast.error(data.error || 'Failed to delete user');
+   291→   291→      }
+   292→   292→    } catch {
+   293→   293→      toast.error('Network error. Please try again.');
+   294→   294→    } finally {
+   295→   295→      setDeleting(false);
+   296→   296→    }
+   297→   297→  };
+   298→   298→
+   299→   299→  // Quick add 30 days
+   300→   300→  const quickAddDays = async (u: AdminUser, days: number) => {
+   301→   301→    try {
+   302→   302→      const res = await fetch(`/api/admin/users/${u.id}`, {
+   303→   303→        method: 'PUT',
+   304→   304→        headers: { 'Content-Type': 'application/json' },
+   305→   305→        body: JSON.stringify({ addDays: days }),
+   306→   306→      });
+   307→   307→      const data = await res.json();
+   308→   308→      if (res.ok) {
+   309→   309→        toast.success(`Added ${days} days to ${u.name}`);
+   310→   310→        fetchUsers();
+   311→   311→      } else {
+   312→   312→        toast.error(data.error || 'Failed to add days');
+   313→   313→      }
+   314→   314→    } catch {
+   315→   315→      toast.error('Network error');
+   316→   316→    }
+   317→   317→  };
+   318→   318→
+   319→   319→  // Send notification to user
+   320→   320→  const handleSendNotification = async () => {
+   321→   321→    if (!notifyUser || !notifTitle.trim() || !notifMessage.trim()) return;
+   322→   322→    setSendingNotif(true);
+   323→   323→    try {
+   324→   324→      const res = await fetch('/api/admin/notify', {
+   325→   325→        method: 'POST',
+   326→   326→        headers: { 'Content-Type': 'application/json' },
+   327→   327→        body: JSON.stringify({
+   328→   328→          userId: notifyUser.id,
+   329→   329→          title: notifTitle.trim(),
+   330→   330→          message: notifMessage.trim(),
+   331→   331→          type: notifType,
+   332→   332→        }),
+   333→   333→      });
+   334→   334→      const data = await res.json();
+   335→   335→      if (res.ok) {
+   336→   336→        toast.success(`Notification sent to ${notifyUser.name}`);
+   337→   337→        setNotifyUser(null);
+   338→   338→        setNotifTitle('');
+   339→   339→        setNotifMessage('');
+   340→   340→        setNotifType('info');
+   341→   341→      } else {
+   342→   342→        toast.error(data.error || 'Failed to send notification');
+   343→   343→      }
+   344→   344→    } catch {
+   345→   345→      toast.error('Network error');
+   346→   346→    } finally {
+   347→   347→      setSendingNotif(false);
+   348→   348→    }
+   349→   349→  };
+   350→   350→
+   351→   351→  // ── Tools Management ──
+   352→   352→  const fetchToolsConfig = useCallback(async () => {
+   353→   353→    setToolsLoading(true);
+   354→   354→    try {
+   355→   355→      const res = await fetch('/api/admin/config');
+   356→   356→      if (res.ok) {
+   357→   357→        const data = await res.json();
+   358→   358→        setToolsConfig(data.config?.tools || { youtube: true });
+   359→   359→      }
+   360→   360→    } catch {
+   361→   361→      // silent
+   362→   362→    } finally {
+   363→   363→      setToolsLoading(false);
+   364→   364→    }
+   365→   365→  }, []);
+   366→   366→
+   367→   367→  useEffect(() => {
+   368→   368→    if (user?.role === 'admin') {
+   369→   369→      fetchToolsConfig();
+   370→   370→    }
+   371→   371→  }, [user, fetchToolsConfig]);
+   372→   372→
+   373→   373→  const handleToggleTool = async (tool: 'youtube') => {
+   374→   374→    const newValue = !toolsConfig[tool];
+   375→   375→    const updated = { ...toolsConfig, [tool]: newValue };
+   376→   376→    setToolsConfig(updated);
+   377→   377→    setToolsSaving(true);
+   378→   378→    try {
+   379→   379→      const res = await fetch('/api/admin/config', {
+   380→   380→        method: 'PUT',
+   381→   381→        headers: { 'Content-Type': 'application/json' },
+   382→   382→        body: JSON.stringify({ tools: updated }),
+   383→   383→      });
+   384→   384→      if (res.ok) {
+   385→   385→        toast.success(`${tool === 'youtube' ? 'YouTube' : tool} ${newValue ? 'enabled' : 'disabled'}`);
+   386→   386→      } else {
+   387→   387→        // Revert on failure
+   388→   388→        setToolsConfig(toolsConfig);
+   389→   389→        toast.error('Failed to update tool setting');
+   390→   390→      }
+   391→   391→    } catch {
+   392→   392→      setToolsConfig(toolsConfig);
+   393→   393→      toast.error('Network error');
+   394→   394→    } finally {
+   395→   395→      setToolsSaving(false);
+   396→   396→    }
+   397→   397→  };
+   398→   398→
+   399→   399→  // ── AI Models Management ──
+   400→   400→  const fetchModels = useCallback(async () => {
+   401→   401→    setModelsLoading(true);
+   402→   402→    try {
+   403→   403→      const res = await fetch('/api/admin/models');
+   404→   404→      if (res.ok) {
+   405→   405→        const data = await res.json();
+   406→   406→        setAiModels(data.models || []);
+   407→   407→      }
+   408→   408→    } catch {
+   409→   409→      // silent
+   410→   410→    } finally {
+   411→   411→      setModelsLoading(false);
+   412→   412→    }
+   413→   413→  }, []);
+   414→   414→
+   415→   415→  useEffect(() => {
+   416→   416→    if (user?.role === 'admin') {
+   417→   417→      fetchModels();
+   418→   418→    }
+   419→   419→  }, [user, fetchModels]);
+   420→   420→
+   421→   421→  const openModelDialog = (model?: AIModelItem) => {
+   422→   422→    if (model) {
+   423→   423→      setEditingModel(model);
+   424→   424→      setModelName(model.name);
+   425→   425→      setModelId(model.modelId);
+   426→   426→      setModelCategory(model.category);
+   427→   427→      setModelDescription(model.description);
+   428→   428→      setModelIsActive(model.isActive);
+   429→   429→    } else {
+   430→   430→      setEditingModel(null);
+   431→   431→      setModelName('');
+   432→   432→      setModelId('');
+   433→   433→      setModelCategory('text');
+   434→   434→      setModelDescription('');
+   435→   435→      setModelIsActive(true);
+   436→   436→    }
+   437→   437→    setModelDialogOpen(true);
+   438→   438→  };
+   439→   439→
+   440→   440→  const handleSaveModel = async () => {
+   441→   441→    if (!modelName.trim() || !modelId.trim()) {
+   442→   442→      toast.error('Name and Model ID are required');
+   443→   443→      return;
+   444→   444→    }
+   445→   445→    setModelSaving(true);
+   446→   446→    try {
+   447→   447→      const body = {
+   448→   448→        name: modelName.trim(),
+   449→   449→        modelId: modelId.trim(),
+   450→   450→        category: modelCategory,
+   451→   451→        description: modelDescription.trim(),
+   452→   452→        isActive: modelIsActive,
+   453→   453→      };
+   454→   454→      const res = editingModel
+   455→   455→        ? await fetch(`/api/admin/models/${editingModel._id}`, {
+   456→   456→            method: 'PUT',
+   457→   457→            headers: { 'Content-Type': 'application/json' },
+   458→   458→            body: JSON.stringify(body),
+   459→   459→          })
+   460→   460→        : await fetch('/api/admin/models', {
+   461→   461→            method: 'POST',
+   462→   462→            headers: { 'Content-Type': 'application/json' },
+   463→   463→            body: JSON.stringify(body),
+   464→   464→          });
+   465→   465→      const data = await res.json();
+   466→   466→      if (res.ok) {
+   467→   467→        toast.success(editingModel ? 'Model updated' : 'Model added');
+   468→   468→        setModelDialogOpen(false);
+   469→   469→        fetchModels();
+   470→   470→      } else {
+   471→   471→        toast.error(data.error || 'Failed to save model');
+   472→   472→      }
+   473→   473→    } catch {
+   474→   474→      toast.error('Network error');
+   475→   475→    } finally {
+   476→   476→      setModelSaving(false);
+   477→   477→    }
+   478→   478→  };
+   479→   479→
+   480→   480→  const handleToggleModel = async (model: AIModelItem) => {
+   481→   481→    try {
+   482→   482→      const res = await fetch(`/api/admin/models/${model._id}`, {
+   483→   483→        method: 'PUT',
+   484→   484→        headers: { 'Content-Type': 'application/json' },
+   485→   485→        body: JSON.stringify({ isActive: !model.isActive }),
+   486→   486→      });
+   487→   487→      if (res.ok) {
+   488→   488→        toast.success(`${model.name} ${!model.isActive ? 'activated' : 'deactivated'}`);
+   489→   489→        fetchModels();
+   490→   490→      } else {
+   491→   491→        toast.error('Failed to toggle model');
+   492→   492→      }
+   493→   493→    } catch {
+   494→   494→      toast.error('Network error');
+   495→   495→    }
+   496→   496→  };
+   497→   497→
+   498→   498→  const handleDeleteModel = async () => {
+   499→   499→    if (!deletingModel) return;
+   500→   500→    setDeletingModelLoading(true);
+   501→   501→    try {
+   502→   502→      const res = await fetch(`/api/admin/models/${deletingModel._id}`, { method: 'DELETE' });
+   503→   503→      const data = await res.json();
+   504→   504→      if (res.ok) {
+   505→   505→        toast.success(`Deleted ${deletingModel.name}`);
+   506→   506→        setDeletingModel(null);
+   507→   507→        fetchModels();
+   508→   508→      } else {
+   509→   509→        toast.error(data.error || 'Failed to delete model');
+   510→   510→      }
+   511→   511→    } catch {
+   512→   512→      toast.error('Network error');
+   513→   513→    } finally {
+   514→   514→      setDeletingModelLoading(false);
+   515→   515→    }
+   516→   516→  };
+   517→   517→
+   518→   518→  const handleSeedModels = async () => {
+   519→   519→    try {
+   520→   520→      const res = await fetch('/api/admin/models/seed', { method: 'POST' });
+   521→   521→      const data = await res.json();
+   522→   522→      if (res.ok) {
+   523→   523→        toast.success(data.message || 'Models seeded');
+   524→   524→        fetchModels();
+   525→   525→      } else {
+   526→   526→        toast.error(data.error || 'Failed to seed models');
+   527→   527→      }
+   528→   528→    } catch {
+   529→   529→      toast.error('Network error');
+   530→   530→    }
+   531→   531→  };
+   532→   532→
+   533→   533→  if (!user || user.role !== 'admin') return null;
+   534→   534→
+   535→   535→  return (
+   536→   536→    <div className="max-w-6xl mx-auto space-y-6">
+   537→   537→      {/* Header */}
+   538→   538→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+   539→   539→        <div className="flex items-center gap-3">
+   540→   540→          <Button variant="ghost" size="icon" onClick={() => router.push('/dashboard')} className="shrink-0">
+   541→   541→            <ChevronDown className="h-5 w-5 rotate-90" />
+   542→   542→          </Button>
+   543→   543→          <div>
+   544→   544→            <div className="flex items-center gap-2">
+   545→   545→              <ShieldCheck className="size-5 text-primary" />
+   546→   546→              <h1 className="text-2xl font-bold tracking-tight">Admin Panel</h1>
+   547→   547→            </div>
+   548→   548→            <p className="text-sm text-muted-foreground">Manage users, plans, and subscriptions</p>
+   549→   549→          </div>
+   550→   550→        </div>
+   551→   551→        <Button variant="outline" className="gap-2" onClick={fetchUsers} disabled={loading}>
+   552→   552→          <RefreshCw className={cn('size-4', loading && 'animate-spin')} />
+   553→   553→          Refresh
+   554→   554→        </Button>
+   555→   555→      </div>
+   556→   556→
+   557→   557→      {/* Stats Cards */}
+   558→   558→      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   559→   559→        {[
+   560→   560→          { label: 'Total Users', value: totalUsers, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/5' },
+   561→   561→          { label: 'Pro Users', value: proUsers, icon: Crown, color: 'text-primary', bg: 'bg-primary/5' },
+   562→   562→          { label: 'Custom Plans', value: customUsers, icon: Star, color: 'text-amber-500', bg: 'bg-amber-500/5' },
+   563→   563→          { label: 'Expired Plans', value: expiredUsers, icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-500/5' },
+   564→   564→        ].map((stat) => (
+   565→   565→          <Card key={stat.label}>
+   566→   566→            <CardContent className="pt-4 pb-3 px-4">
+   567→   567→              <div className="flex items-center justify-between">
+   568→   568→                <div>
+   569→   569→                  <p className="text-xs text-muted-foreground">{stat.label}</p>
+   570→   570→                  <p className="text-2xl font-bold mt-0.5">{stat.value}</p>
+   571→   571→                </div>
+   572→   572→                <div className={cn('size-9 rounded-lg flex items-center justify-center', stat.bg)}>
+   573→   573→                  <stat.icon className={cn('size-4', stat.color)} />
+   574→   574→                </div>
+   575→   575→              </div>
+   576→   576→            </CardContent>
+   577→   577→          </Card>
+   578→   578→        ))}
+   579→   579→      </div>
+   580→   580→
+   581→   581→      {/* Search */}
+   582→   582→      <Card>
+   583→   583→        <CardContent className="pt-4">
+   584→   584→          <div className="relative">
+   585→   585→            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+   586→   586→            <Input
+   587→   587→              type="search"
+   588→   588→              placeholder="Search by name or email..."
+   589→   589→              className="pl-10 h-10"
+   590→   590→              value={search}
+   591→   591→              onChange={(e) => setSearch(e.target.value)}
+   592→   592→            />
+   593→   593→          </div>
+   594→   594→        </CardContent>
+   595→   595→      </Card>
+   596→   596→
+   597→   597→      {/* ══════════════════════════════════════════════════════ */}
+   598→   598→      {/* ── Tools Management ── */}
+   599→   599→      {/* ══════════════════════════════════════════════════════ */}
+   600→   600→      <Card>
+   601→   601→        <CardHeader className="pb-3">
+   602→   602→          <CardTitle className="text-base flex items-center gap-2">
+   603→   603→            <Wrench className="size-4" />
+   604→   604→            Tools Management
+   605→   605→            {toolsSaving && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+   606→   606→          </CardTitle>
+   607→   607→          <CardDescription>
+   608→   608→            Enable or disable tools. Disabled tools are hidden from all users.
+   609→   609→          </CardDescription>
+   610→   610→        </CardHeader>
+   611→   611→        <CardContent className="p-0">
+   612→   612→          {toolsLoading ? (
+   613→   613→            <div className="flex items-center justify-center py-8">
+   614→   614→              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+   615→   615→              <span className="ml-2 text-sm text-muted-foreground">Loading tools...</span>
+   616→   616→            </div>
+   617→   617→          ) : (
+   618→   618→            <div className="divide-y">
+   619→   619→              {/* YouTube Tool */}
+   620→   620→              <div className="flex items-center justify-between px-4 py-3.5">
+   621→   621→                <div className="flex items-center gap-3">
+   622→   622→                  <div className={cn(
+   623→   623→                    'size-9 rounded-lg flex items-center justify-center',
+   624→   624→                    toolsConfig.youtube ? 'bg-red-500/10' : 'bg-muted/50'
+   625→   625→                  )}>
+   626→   626→                    <Youtube className={cn('size-4', toolsConfig.youtube ? 'text-red-500' : 'text-muted-foreground')} />
+   627→   627→                  </div>
+   628→   628→                  <div>
+   629→   629→                    <p className="text-sm font-medium">YouTube</p>
+   630→   630→                    <p className="text-xs text-muted-foreground mt-0.5">
+   631→   631→                      {toolsConfig.youtube
+   632→   632→                        ? 'Users can connect channels, view stats, and manage videos'
+   633→   633→                        : 'YouTube page, sidebar item, and connect option are hidden'}
+   634→   634→                    </p>
+   635→   635→                  </div>
+   636→   636→                </div>
+   637→   637→                <div className="flex items-center gap-3">
+   638→   638→                  <Badge variant={toolsConfig.youtube ? 'default' : 'secondary'} className="text-[10px]">
+   639→   639→                    {toolsConfig.youtube ? 'Active' : 'Disabled'}
+   640→   640→                  </Badge>
+   641→   641→                  <Switch
+   642→   642→                    checked={toolsConfig.youtube}
+   643→   643→                    onCheckedChange={() => handleToggleTool('youtube')}
+   644→   644→                    disabled={toolsSaving}
+   645→   645→                  />
+   646→   646→                </div>
+   647→   647→              </div>
+   648→   648→            </div>
+   649→   649→          )}
+   650→   650→        </CardContent>
+   651→   651→      </Card>
+   652→   652→
+   653→   653→      {/* ══════════════════════════════════════════════════════ */}
+   654→   654→      {/* ── AI Models Management ── */}
+   655→   655→      {/* ══════════════════════════════════════════════════════ */}
+   656→   656→      <Card>
+   657→   657→        <CardHeader className="pb-3">
+   658→   658→          <div className="flex items-center justify-between">
+   659→   659→            <div>
+   660→   660→              <CardTitle className="text-base flex items-center gap-2">
+   661→   661→                <BrainCircuit className="size-4" />
+   662→   662→                AI Models
+   663→   663→                <Badge variant="secondary" className="text-[10px]">{aiModels.length}</Badge>
+   664→   664→              </CardTitle>
+   665→   665→              <CardDescription>
+   666→   666→                Manage text generation and voice AI models. Only active models are used in generation.
+   667→   667→              </CardDescription>
+   668→   668→            </div>
+   669→   669→            <div className="flex items-center gap-2">
+   670→   670→              <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={handleSeedModels} disabled={modelsLoading}>
+   671→   671→                <Sparkles className="size-3" />
+   672→   672→                Seed Defaults
+   673→   673→              </Button>
+   674→   674→              <Button size="sm" className="gap-1.5 text-xs h-8" onClick={() => openModelDialog()}>
+   675→   675→                <Plus className="size-3" />
+   676→   676→                Add Model
+   677→   677→              </Button>
+   678→   678→            </div>
+   679→   679→          </div>
+   680→   680→        </CardHeader>
+   681→   681→        <CardContent className="p-0">
+   682→   682→          {modelsLoading ? (
+   683→   683→            <div className="flex items-center justify-center py-8">
+   684→   684→              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+   685→   685→              <span className="ml-2 text-sm text-muted-foreground">Loading models...</span>
+   686→   686→            </div>
+   687→   687→          ) : aiModels.length === 0 ? (
+   688→   688→            <div className="text-center py-12 space-y-3">
+   689→   689→              <BrainCircuit className="size-8 text-muted-foreground mx-auto" />
+   690→   690→              <div>
+   691→   691→                <p className="text-sm text-muted-foreground">No AI models configured.</p>
+   692→   692→                <p className="text-xs text-muted-foreground mt-1">Click &quot;Seed Defaults&quot; to add the default models.</p>
+   693→   693→              </div>
+   694→   694→            </div>
+   695→   695→          ) : (
+   696→   696→            <div className="divide-y">
+   697→   697→              {/* Text Models */}
+   698→   698→              {aiModels.filter(m => m.category === 'text').length > 0 && (
+   699→   699→                <>
+   700→   700→                  <div className="px-4 py-2 bg-muted/30">
+   701→   701→                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+   702→   702→                      <MessageSquare className="size-3" />
+   703→   703→                      Text Generation Models
+   704→   704→                    </p>
+   705→   705→                  </div>
+   706→   706→                  {aiModels.filter(m => m.category === 'text').map((model) => (
+   707→   707→                    <div key={model._id} className="flex items-center justify-between px-4 py-3.5">
+   708→   708→                      <div className="flex items-center gap-3 min-w-0">
+   709→   709→                        <div className={cn(
+   710→   710→                          'size-9 rounded-lg flex items-center justify-center shrink-0',
+   711→   711→                          model.isActive ? 'bg-blue-500/10' : 'bg-muted/50'
+   712→   712→                        )}>
+   713→   713→                          <Sparkles className={cn('size-4', model.isActive ? 'text-blue-500' : 'text-muted-foreground')} />
+   714→   714→                        </div>
+   715→   715→                        <div className="min-w-0">
+   716→   716→                          <p className="text-sm font-medium truncate">{model.name}</p>
+   717→   717→                          <p className="text-[10px] text-muted-foreground font-mono truncate">{model.modelId}</p>
+   718→   718→                          {model.description && (
+   719→   719→                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{model.description}</p>
+   720→   720→                          )}
+   721→   721→                        </div>
+   722→   722→                      </div>
+   723→   723→                      <div className="flex items-center gap-2 shrink-0 ml-3">
+   724→   724→                        <Badge variant={model.isActive ? 'default' : 'secondary'} className="text-[10px]">
+   725→   725→                          {model.isActive ? 'Active' : 'Off'}
+   726→   726→                        </Badge>
+   727→   727→                        <Switch checked={model.isActive} onCheckedChange={() => handleToggleModel(model)} />
+   728→   728→                        <Button variant="ghost" size="icon" className="size-7" onClick={() => openModelDialog(model)}>
+   729→   729→                          <Edit3 className="size-3" />
+   730→   730→                        </Button>
+   731→   731→                        <Button variant="ghost" size="icon" className="size-7 text-destructive" onClick={() => setDeletingModel(model)}>
+   732→   732→                          <Trash className="size-3" />
+   733→   733→                        </Button>
+   734→   734→                      </div>
+   735→   735→                    </div>
+   736→   736→                  ))}
+   737→   737→                </>
+   738→   738→              )}
+   739→   739→              {/* Voice Models */}
+   740→   740→              {aiModels.filter(m => m.category === 'voice').length > 0 && (
+   741→   741→                <>
+   742→   742→                  <div className="px-4 py-2 bg-muted/30">
+   743→   743→                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+   744→   744→                      <Mic className="size-3" />
+   745→   745→                      Voice (TTS) Models
+   746→   746→                    </p>
+   747→   747→                  </div>
+   748→   748→                  {aiModels.filter(m => m.category === 'voice').map((model) => (
+   749→   749→                    <div key={model._id} className="flex items-center justify-between px-4 py-3.5">
+   750→   750→                      <div className="flex items-center gap-3 min-w-0">
+   751→   751→                        <div className={cn(
+   752→   752→                          'size-9 rounded-lg flex items-center justify-center shrink-0',
+   753→   753→                          model.isActive ? 'bg-purple-500/10' : 'bg-muted/50'
+   754→   754→                        )}>
+   755→   755→                          <Mic className={cn('size-4', model.isActive ? 'text-purple-500' : 'text-muted-foreground')} />
+   756→   756→                        </div>
+   757→   757→                        <div className="min-w-0">
+   758→   758→                          <p className="text-sm font-medium truncate">{model.name}</p>
+   759→   759→                          <p className="text-[10px] text-muted-foreground font-mono truncate">{model.modelId}</p>
+   760→   760→                          {model.description && (
+   761→   761→                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{model.description}</p>
+   762→   762→                          )}
+   763→   763→                        </div>
+   764→   764→                      </div>
+   765→   765→                      <div className="flex items-center gap-2 shrink-0 ml-3">
+   766→   766→                        <Badge variant={model.isActive ? 'default' : 'secondary'} className="text-[10px]">
+   767→   767→                          {model.isActive ? 'Active' : 'Off'}
+   768→   768→                        </Badge>
+   769→   769→                        <Switch checked={model.isActive} onCheckedChange={() => handleToggleModel(model)} />
+   770→   770→                        <Button variant="ghost" size="icon" className="size-7" onClick={() => openModelDialog(model)}>
+   771→   771→                          <Edit3 className="size-3" />
+   772→   772→                        </Button>
+   773→   773→                        <Button variant="ghost" size="icon" className="size-7 text-destructive" onClick={() => setDeletingModel(model)}>
+   774→   774→                          <Trash className="size-3" />
+   775→   775→                        </Button>
+   776→   776→                      </div>
+   777→   777→                    </div>
+   778→   778→                  ))}
+   779→   779→                </>
+   780→   780→              )}
+   781→   781→            </div>
+   782→   782→          )}
+   783→   783→        </CardContent>
+   784→   784→      </Card>
+   785→   785→
+   786→   786→      {/* ── Add/Edit Model Dialog ── */}
+   787→   787→      <Dialog open={modelDialogOpen} onOpenChange={setModelDialogOpen}>
+   788→   788→        <DialogContent className="sm:max-w-md">
+   789→   789→          <DialogHeader>
+   790→   790→            <DialogTitle>{editingModel ? 'Edit AI Model' : 'Add AI Model'}</DialogTitle>
+   791→   791→            <DialogDescription>
+   792→   792→              {editingModel ? 'Update the model configuration.' : 'Add a new AI model for text generation or voice synthesis.'}
+   793→   793→            </DialogDescription>
+   794→   794→          </DialogHeader>
+   795→   795→          <div className="space-y-4 mt-2">
+   796→   796→            <div className="space-y-2">
+   797→   797→              <Label className="text-xs font-medium">Category</Label>
+   798→   798→              <Select value={modelCategory} onValueChange={(v: string) => setModelCategory(v as 'text' | 'voice')}>
+   799→   799→                <SelectTrigger className="h-9 text-sm">
+   800→   800→                  <SelectValue />
+   801→   801→                </SelectTrigger>
+   802→   802→                <SelectContent>
+   803→   803→                  <SelectItem value="text">
+   804→   804→                    <div className="flex items-center gap-2">
+   805→   805→                      <MessageSquare className="size-3.5" />
+   806→   806→                      Text Generation
+   807→   807→                    </div>
+   808→   808→                  </SelectItem>
+   809→   809→                  <SelectItem value="voice">
+   810→   810→                    <div className="flex items-center gap-2">
+   811→   811→                      <Mic className="size-3.5" />
+   812→   812→                      Voice (TTS)
+   813→   813→                    </div>
+   814→   814→                  </SelectItem>
+   815→   815→                </SelectContent>
+   816→   816→              </Select>
+   817→   817→            </div>
+   818→   818→            <div className="space-y-2">
+   819→   819→              <Label className="text-xs font-medium">Display Name</Label>
+   820→   820→              <Input
+   821→   821→                value={modelName}
+   822→   822→                onChange={(e) => setModelName(e.target.value)}
+   823→   823→                placeholder="e.g. Gemini 2.5 Flash"
+   824→   824→                className="h-9 text-sm"
+   825→   825→              />
+   826→   826→            </div>
+   827→   827→            <div className="space-y-2">
+   828→   828→              <Label className="text-xs font-medium">Model ID</Label>
+   829→   829→              <Input
+   830→   830→                value={modelId}
+   831→   831→                onChange={(e) => setModelId(e.target.value)}
+   832→   832→                placeholder="e.g. gemini-2.5-flash"
+   833→   833→                className="h-9 text-sm font-mono"
+   834→   834→              />
+   835→   835→              <p className="text-[10px] text-muted-foreground">
+   836→   836→                The exact model identifier used in the API call (e.g. gemini-2.5-flash, gemini-3.1-flash-tts-preview)
+   837→   837→              </p>
+   838→   838→            </div>
+   839→   839→            <div className="space-y-2">
+   840→   840→              <Label className="text-xs font-medium">Description</Label>
+   841→   841→              <Input
+   842→   842→                value={modelDescription}
+   843→   843→                onChange={(e) => setModelDescription(e.target.value)}
+   844→   844→                placeholder="Brief description of the model"
+   845→   845→                className="h-9 text-sm"
+   846→   846→              />
+   847→   847→            </div>
+   848→   848→            <div className="flex items-center justify-between">
+   849→   849→              <div className="space-y-0.5">
+   850→   850→                <Label className="text-xs font-medium">Active</Label>
+   851→   851→                <p className="text-[10px] text-muted-foreground">Only active models are used in generation</p>
+   852→   852→              </div>
+   853→   853→              <Switch checked={modelIsActive} onCheckedChange={setModelIsActive} />
+   854→   854→            </div>
+   855→   855→          </div>
+   856→   856→          <DialogFooter className="gap-2 sm:gap-0">
+   857→   857→            <Button variant="outline" onClick={() => setModelDialogOpen(false)} className="text-sm">Cancel</Button>
+   858→   858→            <Button onClick={handleSaveModel} disabled={modelSaving || !modelName.trim() || !modelId.trim()} className="text-sm gap-1.5">
+   859→   859→              {modelSaving && <Loader2 className="size-3 animate-spin" />}
+   860→   860→              {editingModel ? 'Update Model' : 'Add Model'}
+   861→   861→            </Button>
+   862→   862→          </DialogFooter>
+   863→   863→        </DialogContent>
+   864→   864→      </Dialog>
+   865→   865→
+   866→   866→      {/* ── Delete Model Confirmation ── */}
+   867→   867→      <Dialog open={!!deletingModel} onOpenChange={() => setDeletingModel(null)}>
+   868→   868→        <DialogContent className="sm:max-w-sm">
+   869→   869→          <DialogHeader>
+   870→   870→            <DialogTitle>Delete Model</DialogTitle>
+   871→   871→            <DialogDescription>
+   872→   872→              Are you sure you want to delete <strong>{deletingModel?.name}</strong>? This action cannot be undone.
+   873→   873→            </DialogDescription>
+   874→   874→          </DialogHeader>
+   875→   875→          <DialogFooter className="gap-2 sm:gap-0">
+   876→   876→            <Button variant="outline" onClick={() => setDeletingModel(null)} className="text-sm">Cancel</Button>
+   877→   877→            <Button variant="destructive" onClick={handleDeleteModel} disabled={deletingModelLoading} className="text-sm gap-1.5">
+   878→   878→              {deletingModelLoading && <Loader2 className="size-3 animate-spin" />}
+   879→   879→              Delete
+   880→   880→            </Button>
+   881→   881→          </DialogFooter>
+   882→   882→        </DialogContent>
+   883→   883→      </Dialog>
+   884→   884→
+   885→   885→      {/* Users Table */}
+   886→   886→      <Card>
+   887→   887→        <CardHeader className="pb-3">
+   888→   888→          <CardTitle className="text-base flex items-center gap-2">
+   889→   889→            <Users className="size-4" />
+   890→   890→            All Users
+   891→   891→            <Badge variant="secondary" className="text-[10px]">{filteredUsers.length}</Badge>
+   892→   892→          </CardTitle>
+   893→   893→          <CardDescription>Click edit to change plans, add/reduce days, or set custom plans</CardDescription>
+   894→   894→        </CardHeader>
+   895→   895→        <CardContent className="p-0">
+   896→   896→          {loading ? (
+   897→   897→            <div className="flex items-center justify-center py-12">
+   898→   898→              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+   899→   899→              <span className="ml-2 text-sm text-muted-foreground">Loading users...</span>
+   900→   900→            </div>
+   901→   901→          ) : filteredUsers.length === 0 ? (
+   902→   902→            <div className="text-center py-12 text-sm text-muted-foreground">
+   903→   903→              {search ? 'No users match your search.' : 'No users found.'}
+   904→   904→            </div>
+   905→   905→          ) : (
+   906→   906→            <div className="overflow-x-auto">
+   907→   907→              <table className="w-full text-sm">
+   908→   908→                <thead>
+   909→   909→                  <tr className="border-b bg-muted/30">
+   910→   910→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">User</th>
+   911→   911→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Plan</th>
+   912→   912→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Days Left</th>
+   913→   913→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Custom</th>
+   914→   914→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Usage</th>
+   915→   915→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Joined</th>
+   916→   916→                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Actions</th>
+   917→   917→                  </tr>
+   918→   918→                </thead>
+   919→   919→                <tbody>
+   920→   920→                  {filteredUsers.map((u) => (
+   921→   921→                    <motion.tr
+   922→   922→                      key={u.id}
+   923→   923→                      layout
+   924→   924→                      initial={{ opacity: 0 }}
+   925→   925→                      animate={{ opacity: 1 }}
+   926→   926→                      className="border-b hover:bg-muted/20 transition-colors"
+   927→   927→                    >
+   928→   928→                      <td className="px-4 py-3">
+   929→   929→                        <div className="flex flex-col gap-0.5">
+   930→   930→                          <div className="flex items-center gap-2">
+   931→   931→                            <span className="font-medium text-sm">{u.name}</span>
+   932→   932→                            {u.role === 'admin' && (
+   933→   933→                              <Badge className="text-[9px] px-1.5 py-0 h-4">Admin</Badge>
+   934→   934→                            )}
+   935→   935→                            {!u.isVerified && (
+   936→   936→                              <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4">Unverified</Badge>
+   937→   937→                            )}
+   938→   938→                          </div>
+   939→   939→                          <span className="text-xs text-muted-foreground">{u.email}</span>
+   940→   940→                        </div>
+   941→   941→                      </td>
+   942→   942→                      <td className="px-4 py-3">
+   943→   943→                        <div className="flex items-center gap-1.5">
+   944→   944→                          {u.plan === 'pro' ? (
+   945→   945→                            <>
+   946→   946→                              <Crown className="size-3.5 text-primary" />
+   947→   947→                              <span className="font-medium text-primary">Pro</span>
+   948→   948→                            </>
+   949→   949→                          ) : (
+   950→   950→                            <>
+   951→   951→                              <Zap className="size-3.5 text-muted-foreground" />
+   952→   952→                              <span className="text-muted-foreground">Free</span>
+   953→   953→                            </>
+   954→   954→                          )}
+   955→   955→                        </div>
+   956→   956→                        {u.stripe?.subscriptionId && (
+   957→   957→                          <span className="text-[10px] text-muted-foreground">Stripe</span>
+   958→   958→                        )}
+   959→   959→                      </td>
+   960→   960→                      <td className="px-4 py-3">
+   961→   961→                        {u.plan === 'pro' ? (
+   962→   962→                          <div className="flex flex-col gap-0.5">
+   963→   963→                            <span className={cn(
+   964→   964→                              'text-sm font-semibold',
+   965→   965→                              u.planDaysLeft <= 3 ? 'text-red-500' : u.planDaysLeft <= 7 ? 'text-amber-500' : 'text-foreground'
+   966→   966→                            )}>
+   967→   967→                              {u.planDaysLeft}d
+   968→   968→                            </span>
+   969→   969→                            {u.planExpiresAt > 0 && (
+   970→   970→                              <span className="text-[10px] text-muted-foreground">
+   971→   971→                                {formatExpiryDate(u.planExpiresAt)}
+   972→   972→                              </span>
+   973→   973→                            )}
+   974→   974→                          </div>
+   975→   975→                        ) : (
+   976→   976→                          <span className="text-xs text-muted-foreground">—</span>
+   977→   977→                        )}
+   978→   978→                      </td>
+   979→   979→                      <td className="px-4 py-3">
+   980→   980→                        {u.isCustomPlan ? (
+   981→   981→                          <div className="flex flex-col gap-0.5">
+   982→   982→                            <Badge className="text-[10px] gap-1 w-fit" variant="outline">
+   983→   983→                              <Star className="size-2.5" />
+   984→   984→                              {u.customPlan?.customLabel || 'Custom'}
+   985→   985→                            </Badge>
+   986→   986→                            {u.customPlan?.customDays > 0 && (
+   987→   987→                              <span className="text-[10px] text-muted-foreground">
+   988→   988→                                {u.customPlan.customDays}d plan
+   989→   989→                              </span>
+   990→   990→                            )}
+   991→   991→                          </div>
+   992→   992→                        ) : (
+   993→   993→                          <span className="text-xs text-muted-foreground">—</span>
+   994→   994→                        )}
+   995→   995→                      </td>
+   996→   996→                      <td className="px-4 py-3">
+   997→   997→                        <div className="text-xs text-muted-foreground">
+   998→   998→                          <span>{u.dailyUsage?.projectsCreated ?? 0} proj</span>
+   999→   999→                          <span className="mx-1">·</span>
+  1000→  1000→                          <span>{u.dailyUsage?.aiGenerations ?? 0} AI</span>
+  1001→  1001→                        </div>
+  1002→  1002→                      </td>
+  1003→  1003→                      <td className="px-4 py-3 text-xs text-muted-foreground">
+  1004→  1004→                        {formatDate(u.createdAt)}
+  1005→  1005→                      </td>
+  1006→  1006→                      <td className="px-4 py-3">
+  1007→  1007→                        <div className="flex items-center justify-end gap-1">
+  1008→  1008→                          {/* Quick add 30 days */}
+  1009→  1009→                          <Button
+  1010→  1010→                            variant="ghost"
+  1011→  1011→                            size="icon"
+  1012→  1012→                            className="size-7"
+  1013→  1013→                            title="Add 30 days"
+  1014→  1014→                            onClick={() => quickAddDays(u, 30)}
+  1015→  1015→                          >
+  1016→  1016→                            <Plus className="size-3" />
+  1017→  1017→                          </Button>
+  1018→  1018→                          {/* Send notification */}
+  1019→  1019→                          <Button
+  1020→  1020→                            variant="ghost"
+  1021→  1021→                            size="icon"
+  1022→  1022→                            className="size-7 text-blue-500 hover:text-blue-500"
+  1023→  1023→                            title="Send notification"
+  1024→  1024→                            onClick={() => { setNotifyUser(u); setNotifTitle(''); setNotifMessage(''); setNotifType('info'); }}
+  1025→  1025→                          >
+  1026→  1026→                            <Bell className="size-3" />
+  1027→  1027→                          </Button>
+  1028→  1028→                          {/* Edit */}
+  1029→  1029→                          <Button
+  1030→  1030→                            variant="ghost"
+  1031→  1031→                            size="icon"
+  1032→  1032→                            className="size-7"
+  1033→  1033→                            title="Edit user"
+  1034→  1034→                            onClick={() => openEdit(u)}
+  1035→  1035→                          >
+  1036→  1036→                            <Edit3 className="size-3" />
+  1037→  1037→                          </Button>
+  1038→  1038→                          {/* Delete */}
+  1039→  1039→                          <Button
+  1040→  1040→                            variant="ghost"
+  1041→  1041→                            size="icon"
+  1042→  1042→                            className="size-7 text-destructive hover:text-destructive"
+  1043→  1043→                            title="Delete user"
+  1044→  1044→                            onClick={() => setDeleteUser(u)}
+  1045→  1045→                            disabled={u.role === 'admin'}
+  1046→  1046→                          >
+  1047→  1047→                            <Trash2 className="size-3" />
+  1048→  1048→                          </Button>
+  1049→  1049→                        </div>
+  1050→  1050→                      </td>
+  1051→  1051→                    </motion.tr>
+  1052→  1052→                  ))}
+  1053→  1053→                </tbody>
+  1054→  1054→              </table>
+  1055→  1055→            </div>
+  1056→  1056→          )}
+  1057→  1057→        </CardContent>
+  1058→  1058→      </Card>
+  1059→  1059→
+  1060→  1060→      {/* ══════════════════════════════════════════════════════ */}
+  1061→  1061→      {/* ── Edit User Dialog ── */}
+  1062→  1062→      {/* ══════════════════════════════════════════════════════ */}
+  1063→  1063→      <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
+  1064→  1064→        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+  1065→  1065→          <DialogHeader>
+  1066→  1066→            <DialogTitle className="flex items-center gap-2">
+  1067→  1067→              <UserCog className="size-4" />
+  1068→  1068→              Edit User
+  1069→  1069→            </DialogTitle>
+  1070→  1070→            <DialogDescription>
+  1071→  1071→              Modify plan, days, or set custom plan for {editUser?.name}
+  1072→  1072→            </DialogDescription>
+  1073→  1073→          </DialogHeader>
+  1074→  1074→
+  1075→  1075→          {editUser && (
+  1076→  1076→            <div className="space-y-4 py-2">
+  1077→  1077→              {/* ── Current Info ── */}
+  1078→  1078→              <div className="rounded-lg bg-muted/50 p-3 space-y-1.5">
+  1079→  1079→                <div className="flex justify-between text-sm">
+  1080→  1080→                  <span className="text-muted-foreground">Email</span>
+  1081→  1081→                  <span className="font-medium text-xs">{editUser.email}</span>
+  1082→  1082→                </div>
+  1083→  1083→                <div className="flex justify-between text-sm">
+  1084→  1084→                  <span className="text-muted-foreground">Current Plan</span>
+  1085→  1085→                  <span className="font-medium">{editUser.plan === 'pro' ? 'Pro' : 'Free'}</span>
+  1086→  1086→                </div>
+  1087→  1087→                <div className="flex justify-between text-sm">
+  1088→  1088→                  <span className="text-muted-foreground">Days Remaining</span>
+  1089→  1089→                  <span className={cn('font-semibold', editUser.planDaysLeft <= 3 ? 'text-red-500' : 'text-foreground')}>
+  1090→  1090→                    {editUser.plan === 'pro' ? `${editUser.planDaysLeft} days` : '—'}
+  1091→  1091→                  </span>
+  1092→  1092→                </div>
+  1093→  1093→                {editUser.planExpiresAt > 0 && (
+  1094→  1094→                  <div className="flex justify-between text-sm">
+  1095→  1095→                    <span className="text-muted-foreground">Expires On</span>
+  1096→  1096→                    <span className="text-xs">{formatExpiryDate(editUser.planExpiresAt)}</span>
+  1097→  1097→                  </div>
+  1098→  1098→                )}
+  1099→  1099→              </div>
+  1100→  1100→
+  1101→  1101→              <Separator />
+  1102→  1102→
+  1103→  1103→              {/* ── Plan Selector ── */}
+  1104→  1104→              <div className="space-y-2">
+  1105→  1105→                <label className="text-sm font-medium">Plan</label>
+  1106→  1106→                <Select value={editPlan} onValueChange={setEditPlan}>
+  1107→  1107→                  <SelectTrigger className="w-full">
+  1108→  1108→                    <SelectValue />
+  1109→  1109→                  </SelectTrigger>
+  1110→  1110→                  <SelectContent>
+  1111→  1111→                    <SelectItem value="free">
+  1112→  1112→                      <div className="flex items-center gap-2">
+  1113→  1113→                        <Zap className="size-3.5 text-muted-foreground" />
+  1114→  1114→                        Free
+  1115→  1115→                      </div>
+  1116→  1116→                    </SelectItem>
+  1117→  1117→                    <SelectItem value="pro">
+  1118→  1118→                      <div className="flex items-center gap-2">
+  1119→  1119→                        <Crown className="size-3.5 text-primary" />
+  1120→  1120→                        Pro
+  1121→  1121→                      </div>
+  1122→  1122→                    </SelectItem>
+  1123→  1123→                  </SelectContent>
+  1124→  1124→                </Select>
+  1125→  1125→              </div>
+  1126→  1126→
+  1127→  1127→              {/* ── Days Editing Section (hidden when plan is Free) ── */}
+  1128→  1128→              {editPlan === 'pro' && (
+  1129→  1129→                <div className="space-y-3 rounded-lg border p-3">
+  1130→  1130→                  <div className="flex items-center gap-2 text-sm font-medium">
+  1131→  1131→                    <CalendarDays className="size-4 text-primary" />
+  1132→  1132→                    Plan Duration
+  1133→  1133→                  </div>
+  1134→  1134→
+  1135→  1135→                  {/* Mode selector: Add / Reduce / Set */}
+  1136→  1136→                  <div className="flex items-center gap-1">
+  1137→  1137→                    {([
+  1138→  1138→                      { mode: 'add' as DaysEditMode, label: 'Add', icon: Plus, color: 'text-green-600' },
+  1139→  1139→                      { mode: 'reduce' as DaysEditMode, label: 'Reduce', icon: Minus, color: 'text-red-500' },
+  1140→  1140→                      { mode: 'set' as DaysEditMode, label: 'Set Exact', icon: Settings, color: 'text-blue-500' },
+  1141→  1141→                    ]).map(({ mode, label, icon: Icon, color }) => (
+  1142→  1142→                      <Button
+  1143→  1143→                        key={mode}
+  1144→  1144→                        variant={daysEditMode === mode ? 'default' : 'outline'}
+  1145→  1145→                        size="sm"
+  1146→  1146→                        className={cn('gap-1 text-xs', daysEditMode !== mode && 'text-muted-foreground')}
+  1147→  1147→                        onClick={() => { setDaysEditMode(mode); setDaysValue(0); }}
+  1148→  1148→                      >
+  1149→  1149→                        <Icon className={cn('size-3', daysEditMode === mode ? color : '')} />
+  1150→  1150→                        {label}
+  1151→  1151→                      </Button>
+  1152→  1152→                    ))}
+  1153→  1153→                  </div>
+  1154→  1154→
+  1155→  1155→                  {/* Days value input with +/- buttons */}
+  1156→  1156→                  <div className="flex items-center gap-2">
+  1157→  1157→                    <Button
+  1158→  1158→                      variant="outline"
+  1159→  1159→                      size="icon"
+  1160→  1160→                      className="size-8"
+  1161→  1161→                      onClick={() => setDaysValue(Math.max(0, daysValue - (daysEditMode === 'set' ? 1 : 7)))}
+  1162→  1162→                    >
+  1163→  1163→                      <Minus className="size-3" />
+  1164→  1164→                    </Button>
+  1165→  1165→                    <Input
+  1166→  1166→                      type="number"
+  1167→  1167→                      min={0}
+  1168→  1168→                      max={daysEditMode === 'set' ? 365 : 365}
+  1169→  1169→                      value={daysValue}
+  1170→  1170→                      onChange={(e) => setDaysValue(Math.max(0, parseInt(e.target.value) || 0))}
+  1171→  1171→                      className="w-24 text-center"
+  1172→  1172→                    />
+  1173→  1173→                    <span className="text-xs text-muted-foreground">days</span>
+  1174→  1174→                    <Button
+  1175→  1175→                      variant="outline"
+  1176→  1176→                      size="icon"
+  1177→  1177→                      className="size-8"
+  1178→  1178→                      onClick={() => setDaysValue(Math.min(365, daysValue + (daysEditMode === 'set' ? 1 : 7)))}
+  1179→  1179→                    >
+  1180→  1180→                      <Plus className="size-3" />
+  1181→  1181→                    </Button>
+  1182→  1182→                  </div>
+  1183→  1183→
+  1184→  1184→                  {/* Description text per mode */}
+  1185→  1185→                  <p className="text-[11px] text-muted-foreground">
+  1186→  1186→                    {daysEditMode === 'add' && 'Add days to the current expiry. If expired, starts from today.'}
+  1187→  1187→                    {daysEditMode === 'reduce' && 'Reduce days from the current expiry. Will not go below today.'}
+  1188→  1188→                    {daysEditMode === 'set' && 'Set the exact number of days from today. Replaces current expiry.'}
+  1189→  1189→                  </p>
+  1190→  1190→
+  1191→  1191→                  {/* Quick preset buttons */}
+  1192→  1192→                  <div className="flex items-center gap-1.5 flex-wrap">
+  1193→  1193→                    {[7, 14, 30, 60, 90].map((d) => (
+  1194→  1194→                      <Button
+  1195→  1195→                        key={d}
+  1196→  1196→                        variant="ghost"
+  1197→  1197→                        size="sm"
+  1198→  1198→                        className="text-[11px] h-7 px-2"
+  1199→  1199→                        onClick={() => setDaysValue(d)}
+  1200→  1200→                      >
+  1201→  1201→                        {d}d
+  1202→  1202→                      </Button>
+  1203→  1203→                    ))}
+  1204→  1204→                  </div>
+  1205→  1205→                </div>
+  1206→  1206→              )}
+  1207→  1207→
+  1208→  1208→              {/* ── Custom Plan Toggle ── */}
+  1209→  1209→              <div className="space-y-2">
+  1210→  1210→                <label className="text-sm font-medium flex items-center gap-2">
+  1211→  1211→                  <Star className="size-3.5 text-amber-500" />
+  1212→  1212→                  Custom Plan
+  1213→  1213→                </label>
+  1214→  1214→                <div className="flex items-center gap-3">
+  1215→  1215→                  <Button
+  1216→  1216→                    variant={editIsCustom ? 'default' : 'outline'}
+  1217→  1217→                    size="sm"
+  1218→  1218→                    onClick={() => { setEditIsCustom(true); if (editPlan !== 'pro') setEditPlan('pro'); }}
+  1219→  1219→                  >
+  1220→  1220→                    <Check className="size-3 mr-1" />
+  1221→  1221→                    Yes
+  1222→  1222→                  </Button>
+  1223→  1223→                  <Button
+  1224→  1224→                    variant={!editIsCustom ? 'default' : 'outline'}
+  1225→  1225→                    size="sm"
+  1226→  1226→                    onClick={() => setEditIsCustom(false)}
+  1227→  1227→                  >
+  1228→  1228→                    <X className="size-3 mr-1" />
+  1229→  1229→                    No
+  1230→  1230→                  </Button>
+  1231→  1231→                </div>
+  1232→  1232→                <p className="text-[11px] text-muted-foreground">
+  1233→  1233→                  When enabled, custom plan days take priority over regular add/reduce/set days.
+  1234→  1234→                </p>
+  1235→  1235→              </div>
+  1236→  1236→
+  1237→  1237→              {/* ── Custom Plan Details ── */}
+  1238→  1238→              <AnimatePresence>
+  1239→  1239→                {editIsCustom && (
+  1240→  1240→                  <motion.div
+  1241→  1241→                    initial={{ opacity: 0, height: 0 }}
+  1242→  1242→                    animate={{ opacity: 1, height: 'auto' }}
+  1243→  1243→                    exit={{ opacity: 0, height: 0 }}
+  1244→  1244→                    className="space-y-3 overflow-hidden"
+  1245→  1245→                  >
+  1246→  1246→                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-3">
+  1247→  1247→                      <div className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400">
+  1248→  1248→                        <Star className="size-3.5" />
+  1249→  1249→                        Custom Plan Configuration
+  1250→  1250→                      </div>
+  1251→  1251→
+  1252→  1252→                      <div className="space-y-2">
+  1253→  1253→                        <label className="text-xs font-medium">Plan Label</label>
+  1254→  1254→                        <Input
+  1255→  1255→                          placeholder="e.g. Team Plan, Agency Plan, VIP"
+  1256→  1256→                          value={editCustomLabel}
+  1257→  1257→                          onChange={(e) => setEditCustomLabel(e.target.value)}
+  1258→  1258→                        />
+  1259→  1259→                      </div>
+  1260→  1260→
+  1261→  1261→                      <div className="space-y-2">
+  1262→  1262→                        <label className="text-xs font-medium">Custom Duration (days)</label>
+  1263→  1263→                        <div className="flex items-center gap-2">
+  1264→  1264→                          <Button
+  1265→  1265→                            variant="outline"
+  1266→  1266→                            size="icon"
+  1267→  1267→                            className="size-8"
+  1268→  1268→                            onClick={() => setEditCustomDays(Math.max(0, editCustomDays - 1))}
+  1269→  1269→                          >
+  1270→  1270→                            <Minus className="size-3" />
+  1271→  1271→                          </Button>
+  1272→  1272→                          <Input
+  1273→  1273→                            type="number"
+  1274→  1274→                            min={0}
+  1275→  1275→                            max={365}
+  1276→  1276→                            value={editCustomDays}
+  1277→  1277→                            onChange={(e) => setEditCustomDays(Math.max(0, parseInt(e.target.value) || 0))}
+  1278→  1278→                            className="w-24 text-center"
+  1279→  1279→                          />
+  1280→  1280→                          <span className="text-xs text-muted-foreground">days</span>
+  1281→  1281→                          <Button
+  1282→  1282→                            variant="outline"
+  1283→  1283→                            size="icon"
+  1284→  1284→                            className="size-8"
+  1285→  1285→                            onClick={() => setEditCustomDays(Math.min(365, editCustomDays + 1))}
+  1286→  1286→                          >
+  1287→  1287→                            <Plus className="size-3" />
+  1288→  1288→                          </Button>
+  1289→  1289→                        </div>
+  1290→  1290→                        <p className="text-[11px] text-amber-600/70 dark:text-amber-400/70">
+  1291→  1291→                          This will set the plan expiry to exactly this many days from now, overriding any other day changes.
+  1292→  1292→                        </p>
+  1293→  1293→                      </div>
+  1294→  1294→                    </div>
+  1295→  1295→                  </motion.div>
+  1296→  1296→                )}
+  1297→  1297→              </AnimatePresence>
+  1298→  1298→
+  1299→  1299→              {/* ── Live Preview ── */}
+  1300→  1300→              {editPlan === 'pro' && (
+  1301→  1301→                <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 space-y-1.5">
+  1302→  1302→                  <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+  1303→  1303→                    <Eye className="size-3.5" />
+  1304→  1304→                    Preview After Save
+  1305→  1305→                  </div>
+  1306→  1306→                  <div className="flex justify-between text-sm">
+  1307→  1307→                    <span className="text-muted-foreground">Plan</span>
+  1308→  1308→                    <span className="font-medium text-primary">Pro</span>
+  1309→  1309→                  </div>
+  1310→  1310→                  <div className="flex justify-between text-sm">
+  1311→  1311→                    <span className="text-muted-foreground">Days Left</span>
+  1312→  1312→                    <span className={cn(
+  1313→  1313→                      'font-semibold',
+  1314→  1314→                      previewDaysLeft() <= 3 ? 'text-red-500' : previewDaysLeft() <= 7 ? 'text-amber-500' : 'text-foreground'
+  1315→  1315→                    )}>
+  1316→  1316→                      {previewDaysLeft()} days
+  1317→  1317→                    </span>
+  1318→  1318→                  </div>
+  1319→  1319→                  <div className="flex justify-between text-sm">
+  1320→  1320→                    <span className="text-muted-foreground">Expires On</span>
+  1321→  1321→                    <span className="text-xs font-medium">{previewExpiryDate()}</span>
+  1322→  1322→                  </div>
+  1323→  1323→                  {editIsCustom && editCustomDays > 0 && (
+  1324→  1324→                    <div className="flex justify-between text-sm">
+  1325→  1325→                      <span className="text-muted-foreground">Custom</span>
+  1326→  1326→                      <Badge variant="outline" className="text-[10px] gap-1">
+  1327→  1327→                        <Star className="size-2.5" />
+  1328→  1328→                        {editCustomLabel || 'Custom'} ({editCustomDays}d)
+  1329→  1329→                      </Badge>
+  1330→  1330→                    </div>
+  1331→  1331→                  )}
+  1332→  1332→                </div>
+  1333→  1333→              )}
+  1334→  1334→
+  1335→  1335→              <Separator />
+  1336→  1336→
+  1337→  1337→              {/* ── Role ── */}
+  1338→  1338→              <div className="space-y-2">
+  1339→  1339→                <label className="text-sm font-medium">Role</label>
+  1340→  1340→                <Select value={editRole} onValueChange={setEditRole}>
+  1341→  1341→                  <SelectTrigger className="w-full">
+  1342→  1342→                    <SelectValue />
+  1343→  1343→                  </SelectTrigger>
+  1344→  1344→                  <SelectContent>
+  1345→  1345→                    <SelectItem value="user">User</SelectItem>
+  1346→  1346→                    <SelectItem value="admin">Admin</SelectItem>
+  1347→  1347→                  </SelectContent>
+  1348→  1348→                </Select>
+  1349→  1349→              </div>
+  1350→  1350→            </div>
+  1351→  1351→          )}
+  1352→  1352→
+  1353→  1353→          <DialogFooter className="gap-2 sm:gap-0">
+  1354→  1354→            <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
+  1355→  1355→            <Button onClick={handleSave} disabled={saving}>
+  1356→  1356→              {saving ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+  1357→  1357→              Save Changes
+  1358→  1358→            </Button>
+  1359→  1359→          </DialogFooter>
+  1360→  1360→        </DialogContent>
+  1361→  1361→      </Dialog>
+  1362→  1362→
+  1363→  1363→      {/* ══════════════════════════════════════════════════════ */}
+  1364→  1364→      {/* ── Delete Confirm Dialog ── */}
+  1365→  1365→      {/* ══════════════════════════════════════════════════════ */}
+  1366→  1366→      <Dialog open={!!deleteUser} onOpenChange={() => setDeleteUser(null)}>
+  1367→  1367→        <DialogContent className="max-w-sm">
+  1368→  1368→          <DialogHeader>
+  1369→  1369→            <DialogTitle className="flex items-center gap-2 text-destructive">
+  1370→  1370→              <AlertTriangle className="size-4" />
+  1371→  1371→              Delete User
+  1372→  1372→            </DialogTitle>
+  1373→  1373→            <DialogDescription>
+  1374→  1374→              This action cannot be undone. All data for this user will be permanently deleted.
+  1375→  1375→            </DialogDescription>
+  1376→  1376→          </DialogHeader>
+  1377→  1377→          {deleteUser && (
+  1378→  1378→            <div className="rounded-lg bg-destructive/5 border border-destructive/20 p-3">
+  1379→  1379→              <p className="text-sm font-medium">{deleteUser.name}</p>
+  1380→  1380→              <p className="text-xs text-muted-foreground">{deleteUser.email}</p>
+  1381→  1381→            </div>
+  1382→  1382→          )}
+  1383→  1383→          <DialogFooter>
+  1384→  1384→            <Button variant="outline" onClick={() => setDeleteUser(null)}>Cancel</Button>
+  1385→  1385→            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+  1386→  1386→              {deleting ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+  1387→  1387→              Delete
+  1388→  1388→            </Button>
+  1389→  1389→          </DialogFooter>
+  1390→  1390→        </DialogContent>
+  1391→  1391→      </Dialog>
+  1392→  1392→
+  1393→  1393→      {/* ══════════════════════════════════════════════════════ */}
+  1394→  1394→      {/* ── Send Notification Dialog ── */}
+  1395→  1395→      {/* ══════════════════════════════════════════════════════ */}
+  1396→  1396→      <Dialog open={!!notifyUser} onOpenChange={() => setNotifyUser(null)}>
+  1397→  1397→        <DialogContent className="max-w-md">
+  1398→  1398→          <DialogHeader>
+  1399→  1399→            <DialogTitle className="flex items-center gap-2">
+  1400→  1400→              <Bell className="size-4 text-blue-500" />
+  1401→  1401→              Send Notification
+  1402→  1402→            </DialogTitle>
+  1403→  1403→            <DialogDescription>
+  1404→  1404→              Send a notification to {notifyUser?.name} ({notifyUser?.email})
+  1405→  1405→            </DialogDescription>
+  1406→  1406→          </DialogHeader>
+  1407→  1407→
+  1408→  1408→          {notifyUser && (
+  1409→  1409→            <div className="space-y-4 py-2">
+  1410→  1410→              {/* Recipient */}
+  1411→  1411→              <div className="rounded-lg bg-muted/50 p-3">
+  1412→  1412→                <div className="flex justify-between text-sm">
+  1413→  1413→                  <span className="text-muted-foreground">Recipient</span>
+  1414→  1414→                  <span className="font-medium">{notifyUser.name}</span>
+  1415→  1415→                </div>
+  1416→  1416→                <div className="flex justify-between text-sm mt-1">
+  1417→  1417→                  <span className="text-muted-foreground">Plan</span>
+  1418→  1418→                  <span className={cn(notifyUser.plan === 'pro' && 'text-primary font-medium')}>
+  1419→  1419→                    {notifyUser.plan === 'pro' ? 'Pro' : 'Free'}
+  1420→  1420→                  </span>
+  1421→  1421→                </div>
+  1422→  1422→              </div>
+  1423→  1423→
+  1424→  1424→              {/* Notification Type */}
+  1425→  1425→              <div className="space-y-2">
+  1426→  1426→                <label className="text-sm font-medium">Type</label>
+  1427→  1427→                <div className="flex items-center gap-1.5">
+  1428→  1428→                  {([
+  1429→  1429→                    { value: 'info' as const, label: 'Info', color: 'text-blue-500' },
+  1430→  1430→                    { value: 'warning' as const, label: 'Warning', color: 'text-amber-500' },
+  1431→  1431→                    { value: 'urgent' as const, label: 'Urgent', color: 'text-red-500' },
+  1432→  1432→                  ]).map(({ value, label, color }) => (
+  1433→  1433→                    <Button
+  1434→  1434→                      key={value}
+  1435→  1435→                      variant={notifType === value ? 'default' : 'outline'}
+  1436→  1436→                      size="sm"
+  1437→  1437→                      className={cn('gap-1 text-xs', notifType !== value && 'text-muted-foreground')}
+  1438→  1438→                      onClick={() => setNotifType(value)}
+  1439→  1439→                    >
+  1440→  1440→                      <span className={cn('size-1.5 rounded-full', color === 'text-blue-500' ? 'bg-blue-500' : color === 'text-amber-500' ? 'bg-amber-500' : 'bg-red-500')} />
+  1441→  1441→                      {label}
+  1442→  1442→                    </Button>
+  1443→  1443→                  ))}
+  1444→  1444→                </div>
+  1445→  1445→              </div>
+  1446→  1446→
+  1447→  1447→              {/* Title */}
+  1448→  1448→              <div className="space-y-2">
+  1449→  1449→                <label className="text-sm font-medium">Title</label>
+  1450→  1450→                <Input
+  1451→  1451→                  placeholder="e.g. Welcome to Pro!"
+  1452→  1452→                  value={notifTitle}
+  1453→  1453→                  onChange={(e) => setNotifTitle(e.target.value)}
+  1454→  1454→                  maxLength={100}
+  1455→  1455→                />
+  1456→  1456→              </div>
+  1457→  1457→
+  1458→  1458→              {/* Message */}
+  1459→  1459→              <div className="space-y-2">
+  1460→  1460→                <label className="text-sm font-medium">Message</label>
+  1461→  1461→                <Textarea
+  1462→  1462→                  placeholder="Write your notification message..."
+  1463→  1463→                  value={notifMessage}
+  1464→  1464→                  onChange={(e) => setNotifMessage(e.target.value)}
+  1465→  1465→                  rows={3}
+  1466→  1466→                  maxLength={500}
+  1467→  1467→                />
+  1468→  1468→                <p className="text-[11px] text-muted-foreground text-right">{notifMessage.length}/500</p>
+  1469→  1469→              </div>
+  1470→  1470→            </div>
+  1471→  1471→          )}
+  1472→  1472→
+  1473→  1473→          <DialogFooter className="gap-2 sm:gap-0">
+  1474→  1474→            <Button variant="outline" onClick={() => setNotifyUser(null)}>Cancel</Button>
+  1475→  1475→            <Button
+  1476→  1476→              onClick={handleSendNotification}
+  1477→  1477→              disabled={sendingNotif || !notifTitle.trim() || !notifMessage.trim()}
+  1478→  1478→              className="gap-2"
+  1479→  1479→            >
+  1480→  1480→              {sendingNotif ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+  1481→  1481→              Send
+  1482→  1482→            </Button>
+  1483→  1483→          </DialogFooter>
+  1484→  1484→        </DialogContent>
+  1485→  1485→      </Dialog>
+  1486→  1486→    </div>
+  1487→  1487→  );
+  1488→  1488→}
+  1489→  1489→

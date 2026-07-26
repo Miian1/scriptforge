@@ -1,0 +1,985 @@
+     1→'use client';
+     2→
+     3→import { useEffect, useState, useCallback } from 'react';
+     4→import { useRouter } from 'next/navigation';
+     5→import { motion, AnimatePresence } from 'framer-motion';
+     6→import {
+     7→  ShieldCheck, Users, Crown, Zap, Search, Loader2, ChevronDown,
+     8→  Edit3, Trash2, X, Check, Clock, Star, UserCog,
+     9→  AlertTriangle, RefreshCw, Plus, Minus, CalendarDays, Settings, Eye, Bell, Send
+    10→} from 'lucide-react';
+    11→import { Button } from '@/components/ui/button';
+    12→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+    13→import { Input } from '@/components/ui/input';
+    14→import { Textarea } from '@/components/ui/textarea';
+    15→import { Badge } from '@/components/ui/badge';
+    16→import { Separator } from '@/components/ui/separator';
+    17→import {
+    18→  Dialog,
+    19→  DialogContent,
+    20→  DialogHeader,
+    21→  DialogTitle,
+    22→  DialogDescription,
+    23→  DialogFooter,
+    24→} from '@/components/ui/dialog';
+    25→import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+    26→import { useAuthStore } from '@/lib/auth-store';
+    27→import { toast } from 'sonner';
+    28→import { cn } from '@/lib/utils';
+    29→
+    30→interface AdminUser {
+    31→  id: string;
+    32→  name: string;
+    33→  email: string;
+    34→  provider: string;
+    35→  role: string;
+    36→  plan: string;
+    37→  isVerified: boolean;
+    38→  isCustomPlan: boolean;
+    39→  customPlan: { isCustom: boolean; customLabel: string; customDays: number };
+    40→  planExpiresAt: number;
+    41→  planDaysLeft: number;
+    42→  stripe: { customerId: string; subscriptionId: string; currentPeriodEnd: number; cancelAtPeriodEnd: boolean };
+    43→  dailyUsage: { date: string; projectsCreated: number; aiGenerations: number };
+    44→  createdAt: string;
+    45→  updatedAt: string;
+    46→}
+    47→
+    48→function formatDate(timestamp: string | number): string {
+    49→  if (!timestamp) return '—';
+    50→  const date = new Date(typeof timestamp === 'number' ? timestamp : timestamp);
+    51→  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    52→}
+    53→
+    54→function formatExpiryDate(timestamp: number): string {
+    55→  if (!timestamp || timestamp <= 0) return '—';
+    56→  const date = new Date(timestamp);
+    57→  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    58→}
+    59→
+    60→// ── Days editing mode ──
+    61→type DaysEditMode = 'add' | 'reduce' | 'set';
+    62→
+    63→export default function AdminPage() {
+    64→  const router = useRouter();
+    65→  const user = useAuthStore((s) => s.user);
+    66→  const [users, setUsers] = useState<AdminUser[]>([]);
+    67→  const [loading, setLoading] = useState(true);
+    68→  const [search, setSearch] = useState('');
+    69→  const [editUser, setEditUser] = useState<AdminUser | null>(null);
+    70→  const [saving, setSaving] = useState(false);
+    71→  const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
+    72→  const [deleting, setDeleting] = useState(false);
+    73→  const [notifyUser, setNotifyUser] = useState<AdminUser | null>(null);
+    74→  const [sendingNotif, setSendingNotif] = useState(false);
+    75→  const [notifTitle, setNotifTitle] = useState('');
+    76→  const [notifMessage, setNotifMessage] = useState('');
+    77→  const [notifType, setNotifType] = useState<'info' | 'warning' | 'urgent'>('info');
+    78→
+    79→  // Edit form state
+    80→  const [editPlan, setEditPlan] = useState('free');
+    81→  const [editIsCustom, setEditIsCustom] = useState(false);
+    82→  const [editCustomLabel, setEditCustomLabel] = useState('');
+    83→  const [editCustomDays, setEditCustomDays] = useState(0);
+    84→  const [editRole, setEditRole] = useState('user');
+    85→  const [daysEditMode, setDaysEditMode] = useState<DaysEditMode>('add');
+    86→  const [daysValue, setDaysValue] = useState(0);
+    87→
+    88→  // Redirect non-admin
+    89→  useEffect(() => {
+    90→    if (user && user.role !== 'admin') {
+    91→      router.push('/dashboard');
+    92→    }
+    93→  }, [user, router]);
+    94→
+    95→  const fetchUsers = useCallback(async () => {
+    96→    setLoading(true);
+    97→    try {
+    98→      const res = await fetch('/api/admin/users');
+    99→      if (res.ok) {
+   100→        const data = await res.json();
+   101→        setUsers(data.users || []);
+   102→      } else {
+   103→        const data = await res.json();
+   104→        toast.error(data.error || 'Failed to load users');
+   105→      }
+   106→    } catch {
+   107→      toast.error('Network error. Please try again.');
+   108→    } finally {
+   109→      setLoading(false);
+   110→    }
+   111→  }, []);
+   112→
+   113→  useEffect(() => {
+   114→    if (user?.role === 'admin') {
+   115→      fetchUsers();
+   116→    }
+   117→  }, [user, fetchUsers]);
+   118→
+   119→  // Filter users by search
+   120→  const filteredUsers = users.filter((u) => {
+   121→    if (!search.trim()) return true;
+   122→    const q = search.toLowerCase();
+   123→    return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+   124→  });
+   125→
+   126→  // Stats
+   127→  const totalUsers = users.length;
+   128→  const proUsers = users.filter((u) => u.plan === 'pro').length;
+   129→  const customUsers = users.filter((u) => u.isCustomPlan).length;
+   130→  const expiredUsers = users.filter((u) => u.plan === 'pro' && u.planDaysLeft <= 0).length;
+   131→
+   132→  // Open edit dialog
+   133→  const openEdit = (u: AdminUser) => {
+   134→    setEditUser(u);
+   135→    setEditPlan(u.plan);
+   136→    setEditIsCustom(u.isCustomPlan);
+   137→    setEditCustomLabel(u.customPlan?.customLabel || '');
+   138→    setEditCustomDays(u.customPlan?.customDays || 0);
+   139→    setEditRole(u.role);
+   140→    setDaysEditMode('add');
+   141→    setDaysValue(0);
+   142→  };
+   143→
+   144→  // ── Compute preview of what days will be after save ──
+   145→  const previewDaysLeft = (): number => {
+   146→    if (!editUser) return 0;
+   147→    if (editPlan === 'free') return 0;
+   148→
+   149→    // If custom is ON and has custom days, those take priority
+   150→    if (editIsCustom && editCustomDays > 0) {
+   151→      return editCustomDays;
+   152→    }
+   153→
+   154→    // Base expiry
+   155→    let baseExpiry = editUser.planExpiresAt && editUser.planExpiresAt > Date.now()
+   156→      ? editUser.planExpiresAt
+   157→      : Date.now();
+   158→
+   159→    if (daysEditMode === 'add' && daysValue > 0) {
+   160→      baseExpiry = baseExpiry + daysValue * 24 * 60 * 60 * 1000;
+   161→    } else if (daysEditMode === 'reduce' && daysValue > 0) {
+   162→      baseExpiry = Math.max(Date.now(), baseExpiry - daysValue * 24 * 60 * 60 * 1000);
+   163→    } else if (daysEditMode === 'set') {
+   164→      if (daysValue <= 0) return 0;
+   165→      baseExpiry = Date.now() + daysValue * 24 * 60 * 60 * 1000;
+   166→    }
+   167→
+   168→    const diff = baseExpiry - Date.now();
+   169→    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+   170→  };
+   171→
+   172→  const previewExpiryDate = (): string => {
+   173→    if (!editUser) return '—';
+   174→    if (editPlan === 'free') return 'N/A';
+   175→
+   176→    if (editIsCustom && editCustomDays > 0) {
+   177→      const d = new Date(Date.now() + editCustomDays * 24 * 60 * 60 * 1000);
+   178→      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+   179→    }
+   180→
+   181→    let baseExpiry = editUser.planExpiresAt && editUser.planExpiresAt > Date.now()
+   182→      ? editUser.planExpiresAt
+   183→      : Date.now();
+   184→
+   185→    if (daysEditMode === 'add' && daysValue > 0) {
+   186→      baseExpiry = baseExpiry + daysValue * 24 * 60 * 60 * 1000;
+   187→    } else if (daysEditMode === 'reduce' && daysValue > 0) {
+   188→      baseExpiry = Math.max(Date.now(), baseExpiry - daysValue * 24 * 60 * 60 * 1000);
+   189→    } else if (daysEditMode === 'set') {
+   190→      if (daysValue <= 0) return 'N/A';
+   191→      baseExpiry = Date.now() + daysValue * 24 * 60 * 60 * 1000;
+   192→    }
+   193→
+   194→    return new Date(baseExpiry).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+   195→  };
+   196→
+   197→  // Save user
+   198→  const handleSave = async () => {
+   199→    if (!editUser) return;
+   200→    setSaving(true);
+   201→    try {
+   202→      const body: Record<string, unknown> = {
+   203→        plan: editPlan,
+   204→        role: editRole,
+   205→        isCustomPlan: editIsCustom,
+   206→        customPlan: {
+   207→          isCustom: editIsCustom,
+   208→          customLabel: editCustomLabel,
+   209→          customDays: editCustomDays,
+   210→        },
+   211→      };
+   212→
+   213→      // Days operations (only when not custom, since custom takes priority)
+   214→      if (!editIsCustom || editCustomDays <= 0) {
+   215→        if (daysEditMode === 'add' && daysValue > 0) {
+   216→          body.addDays = daysValue;
+   217→        } else if (daysEditMode === 'reduce' && daysValue > 0) {
+   218→          body.reduceDays = daysValue;
+   219→        } else if (daysEditMode === 'set') {
+   220→          body.setDays = daysValue;
+   221→        }
+   222→      }
+   223→
+   224→      const res = await fetch(`/api/admin/users/${editUser.id}`, {
+   225→        method: 'PUT',
+   226→        headers: { 'Content-Type': 'application/json' },
+   227→        body: JSON.stringify(body),
+   228→      });
+   229→      const data = await res.json();
+   230→      if (res.ok) {
+   231→        toast.success(`Updated ${editUser.name} successfully`);
+   232→        setEditUser(null);
+   233→        fetchUsers();
+   234→      } else {
+   235→        toast.error(data.error || 'Failed to update user');
+   236→      }
+   237→    } catch {
+   238→      toast.error('Network error. Please try again.');
+   239→    } finally {
+   240→      setSaving(false);
+   241→    }
+   242→  };
+   243→
+   244→  // Delete user
+   245→  const handleDelete = async () => {
+   246→    if (!deleteUser) return;
+   247→    setDeleting(true);
+   248→    try {
+   249→      const res = await fetch(`/api/admin/users/${deleteUser.id}`, { method: 'DELETE' });
+   250→      const data = await res.json();
+   251→      if (res.ok) {
+   252→        toast.success(`Deleted ${deleteUser.email}`);
+   253→        setDeleteUser(null);
+   254→        fetchUsers();
+   255→      } else {
+   256→        toast.error(data.error || 'Failed to delete user');
+   257→      }
+   258→    } catch {
+   259→      toast.error('Network error. Please try again.');
+   260→    } finally {
+   261→      setDeleting(false);
+   262→    }
+   263→  };
+   264→
+   265→  // Quick add 30 days
+   266→  const quickAddDays = async (u: AdminUser, days: number) => {
+   267→    try {
+   268→      const res = await fetch(`/api/admin/users/${u.id}`, {
+   269→        method: 'PUT',
+   270→        headers: { 'Content-Type': 'application/json' },
+   271→        body: JSON.stringify({ addDays: days }),
+   272→      });
+   273→      const data = await res.json();
+   274→      if (res.ok) {
+   275→        toast.success(`Added ${days} days to ${u.name}`);
+   276→        fetchUsers();
+   277→      } else {
+   278→        toast.error(data.error || 'Failed to add days');
+   279→      }
+   280→    } catch {
+   281→      toast.error('Network error');
+   282→    }
+   283→  };
+   284→
+   285→  // Send notification to user
+   286→  const handleSendNotification = async () => {
+   287→    if (!notifyUser || !notifTitle.trim() || !notifMessage.trim()) return;
+   288→    setSendingNotif(true);
+   289→    try {
+   290→      const res = await fetch('/api/admin/notify', {
+   291→        method: 'POST',
+   292→        headers: { 'Content-Type': 'application/json' },
+   293→        body: JSON.stringify({
+   294→          userId: notifyUser.id,
+   295→          title: notifTitle.trim(),
+   296→          message: notifMessage.trim(),
+   297→          type: notifType,
+   298→        }),
+   299→      });
+   300→      const data = await res.json();
+   301→      if (res.ok) {
+   302→        toast.success(`Notification sent to ${notifyUser.name}`);
+   303→        setNotifyUser(null);
+   304→        setNotifTitle('');
+   305→        setNotifMessage('');
+   306→        setNotifType('info');
+   307→      } else {
+   308→        toast.error(data.error || 'Failed to send notification');
+   309→      }
+   310→    } catch {
+   311→      toast.error('Network error');
+   312→    } finally {
+   313→      setSendingNotif(false);
+   314→    }
+   315→  };
+   316→
+   317→  if (!user || user.role !== 'admin') return null;
+   318→
+   319→  return (
+   320→    <div className="max-w-6xl mx-auto space-y-6">
+   321→      {/* Header */}
+   322→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+   323→        <div className="flex items-center gap-3">
+   324→          <Button variant="ghost" size="icon" onClick={() => router.push('/dashboard')} className="shrink-0">
+   325→            <ChevronDown className="h-5 w-5 rotate-90" />
+   326→          </Button>
+   327→          <div>
+   328→            <div className="flex items-center gap-2">
+   329→              <ShieldCheck className="size-5 text-primary" />
+   330→              <h1 className="text-2xl font-bold tracking-tight">Admin Panel</h1>
+   331→            </div>
+   332→            <p className="text-sm text-muted-foreground">Manage users, plans, and subscriptions</p>
+   333→          </div>
+   334→        </div>
+   335→        <Button variant="outline" className="gap-2" onClick={fetchUsers} disabled={loading}>
+   336→          <RefreshCw className={cn('size-4', loading && 'animate-spin')} />
+   337→          Refresh
+   338→        </Button>
+   339→      </div>
+   340→
+   341→      {/* Stats Cards */}
+   342→      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   343→        {[
+   344→          { label: 'Total Users', value: totalUsers, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/5' },
+   345→          { label: 'Pro Users', value: proUsers, icon: Crown, color: 'text-primary', bg: 'bg-primary/5' },
+   346→          { label: 'Custom Plans', value: customUsers, icon: Star, color: 'text-amber-500', bg: 'bg-amber-500/5' },
+   347→          { label: 'Expired Plans', value: expiredUsers, icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-500/5' },
+   348→        ].map((stat) => (
+   349→          <Card key={stat.label}>
+   350→            <CardContent className="pt-4 pb-3 px-4">
+   351→              <div className="flex items-center justify-between">
+   352→                <div>
+   353→                  <p className="text-xs text-muted-foreground">{stat.label}</p>
+   354→                  <p className="text-2xl font-bold mt-0.5">{stat.value}</p>
+   355→                </div>
+   356→                <div className={cn('size-9 rounded-lg flex items-center justify-center', stat.bg)}>
+   357→                  <stat.icon className={cn('size-4', stat.color)} />
+   358→                </div>
+   359→              </div>
+   360→            </CardContent>
+   361→          </Card>
+   362→        ))}
+   363→      </div>
+   364→
+   365→      {/* Search */}
+   366→      <Card>
+   367→        <CardContent className="pt-4">
+   368→          <div className="relative">
+   369→            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+   370→            <Input
+   371→              type="search"
+   372→              placeholder="Search by name or email..."
+   373→              className="pl-10 h-10"
+   374→              value={search}
+   375→              onChange={(e) => setSearch(e.target.value)}
+   376→            />
+   377→          </div>
+   378→        </CardContent>
+   379→      </Card>
+   380→
+   381→      {/* Users Table */}
+   382→      <Card>
+   383→        <CardHeader className="pb-3">
+   384→          <CardTitle className="text-base flex items-center gap-2">
+   385→            <Users className="size-4" />
+   386→            All Users
+   387→            <Badge variant="secondary" className="text-[10px]">{filteredUsers.length}</Badge>
+   388→          </CardTitle>
+   389→          <CardDescription>Click edit to change plans, add/reduce days, or set custom plans</CardDescription>
+   390→        </CardHeader>
+   391→        <CardContent className="p-0">
+   392→          {loading ? (
+   393→            <div className="flex items-center justify-center py-12">
+   394→              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+   395→              <span className="ml-2 text-sm text-muted-foreground">Loading users...</span>
+   396→            </div>
+   397→          ) : filteredUsers.length === 0 ? (
+   398→            <div className="text-center py-12 text-sm text-muted-foreground">
+   399→              {search ? 'No users match your search.' : 'No users found.'}
+   400→            </div>
+   401→          ) : (
+   402→            <div className="overflow-x-auto">
+   403→              <table className="w-full text-sm">
+   404→                <thead>
+   405→                  <tr className="border-b bg-muted/30">
+   406→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">User</th>
+   407→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Plan</th>
+   408→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Days Left</th>
+   409→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Custom</th>
+   410→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Usage</th>
+   411→                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Joined</th>
+   412→                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Actions</th>
+   413→                  </tr>
+   414→                </thead>
+   415→                <tbody>
+   416→                  {filteredUsers.map((u) => (
+   417→                    <motion.tr
+   418→                      key={u.id}
+   419→                      layout
+   420→                      initial={{ opacity: 0 }}
+   421→                      animate={{ opacity: 1 }}
+   422→                      className="border-b hover:bg-muted/20 transition-colors"
+   423→                    >
+   424→                      <td className="px-4 py-3">
+   425→                        <div className="flex flex-col gap-0.5">
+   426→                          <div className="flex items-center gap-2">
+   427→                            <span className="font-medium text-sm">{u.name}</span>
+   428→                            {u.role === 'admin' && (
+   429→                              <Badge className="text-[9px] px-1.5 py-0 h-4">Admin</Badge>
+   430→                            )}
+   431→                            {!u.isVerified && (
+   432→                              <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4">Unverified</Badge>
+   433→                            )}
+   434→                          </div>
+   435→                          <span className="text-xs text-muted-foreground">{u.email}</span>
+   436→                        </div>
+   437→                      </td>
+   438→                      <td className="px-4 py-3">
+   439→                        <div className="flex items-center gap-1.5">
+   440→                          {u.plan === 'pro' ? (
+   441→                            <>
+   442→                              <Crown className="size-3.5 text-primary" />
+   443→                              <span className="font-medium text-primary">Pro</span>
+   444→                            </>
+   445→                          ) : (
+   446→                            <>
+   447→                              <Zap className="size-3.5 text-muted-foreground" />
+   448→                              <span className="text-muted-foreground">Free</span>
+   449→                            </>
+   450→                          )}
+   451→                        </div>
+   452→                        {u.stripe?.subscriptionId && (
+   453→                          <span className="text-[10px] text-muted-foreground">Stripe</span>
+   454→                        )}
+   455→                      </td>
+   456→                      <td className="px-4 py-3">
+   457→                        {u.plan === 'pro' ? (
+   458→                          <div className="flex flex-col gap-0.5">
+   459→                            <span className={cn(
+   460→                              'text-sm font-semibold',
+   461→                              u.planDaysLeft <= 3 ? 'text-red-500' : u.planDaysLeft <= 7 ? 'text-amber-500' : 'text-foreground'
+   462→                            )}>
+   463→                              {u.planDaysLeft}d
+   464→                            </span>
+   465→                            {u.planExpiresAt > 0 && (
+   466→                              <span className="text-[10px] text-muted-foreground">
+   467→                                {formatExpiryDate(u.planExpiresAt)}
+   468→                              </span>
+   469→                            )}
+   470→                          </div>
+   471→                        ) : (
+   472→                          <span className="text-xs text-muted-foreground">—</span>
+   473→                        )}
+   474→                      </td>
+   475→                      <td className="px-4 py-3">
+   476→                        {u.isCustomPlan ? (
+   477→                          <div className="flex flex-col gap-0.5">
+   478→                            <Badge className="text-[10px] gap-1 w-fit" variant="outline">
+   479→                              <Star className="size-2.5" />
+   480→                              {u.customPlan?.customLabel || 'Custom'}
+   481→                            </Badge>
+   482→                            {u.customPlan?.customDays > 0 && (
+   483→                              <span className="text-[10px] text-muted-foreground">
+   484→                                {u.customPlan.customDays}d plan
+   485→                              </span>
+   486→                            )}
+   487→                          </div>
+   488→                        ) : (
+   489→                          <span className="text-xs text-muted-foreground">—</span>
+   490→                        )}
+   491→                      </td>
+   492→                      <td className="px-4 py-3">
+   493→                        <div className="text-xs text-muted-foreground">
+   494→                          <span>{u.dailyUsage?.projectsCreated ?? 0} proj</span>
+   495→                          <span className="mx-1">·</span>
+   496→                          <span>{u.dailyUsage?.aiGenerations ?? 0} AI</span>
+   497→                        </div>
+   498→                      </td>
+   499→                      <td className="px-4 py-3 text-xs text-muted-foreground">
+   500→                        {formatDate(u.createdAt)}
+   501→                      </td>
+   502→                      <td className="px-4 py-3">
+   503→                        <div className="flex items-center justify-end gap-1">
+   504→                          {/* Quick add 30 days */}
+   505→                          <Button
+   506→                            variant="ghost"
+   507→                            size="icon"
+   508→                            className="size-7"
+   509→                            title="Add 30 days"
+   510→                            onClick={() => quickAddDays(u, 30)}
+   511→                          >
+   512→                            <Plus className="size-3" />
+   513→                          </Button>
+   514→                          {/* Send notification */}
+   515→                          <Button
+   516→                            variant="ghost"
+   517→                            size="icon"
+   518→                            className="size-7 text-blue-500 hover:text-blue-500"
+   519→                            title="Send notification"
+   520→                            onClick={() => { setNotifyUser(u); setNotifTitle(''); setNotifMessage(''); setNotifType('info'); }}
+   521→                          >
+   522→                            <Bell className="size-3" />
+   523→                          </Button>
+   524→                          {/* Edit */}
+   525→                          <Button
+   526→                            variant="ghost"
+   527→                            size="icon"
+   528→                            className="size-7"
+   529→                            title="Edit user"
+   530→                            onClick={() => openEdit(u)}
+   531→                          >
+   532→                            <Edit3 className="size-3" />
+   533→                          </Button>
+   534→                          {/* Delete */}
+   535→                          <Button
+   536→                            variant="ghost"
+   537→                            size="icon"
+   538→                            className="size-7 text-destructive hover:text-destructive"
+   539→                            title="Delete user"
+   540→                            onClick={() => setDeleteUser(u)}
+   541→                            disabled={u.role === 'admin'}
+   542→                          >
+   543→                            <Trash2 className="size-3" />
+   544→                          </Button>
+   545→                        </div>
+   546→                      </td>
+   547→                    </motion.tr>
+   548→                  ))}
+   549→                </tbody>
+   550→              </table>
+   551→            </div>
+   552→          )}
+   553→        </CardContent>
+   554→      </Card>
+   555→
+   556→      {/* ══════════════════════════════════════════════════════ */}
+   557→      {/* ── Edit User Dialog ── */}
+   558→      {/* ══════════════════════════════════════════════════════ */}
+   559→      <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
+   560→        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+   561→          <DialogHeader>
+   562→            <DialogTitle className="flex items-center gap-2">
+   563→              <UserCog className="size-4" />
+   564→              Edit User
+   565→            </DialogTitle>
+   566→            <DialogDescription>
+   567→              Modify plan, days, or set custom plan for {editUser?.name}
+   568→            </DialogDescription>
+   569→          </DialogHeader>
+   570→
+   571→          {editUser && (
+   572→            <div className="space-y-4 py-2">
+   573→              {/* ── Current Info ── */}
+   574→              <div className="rounded-lg bg-muted/50 p-3 space-y-1.5">
+   575→                <div className="flex justify-between text-sm">
+   576→                  <span className="text-muted-foreground">Email</span>
+   577→                  <span className="font-medium text-xs">{editUser.email}</span>
+   578→                </div>
+   579→                <div className="flex justify-between text-sm">
+   580→                  <span className="text-muted-foreground">Current Plan</span>
+   581→                  <span className="font-medium">{editUser.plan === 'pro' ? 'Pro' : 'Free'}</span>
+   582→                </div>
+   583→                <div className="flex justify-between text-sm">
+   584→                  <span className="text-muted-foreground">Days Remaining</span>
+   585→                  <span className={cn('font-semibold', editUser.planDaysLeft <= 3 ? 'text-red-500' : 'text-foreground')}>
+   586→                    {editUser.plan === 'pro' ? `${editUser.planDaysLeft} days` : '—'}
+   587→                  </span>
+   588→                </div>
+   589→                {editUser.planExpiresAt > 0 && (
+   590→                  <div className="flex justify-between text-sm">
+   591→                    <span className="text-muted-foreground">Expires On</span>
+   592→                    <span className="text-xs">{formatExpiryDate(editUser.planExpiresAt)}</span>
+   593→                  </div>
+   594→                )}
+   595→              </div>
+   596→
+   597→              <Separator />
+   598→
+   599→              {/* ── Plan Selector ── */}
+   600→              <div className="space-y-2">
+   601→                <label className="text-sm font-medium">Plan</label>
+   602→                <Select value={editPlan} onValueChange={setEditPlan}>
+   603→                  <SelectTrigger className="w-full">
+   604→                    <SelectValue />
+   605→                  </SelectTrigger>
+   606→                  <SelectContent>
+   607→                    <SelectItem value="free">
+   608→                      <div className="flex items-center gap-2">
+   609→                        <Zap className="size-3.5 text-muted-foreground" />
+   610→                        Free
+   611→                      </div>
+   612→                    </SelectItem>
+   613→                    <SelectItem value="pro">
+   614→                      <div className="flex items-center gap-2">
+   615→                        <Crown className="size-3.5 text-primary" />
+   616→                        Pro
+   617→                      </div>
+   618→                    </SelectItem>
+   619→                  </SelectContent>
+   620→                </Select>
+   621→              </div>
+   622→
+   623→              {/* ── Days Editing Section (hidden when plan is Free) ── */}
+   624→              {editPlan === 'pro' && (
+   625→                <div className="space-y-3 rounded-lg border p-3">
+   626→                  <div className="flex items-center gap-2 text-sm font-medium">
+   627→                    <CalendarDays className="size-4 text-primary" />
+   628→                    Plan Duration
+   629→                  </div>
+   630→
+   631→                  {/* Mode selector: Add / Reduce / Set */}
+   632→                  <div className="flex items-center gap-1">
+   633→                    {([
+   634→                      { mode: 'add' as DaysEditMode, label: 'Add', icon: Plus, color: 'text-green-600' },
+   635→                      { mode: 'reduce' as DaysEditMode, label: 'Reduce', icon: Minus, color: 'text-red-500' },
+   636→                      { mode: 'set' as DaysEditMode, label: 'Set Exact', icon: Settings, color: 'text-blue-500' },
+   637→                    ]).map(({ mode, label, icon: Icon, color }) => (
+   638→                      <Button
+   639→                        key={mode}
+   640→                        variant={daysEditMode === mode ? 'default' : 'outline'}
+   641→                        size="sm"
+   642→                        className={cn('gap-1 text-xs', daysEditMode !== mode && 'text-muted-foreground')}
+   643→                        onClick={() => { setDaysEditMode(mode); setDaysValue(0); }}
+   644→                      >
+   645→                        <Icon className={cn('size-3', daysEditMode === mode ? color : '')} />
+   646→                        {label}
+   647→                      </Button>
+   648→                    ))}
+   649→                  </div>
+   650→
+   651→                  {/* Days value input with +/- buttons */}
+   652→                  <div className="flex items-center gap-2">
+   653→                    <Button
+   654→                      variant="outline"
+   655→                      size="icon"
+   656→                      className="size-8"
+   657→                      onClick={() => setDaysValue(Math.max(0, daysValue - (daysEditMode === 'set' ? 1 : 7)))}
+   658→                    >
+   659→                      <Minus className="size-3" />
+   660→                    </Button>
+   661→                    <Input
+   662→                      type="number"
+   663→                      min={0}
+   664→                      max={daysEditMode === 'set' ? 365 : 365}
+   665→                      value={daysValue}
+   666→                      onChange={(e) => setDaysValue(Math.max(0, parseInt(e.target.value) || 0))}
+   667→                      className="w-24 text-center"
+   668→                    />
+   669→                    <span className="text-xs text-muted-foreground">days</span>
+   670→                    <Button
+   671→                      variant="outline"
+   672→                      size="icon"
+   673→                      className="size-8"
+   674→                      onClick={() => setDaysValue(Math.min(365, daysValue + (daysEditMode === 'set' ? 1 : 7)))}
+   675→                    >
+   676→                      <Plus className="size-3" />
+   677→                    </Button>
+   678→                  </div>
+   679→
+   680→                  {/* Description text per mode */}
+   681→                  <p className="text-[11px] text-muted-foreground">
+   682→                    {daysEditMode === 'add' && 'Add days to the current expiry. If expired, starts from today.'}
+   683→                    {daysEditMode === 'reduce' && 'Reduce days from the current expiry. Will not go below today.'}
+   684→                    {daysEditMode === 'set' && 'Set the exact number of days from today. Replaces current expiry.'}
+   685→                  </p>
+   686→
+   687→                  {/* Quick preset buttons */}
+   688→                  <div className="flex items-center gap-1.5 flex-wrap">
+   689→                    {[7, 14, 30, 60, 90].map((d) => (
+   690→                      <Button
+   691→                        key={d}
+   692→                        variant="ghost"
+   693→                        size="sm"
+   694→                        className="text-[11px] h-7 px-2"
+   695→                        onClick={() => setDaysValue(d)}
+   696→                      >
+   697→                        {d}d
+   698→                      </Button>
+   699→                    ))}
+   700→                  </div>
+   701→                </div>
+   702→              )}
+   703→
+   704→              {/* ── Custom Plan Toggle ── */}
+   705→              <div className="space-y-2">
+   706→                <label className="text-sm font-medium flex items-center gap-2">
+   707→                  <Star className="size-3.5 text-amber-500" />
+   708→                  Custom Plan
+   709→                </label>
+   710→                <div className="flex items-center gap-3">
+   711→                  <Button
+   712→                    variant={editIsCustom ? 'default' : 'outline'}
+   713→                    size="sm"
+   714→                    onClick={() => { setEditIsCustom(true); if (editPlan !== 'pro') setEditPlan('pro'); }}
+   715→                  >
+   716→                    <Check className="size-3 mr-1" />
+   717→                    Yes
+   718→                  </Button>
+   719→                  <Button
+   720→                    variant={!editIsCustom ? 'default' : 'outline'}
+   721→                    size="sm"
+   722→                    onClick={() => setEditIsCustom(false)}
+   723→                  >
+   724→                    <X className="size-3 mr-1" />
+   725→                    No
+   726→                  </Button>
+   727→                </div>
+   728→                <p className="text-[11px] text-muted-foreground">
+   729→                  When enabled, custom plan days take priority over regular add/reduce/set days.
+   730→                </p>
+   731→              </div>
+   732→
+   733→              {/* ── Custom Plan Details ── */}
+   734→              <AnimatePresence>
+   735→                {editIsCustom && (
+   736→                  <motion.div
+   737→                    initial={{ opacity: 0, height: 0 }}
+   738→                    animate={{ opacity: 1, height: 'auto' }}
+   739→                    exit={{ opacity: 0, height: 0 }}
+   740→                    className="space-y-3 overflow-hidden"
+   741→                  >
+   742→                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-3">
+   743→                      <div className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400">
+   744→                        <Star className="size-3.5" />
+   745→                        Custom Plan Configuration
+   746→                      </div>
+   747→
+   748→                      <div className="space-y-2">
+   749→                        <label className="text-xs font-medium">Plan Label</label>
+   750→                        <Input
+   751→                          placeholder="e.g. Team Plan, Agency Plan, VIP"
+   752→                          value={editCustomLabel}
+   753→                          onChange={(e) => setEditCustomLabel(e.target.value)}
+   754→                        />
+   755→                      </div>
+   756→
+   757→                      <div className="space-y-2">
+   758→                        <label className="text-xs font-medium">Custom Duration (days)</label>
+   759→                        <div className="flex items-center gap-2">
+   760→                          <Button
+   761→                            variant="outline"
+   762→                            size="icon"
+   763→                            className="size-8"
+   764→                            onClick={() => setEditCustomDays(Math.max(0, editCustomDays - 1))}
+   765→                          >
+   766→                            <Minus className="size-3" />
+   767→                          </Button>
+   768→                          <Input
+   769→                            type="number"
+   770→                            min={0}
+   771→                            max={365}
+   772→                            value={editCustomDays}
+   773→                            onChange={(e) => setEditCustomDays(Math.max(0, parseInt(e.target.value) || 0))}
+   774→                            className="w-24 text-center"
+   775→                          />
+   776→                          <span className="text-xs text-muted-foreground">days</span>
+   777→                          <Button
+   778→                            variant="outline"
+   779→                            size="icon"
+   780→                            className="size-8"
+   781→                            onClick={() => setEditCustomDays(Math.min(365, editCustomDays + 1))}
+   782→                          >
+   783→                            <Plus className="size-3" />
+   784→                          </Button>
+   785→                        </div>
+   786→                        <p className="text-[11px] text-amber-600/70 dark:text-amber-400/70">
+   787→                          This will set the plan expiry to exactly this many days from now, overriding any other day changes.
+   788→                        </p>
+   789→                      </div>
+   790→                    </div>
+   791→                  </motion.div>
+   792→                )}
+   793→              </AnimatePresence>
+   794→
+   795→              {/* ── Live Preview ── */}
+   796→              {editPlan === 'pro' && (
+   797→                <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 space-y-1.5">
+   798→                  <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+   799→                    <Eye className="size-3.5" />
+   800→                    Preview After Save
+   801→                  </div>
+   802→                  <div className="flex justify-between text-sm">
+   803→                    <span className="text-muted-foreground">Plan</span>
+   804→                    <span className="font-medium text-primary">Pro</span>
+   805→                  </div>
+   806→                  <div className="flex justify-between text-sm">
+   807→                    <span className="text-muted-foreground">Days Left</span>
+   808→                    <span className={cn(
+   809→                      'font-semibold',
+   810→                      previewDaysLeft() <= 3 ? 'text-red-500' : previewDaysLeft() <= 7 ? 'text-amber-500' : 'text-foreground'
+   811→                    )}>
+   812→                      {previewDaysLeft()} days
+   813→                    </span>
+   814→                  </div>
+   815→                  <div className="flex justify-between text-sm">
+   816→                    <span className="text-muted-foreground">Expires On</span>
+   817→                    <span className="text-xs font-medium">{previewExpiryDate()}</span>
+   818→                  </div>
+   819→                  {editIsCustom && editCustomDays > 0 && (
+   820→                    <div className="flex justify-between text-sm">
+   821→                      <span className="text-muted-foreground">Custom</span>
+   822→                      <Badge variant="outline" className="text-[10px] gap-1">
+   823→                        <Star className="size-2.5" />
+   824→                        {editCustomLabel || 'Custom'} ({editCustomDays}d)
+   825→                      </Badge>
+   826→                    </div>
+   827→                  )}
+   828→                </div>
+   829→              )}
+   830→
+   831→              <Separator />
+   832→
+   833→              {/* ── Role ── */}
+   834→              <div className="space-y-2">
+   835→                <label className="text-sm font-medium">Role</label>
+   836→                <Select value={editRole} onValueChange={setEditRole}>
+   837→                  <SelectTrigger className="w-full">
+   838→                    <SelectValue />
+   839→                  </SelectTrigger>
+   840→                  <SelectContent>
+   841→                    <SelectItem value="user">User</SelectItem>
+   842→                    <SelectItem value="admin">Admin</SelectItem>
+   843→                  </SelectContent>
+   844→                </Select>
+   845→              </div>
+   846→            </div>
+   847→          )}
+   848→
+   849→          <DialogFooter className="gap-2 sm:gap-0">
+   850→            <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
+   851→            <Button onClick={handleSave} disabled={saving}>
+   852→              {saving ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+   853→              Save Changes
+   854→            </Button>
+   855→          </DialogFooter>
+   856→        </DialogContent>
+   857→      </Dialog>
+   858→
+   859→      {/* ══════════════════════════════════════════════════════ */}
+   860→      {/* ── Delete Confirm Dialog ── */}
+   861→      {/* ══════════════════════════════════════════════════════ */}
+   862→      <Dialog open={!!deleteUser} onOpenChange={() => setDeleteUser(null)}>
+   863→        <DialogContent className="max-w-sm">
+   864→          <DialogHeader>
+   865→            <DialogTitle className="flex items-center gap-2 text-destructive">
+   866→              <AlertTriangle className="size-4" />
+   867→              Delete User
+   868→            </DialogTitle>
+   869→            <DialogDescription>
+   870→              This action cannot be undone. All data for this user will be permanently deleted.
+   871→            </DialogDescription>
+   872→          </DialogHeader>
+   873→          {deleteUser && (
+   874→            <div className="rounded-lg bg-destructive/5 border border-destructive/20 p-3">
+   875→              <p className="text-sm font-medium">{deleteUser.name}</p>
+   876→              <p className="text-xs text-muted-foreground">{deleteUser.email}</p>
+   877→            </div>
+   878→          )}
+   879→          <DialogFooter>
+   880→            <Button variant="outline" onClick={() => setDeleteUser(null)}>Cancel</Button>
+   881→            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+   882→              {deleting ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+   883→              Delete
+   884→            </Button>
+   885→          </DialogFooter>
+   886→        </DialogContent>
+   887→      </Dialog>
+   888→
+   889→      {/* ══════════════════════════════════════════════════════ */}
+   890→      {/* ── Send Notification Dialog ── */}
+   891→      {/* ══════════════════════════════════════════════════════ */}
+   892→      <Dialog open={!!notifyUser} onOpenChange={() => setNotifyUser(null)}>
+   893→        <DialogContent className="max-w-md">
+   894→          <DialogHeader>
+   895→            <DialogTitle className="flex items-center gap-2">
+   896→              <Bell className="size-4 text-blue-500" />
+   897→              Send Notification
+   898→            </DialogTitle>
+   899→            <DialogDescription>
+   900→              Send a notification to {notifyUser?.name} ({notifyUser?.email})
+   901→            </DialogDescription>
+   902→          </DialogHeader>
+   903→
+   904→          {notifyUser && (
+   905→            <div className="space-y-4 py-2">
+   906→              {/* Recipient */}
+   907→              <div className="rounded-lg bg-muted/50 p-3">
+   908→                <div className="flex justify-between text-sm">
+   909→                  <span className="text-muted-foreground">Recipient</span>
+   910→                  <span className="font-medium">{notifyUser.name}</span>
+   911→                </div>
+   912→                <div className="flex justify-between text-sm mt-1">
+   913→                  <span className="text-muted-foreground">Plan</span>
+   914→                  <span className={cn(notifyUser.plan === 'pro' && 'text-primary font-medium')}>
+   915→                    {notifyUser.plan === 'pro' ? 'Pro' : 'Free'}
+   916→                  </span>
+   917→                </div>
+   918→              </div>
+   919→
+   920→              {/* Notification Type */}
+   921→              <div className="space-y-2">
+   922→                <label className="text-sm font-medium">Type</label>
+   923→                <div className="flex items-center gap-1.5">
+   924→                  {([
+   925→                    { value: 'info' as const, label: 'Info', color: 'text-blue-500' },
+   926→                    { value: 'warning' as const, label: 'Warning', color: 'text-amber-500' },
+   927→                    { value: 'urgent' as const, label: 'Urgent', color: 'text-red-500' },
+   928→                  ]).map(({ value, label, color }) => (
+   929→                    <Button
+   930→                      key={value}
+   931→                      variant={notifType === value ? 'default' : 'outline'}
+   932→                      size="sm"
+   933→                      className={cn('gap-1 text-xs', notifType !== value && 'text-muted-foreground')}
+   934→                      onClick={() => setNotifType(value)}
+   935→                    >
+   936→                      <span className={cn('size-1.5 rounded-full', color === 'text-blue-500' ? 'bg-blue-500' : color === 'text-amber-500' ? 'bg-amber-500' : 'bg-red-500')} />
+   937→                      {label}
+   938→                    </Button>
+   939→                  ))}
+   940→                </div>
+   941→              </div>
+   942→
+   943→              {/* Title */}
+   944→              <div className="space-y-2">
+   945→                <label className="text-sm font-medium">Title</label>
+   946→                <Input
+   947→                  placeholder="e.g. Welcome to Pro!"
+   948→                  value={notifTitle}
+   949→                  onChange={(e) => setNotifTitle(e.target.value)}
+   950→                  maxLength={100}
+   951→                />
+   952→              </div>
+   953→
+   954→              {/* Message */}
+   955→              <div className="space-y-2">
+   956→                <label className="text-sm font-medium">Message</label>
+   957→                <Textarea
+   958→                  placeholder="Write your notification message..."
+   959→                  value={notifMessage}
+   960→                  onChange={(e) => setNotifMessage(e.target.value)}
+   961→                  rows={3}
+   962→                  maxLength={500}
+   963→                />
+   964→                <p className="text-[11px] text-muted-foreground text-right">{notifMessage.length}/500</p>
+   965→              </div>
+   966→            </div>
+   967→          )}
+   968→
+   969→          <DialogFooter className="gap-2 sm:gap-0">
+   970→            <Button variant="outline" onClick={() => setNotifyUser(null)}>Cancel</Button>
+   971→            <Button
+   972→              onClick={handleSendNotification}
+   973→              disabled={sendingNotif || !notifTitle.trim() || !notifMessage.trim()}
+   974→              className="gap-2"
+   975→            >
+   976→              {sendingNotif ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+   977→              Send
+   978→            </Button>
+   979→          </DialogFooter>
+   980→        </DialogContent>
+   981→      </Dialog>
+   982→    </div>
+   983→  );
+   984→}
+   985→
