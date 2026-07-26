@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
 import { AIModel, type IAIModel } from '@/lib/models/AIModel';
+import { invalidateModelCache } from '@/lib/get-active-model';
 
 // ── Auth guard ──
 async function requireAdmin() {
@@ -73,6 +74,9 @@ export async function POST(req: NextRequest) {
       sortOrder: sortOrder || 0,
     });
 
+    // Invalidate cache so the new model is picked up immediately
+    invalidateModelCache();
+
     return NextResponse.json({ model }, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message.includes('Forbidden')) {
@@ -133,6 +137,9 @@ export async function SEED() {
         created++;
       }
     }
+
+    // Invalidate cache so any newly active models are picked up immediately
+    invalidateModelCache();
 
     const total = await AIModel.countDocuments();
     return NextResponse.json({ message: `Seeded ${created} new models. Total: ${total}`, created, total });

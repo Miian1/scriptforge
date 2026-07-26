@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
 
     // Resolve voice model: use caller-specified modelId, else active from DB, else fallback
     const resolvedModelId = modelId || await getActiveModelId('voice');
+    console.log('[tts/generate] Resolved modelId:', resolvedModelId, '(from:', modelId ? 'client' : 'DB active', ')');
 
     const audioBuffer = await generateSpeech({
       voiceName,

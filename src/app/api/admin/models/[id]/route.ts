@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
 import { AIModel } from '@/lib/models/AIModel';
+import { invalidateModelCache } from '@/lib/get-active-model';
 
 async function requireAdmin() {
   const session = await getSession();
@@ -41,6 +42,9 @@ export async function PUT(
       return NextResponse.json({ error: 'Model not found' }, { status: 404 });
     }
 
+    // Invalidate cache so the change is picked up immediately on next request
+    invalidateModelCache();
+
     return NextResponse.json({ model });
   } catch (error) {
     if (error instanceof Error && error.message.includes('Forbidden')) {
@@ -65,6 +69,9 @@ export async function DELETE(
     if (!model) {
       return NextResponse.json({ error: 'Model not found' }, { status: 404 });
     }
+
+    // Invalidate cache in case the deleted model was the active one
+    invalidateModelCache();
 
     return NextResponse.json({ message: 'Model deleted' });
   } catch (error) {

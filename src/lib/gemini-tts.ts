@@ -195,7 +195,7 @@ export async function generateSpeech(options: TTSOptions): Promise<Buffer> {
   };
 
   console.log('[gemini-tts] Request URL:', url.replace(GEMINI_API_KEY, '***'));
-  console.log('[gemini-tts] Voice:', voiceName, 'Prompt length:', prompt.length);
+  console.log('[gemini-tts] Model:', modelId, '| Voice:', voiceName, '| Prompt length:', prompt.length);
 
   const res = await fetch(url, {
     method: 'POST',
