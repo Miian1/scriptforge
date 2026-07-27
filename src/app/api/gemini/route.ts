@@ -1,57 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
-import { connectDB } from '@/lib/mongodb';
-import { User } from '@/lib/models/User';
-import { PLAN_LIMITS, resetIfNewDay } from '@/lib/usage';
 import { getActiveModelId } from '@/lib/get-active-model';
+import { requireCredits, refundCredits } from '@/lib/credits';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const FALLBACK_MODEL = 'gemini-2.5-flash';
 
 export async function POST(request: NextRequest) {
   try {
-    // Require authentication
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    // ── Credit guard ──
+    // This route is the main text-generation endpoint. Every call costs 1 credit.
+    // The deduction is performed atomically inside requireCredits — if the call
+    // below fails, we refund the credit so the user isn't penalised for our errors.
+    const guard = await requireCredits('TEXT_GENERATION');
+    if (!guard.ok || !guard.userId) {
+      return NextResponse.json(
+        { error: guard.error || 'Access denied', code: guard.status === 429 ? 'CREDITS_EXHAUSTED' : undefined },
+        { status: guard.status },
+      );
     }
+    const userId = guard.userId;
 
     if (!GEMINI_API_KEY) {
+      await refundCredits(userId, 'TEXT_GENERATION');
       return NextResponse.json(
         { error: 'Gemini API key is not configured on the server.' },
         { status: 500 }
       );
     }
 
-    // ── Usage limit check ──
-    await connectDB();
-    const user = await User.findById(session.userId);
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-
-    const plan = user.plan || 'free';
-    const limits = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS];
-    const usage = resetIfNewDay(user.dailyUsage, plan as 'free' | 'pro');
-
-    const isLifetime = plan === 'free';
-    if (usage.aiGenerations >= limits.aiGenerationsPerDay) {
-      return NextResponse.json({
-        error: isLifetime
-          ? `You've used all ${limits.aiGenerationsPerDay} AI generations on the Free plan. Upgrade to Pro for 100 daily generations.`
-          : `You've reached your daily AI generation limit (${limits.aiGenerationsPerDay}). Upgrade to Pro for 10x more generations.`,
-        code: 'PLAN_LIMIT_REACHED',
-      }, { status: 429 });
-    }
-
-    // Increment AI usage
-    user.dailyUsage = { ...usage, aiGenerations: usage.aiGenerations + 1 };
-    await user.save();
-
     const body = await request.json();
     const { prompt, maxTokens } = body;
 
     if (!prompt || typeof prompt !== 'string') {
+      await refundCredits(userId, 'TEXT_GENERATION');
       return NextResponse.json({ error: 'Prompt is required.' }, { status: 400 });
     }
 
@@ -74,6 +55,8 @@ export async function POST(request: NextRequest) {
     });
 
     if (!res.ok) {
+      // Refund on server-side Gemini error — the user didn't get their result.
+      await refundCredits(userId, 'TEXT_GENERATION');
       const errorData = await res.json().catch(() => ({ error: { message: `Gemini API error: ${res.status}` } }));
       const message = (errorData as Record<string, Record<string, string>>)?.error?.message || `Gemini API error: ${res.status}`;
 
@@ -88,10 +71,14 @@ export async function POST(request: NextRequest) {
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!text) {
+      await refundCredits(userId, 'TEXT_GENERATION');
       return NextResponse.json({ error: 'Empty response from Gemini.' }, { status: 502 });
     }
 
-    return NextResponse.json({ text });
+    return NextResponse.json({
+      text,
+      credits: guard.state,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown server error';
     return NextResponse.json({ error: message }, { status: 500 });

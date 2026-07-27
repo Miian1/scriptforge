@@ -65,6 +65,23 @@ export async function GET() {
         planDaysLeft: daysLeft,
         stripe: u.stripe || { customerId: '', subscriptionId: '', currentPeriodEnd: 0, cancelAtPeriodEnd: false },
         dailyUsage: u.dailyUsage || { date: '', projectsCreated: 0, aiGenerations: 0 },
+        // ── Credit system ──
+        // For staff we report -1 (unlimited). For regular users we report
+        // the actual balance, the effective daily limit (custom override or
+        // plan default), and lifetime usage.
+        credits: {
+          balance: (u.role === 'admin' || u.role === 'manager') ? -1 : (u.credits?.balance ?? 0),
+          bonusCredits: (u.role === 'admin' || u.role === 'manager') ? 0 : (u.credits?.bonusCredits ?? 0),
+          dailyLimit: (() => {
+            if (u.role === 'admin' || u.role === 'manager') return -1;
+            const override = u.credits?.dailyLimit ?? 0;
+            if (override > 0) return override;
+            return u.plan === 'pro' ? 150 : 10;
+          })(),
+          lifetimeUsed: u.credits?.lifetimeUsed ?? 0,
+          lastResetDate: u.credits?.lastResetDate || '',
+          transactionCount: Array.isArray(u.credits?.transactions) ? u.credits.transactions.length : 0,
+        },
         createdAt: u.createdAt,
         updatedAt: u.updatedAt,
       };

@@ -4,6 +4,8 @@
 // Fetches scene narration from DB, strips stage directions, generates speech.
 // If saveAudio=true, saves to disk, creates GeneratedAudio record, updates scene.
 // Returns: audio/wav binary stream (with X-Audio-Path and X-Audio-Record-Id headers)
+//
+// Voice generation is Pro-only AND costs 1 credit per call.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
@@ -13,16 +15,25 @@ import { GeneratedAudioModel } from '@/lib/models/GeneratedAudio';
 import { generateSpeech, stripStageDirections, GEMINI_TTS_VOICES } from '@/lib/gemini-tts';
 import { getActiveModelId } from '@/lib/get-active-model';
 import { requirePro } from '@/lib/require-pro';
+import { requireCredits, refundCredits } from '@/lib/credits';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
 export async function POST(req: NextRequest) {
   try {
     // ── Pro-plan gate ──
-    // Voice generation is a Pro-only feature. Free users get 403.
-    const guard = await requirePro();
+    const proGuard = await requirePro();
+    if (!proGuard.ok || !proGuard.userId) {
+      return NextResponse.json({ error: proGuard.error || 'Access denied' }, { status: proGuard.status });
+    }
+
+    // ── Credit guard ──
+    const guard = await requireCredits('VOICE_GENERATION');
     if (!guard.ok || !guard.userId) {
-      return NextResponse.json({ error: guard.error || 'Access denied' }, { status: guard.status });
+      return NextResponse.json(
+        { error: guard.error || 'Access denied', code: guard.status === 429 ? 'CREDITS_EXHAUSTED' : undefined },
+        { status: guard.status },
+      );
     }
     const userId = guard.userId;
 
@@ -30,6 +41,7 @@ export async function POST(req: NextRequest) {
     const { sceneId, voiceName, instructions, modelId, saveAudio, style, pace, accent } = body;
 
     if (!sceneId || !voiceName) {
+      await refundCredits(userId, 'VOICE_GENERATION');
       return NextResponse.json(
         { error: 'sceneId and voiceName are required' },
         { status: 400 }
@@ -40,21 +52,25 @@ export async function POST(req: NextRequest) {
     await connectDB();
     const scene = await SceneModel.findById(sceneId);
     if (!scene) {
+      await refundCredits(userId, 'VOICE_GENERATION');
       return NextResponse.json({ error: 'Scene not found' }, { status: 404 });
     }
 
     const narration = scene.narration?.trim();
     if (!narration) {
+      await refundCredits(userId, 'VOICE_GENERATION');
       return NextResponse.json({ error: 'Scene has no narration text' }, { status: 400 });
     }
 
     // Strip stage directions [pause], (dramatic), *music* etc.
     const cleanNarration = stripStageDirections(narration);
     if (!cleanNarration) {
+      await refundCredits(userId, 'VOICE_GENERATION');
       return NextResponse.json({ error: 'Narration is empty after removing stage directions' }, { status: 400 });
     }
 
     if (cleanNarration.length > 5000) {
+      await refundCredits(userId, 'VOICE_GENERATION');
       return NextResponse.json(
         { error: 'Narration is too long (max 5000 characters)' },
         { status: 400 }
@@ -63,14 +79,20 @@ export async function POST(req: NextRequest) {
 
     // Resolve voice model: use caller-specified modelId, else active from DB, else fallback
     const resolvedModelId = modelId || await getActiveModelId('voice');
-    console.log('[tts/generate-scene] Resolved modelId:', resolvedModelId, '(from:', modelId ? 'client' : 'DB active', ')');
 
-    const audioBuffer = await generateSpeech({
-      voiceName,
-      text: cleanNarration,
-      instructions: instructions || undefined,
-      modelId: resolvedModelId,
-    });
+    let audioBuffer: Buffer;
+    try {
+      audioBuffer = await generateSpeech({
+        voiceName,
+        text: cleanNarration,
+        instructions: instructions || undefined,
+        modelId: resolvedModelId,
+      });
+    } catch (genErr) {
+      // Refund if the TTS call itself failed
+      await refundCredits(userId, 'VOICE_GENERATION');
+      throw genErr;
+    }
 
     // Resolve voice metadata
     const voiceDef = GEMINI_TTS_VOICES.find(v => v.name === voiceName);
@@ -128,6 +150,8 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'audio/wav',
         'Content-Length': audioBuffer.length.toString(),
         'Cache-Control': 'no-cache',
+        'X-Credits-Balance': String(guard.state?.balance ?? ''),
+        'X-Credits-Daily-Limit': String(guard.state?.dailyLimit ?? ''),
         ...(audioPath ? { 'X-Audio-Path': audioPath } : {}),
         ...(audioRecordId ? { 'X-Audio-Record-Id': audioRecordId } : {}),
       },

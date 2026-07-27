@@ -3,8 +3,7 @@ import { connectDB } from '@/lib/mongodb';
 import { ProjectModel } from '@/lib/models/Project';
 import { User } from '@/lib/models/User';
 import { YouTubeCache } from '@/lib/models/YouTubeCache';
-import { getSession } from '@/lib/auth';
-import { PLAN_LIMITS, resetIfNewDay } from '@/lib/usage';
+import { requireCredits, refundCredits } from '@/lib/credits';
 import { getActiveModelId } from '@/lib/get-active-model';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -12,36 +11,30 @@ const FALLBACK_MODEL = 'gemini-2.5-flash';
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    // ── Credit guard ──
+    const guard = await requireCredits('PROJECT_SCORING');
+    if (!guard.ok || !guard.userId) {
+      return NextResponse.json(
+        { error: guard.error || 'Access denied', code: guard.status === 429 ? 'CREDITS_EXHAUSTED' : undefined },
+        { status: guard.status },
+      );
     }
+    const userId = guard.userId;
+    const session = { userId };
 
     const body = await req.json();
     const { projectId } = body;
     if (!projectId) {
+      await refundCredits(userId, 'PROJECT_SCORING');
       return NextResponse.json({ error: 'Project ID required' }, { status: 400 });
     }
 
     await connectDB();
 
-    // Fetch user and check plan
+    // Fetch user (needed for YouTube context, not for credit check)
     const user = await User.findById(session.userId);
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-
-    const plan = user.plan || 'free';
-    const limits = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS];
-    const usage = resetIfNewDay(user.dailyUsage, plan as 'free' | 'pro');
-    const isLifetime = plan === 'free';
-
-    if (usage.aiGenerations >= limits.aiGenerationsPerDay) {
-      return NextResponse.json({
-        error: isLifetime
-          ? `You've used all ${limits.aiGenerationsPerDay} AI generations on the Free plan. Upgrade to Pro for 100 daily generations.`
-          : `Daily AI limit reached (${limits.aiGenerationsPerDay}). Upgrade to Pro for more.`,
-      }, { status: 429 });
     }
 
     // Fetch project
@@ -50,6 +43,7 @@ export async function POST(req: NextRequest) {
       userId: session.userId,
     });
     if (!project) {
+      await refundCredits(userId, 'PROJECT_SCORING');
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
@@ -125,6 +119,7 @@ Return JSON in this exact format:
 
     // Call Gemini
     if (!GEMINI_API_KEY) {
+      await refundCredits(userId, 'PROJECT_SCORING');
       return NextResponse.json({ error: 'Gemini API key not configured' }, { status: 500 });
     }
 
@@ -147,6 +142,7 @@ Return JSON in this exact format:
     });
 
     if (!res.ok) {
+      await refundCredits(userId, 'PROJECT_SCORING');
       const errData = await res.json().catch(() => ({ error: { message: `Gemini error: ${res.status}` } }));
       const msg = (errData as Record<string, Record<string, string>>)?.error?.message || `Gemini API error: ${res.status}`;
       return NextResponse.json({ error: msg }, { status: 500 });
@@ -156,6 +152,7 @@ Return JSON in this exact format:
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!text) {
+      await refundCredits(userId, 'PROJECT_SCORING');
       return NextResponse.json({ error: 'Empty response from Gemini' }, { status: 500 });
     }
 
@@ -164,6 +161,7 @@ Return JSON in this exact format:
     try {
       scores = JSON.parse(text);
     } catch {
+      await refundCredits(userId, 'PROJECT_SCORING');
       return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 });
     }
 
@@ -196,10 +194,6 @@ Return JSON in this exact format:
       }
     );
 
-    // Increment usage
-    user.dailyUsage = { ...usage, aiGenerations: usage.aiGenerations + 1 };
-    await user.save();
-
     // Re-fetch project to get updated history
     const updatedProject = await ProjectModel.findOne({
       _id: projectId,
@@ -210,7 +204,11 @@ Return JSON in this exact format:
       ? updatedProject.scoreHistory
       : [scoreEntry];
 
-    return NextResponse.json({ scores: scoreEntry, scoreHistory: history });
+    return NextResponse.json({
+      scores: scoreEntry,
+      scoreHistory: history,
+      credits: guard.state,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     return NextResponse.json({ error: message }, { status: 500 });

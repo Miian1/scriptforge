@@ -9,7 +9,7 @@ import {
   AlertTriangle, RefreshCw, Plus, Minus, CalendarDays, Settings, Eye, Bell, Send,
   Wrench, Youtube, ToggleLeft, ToggleRight, Save,
   BrainCircuit, Mic, MessageSquare, Sparkles, Trash,
-  CreditCard, Banknote, UserPlus
+  CreditCard, Banknote, UserPlus, Coins, Gift, RotateCcw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -47,6 +47,16 @@ interface AdminUser {
   planDaysLeft: number;
   stripe: { customerId: string; subscriptionId: string; currentPeriodEnd: number; cancelAtPeriodEnd: boolean };
   dailyUsage: { date: string; projectsCreated: number; aiGenerations: number };
+  // ── Credit system ──
+  // -1 means "unlimited" (admin/manager). Regular users have real numbers.
+  credits: {
+    balance: number;
+    bonusCredits: number;
+    dailyLimit: number;
+    lifetimeUsed: number;
+    lastResetDate: string;
+    transactionCount?: number;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -120,6 +130,14 @@ export default function AdminPage() {
   const [daysEditMode, setDaysEditMode] = useState<DaysEditMode>('add');
   const [daysValue, setDaysValue] = useState(0);
 
+  // ── Credit edit state ──
+  // Three independent operations the admin can run from the edit dialog.
+  // Each one is optional — only sent to the API if the admin interacts with it.
+  const [editCreditDailyLimit, setEditCreditDailyLimit] = useState<number>(0);  // 0 = plan default
+  const [editCreditDailyLimitEnabled, setEditCreditDailyLimitEnabled] = useState<boolean>(false);
+  const [editCreditBonusAdd, setEditCreditBonusAdd] = useState<number>(0);
+  const [editCreditReset, setEditCreditReset] = useState<boolean>(false);
+
   // Create user dialog state
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [creatingUser, setCreatingUser] = useState(false);
@@ -182,6 +200,20 @@ export default function AdminPage() {
     setEditRole(u.role);
     setDaysEditMode('add');
     setDaysValue(0);
+    // ── Initialize credit state ──
+    // If the user already has a custom daily limit override (>0), load it
+    // and enable the toggle. Otherwise start at the plan default.
+    const isStaff = u.role === 'admin' || u.role === 'manager';
+    if (isStaff) {
+      setEditCreditDailyLimitEnabled(false);
+      setEditCreditDailyLimit(0);
+    } else {
+      const hasOverride = u.credits?.dailyLimit > 0 && u.credits.dailyLimit !== 10 && u.credits.dailyLimit !== 150;
+      setEditCreditDailyLimitEnabled(hasOverride);
+      setEditCreditDailyLimit(hasOverride ? u.credits.dailyLimit : (u.plan === 'pro' ? 150 : 10));
+    }
+    setEditCreditBonusAdd(0);
+    setEditCreditReset(false);
   };
 
   // ── Compute preview of what days will be after save ──
@@ -247,6 +279,32 @@ export default function AdminPage() {
         body.reduceDays = daysValue;
       } else if (daysEditMode === 'set') {
         body.setDays = daysValue;
+      }
+
+      // ── Credit operations ──
+      // Only send the credit fields the admin actually interacted with, so
+      // we don't clobber bonus credits or trigger an unwanted reset when the
+      // admin only meant to change the plan.
+      const isStaff = editRole === 'admin' || editRole === 'manager';
+
+      if (!isStaff) {
+        // Daily limit override: send only if the toggle is enabled
+        if (editCreditDailyLimitEnabled) {
+          body.creditDailyLimit = Math.max(1, Math.min(10000, editCreditDailyLimit));
+        } else {
+          // Admin disabled the override → reset to 0 (plan default)
+          body.creditDailyLimit = 0;
+        }
+
+        // Bonus credits: send only if non-zero
+        if (editCreditBonusAdd !== 0) {
+          body.creditBonusAdd = editCreditBonusAdd;
+        }
+
+        // Reset balance to plan limit immediately
+        if (editCreditReset) {
+          body.creditReset = true;
+        }
       }
 
       const res = await fetch(`/api/admin/users/${editUser.id}`, {
@@ -949,6 +1007,89 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ══════════════════════════════════════════════════════ */}
+      {/* ── Credit System Policy ── */}
+      {/* ══════════════════════════════════════════════════════ */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Coins className="size-4 text-amber-500" />
+            Credit System
+          </CardTitle>
+          <CardDescription>
+            AI usage is metered per-action. Each generation (text, voice, project create, scoring, YouTube AI reply, SEO improve) costs exactly 1 credit.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="divide-y">
+            <div className="px-4 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-lg flex items-center justify-center bg-blue-500/10">
+                  <Zap className="size-4 text-blue-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Free Plan</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">10 credits per day · resets daily</p>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-xs">10/day</Badge>
+            </div>
+            <div className="px-4 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-lg flex items-center justify-center bg-primary/10">
+                  <Crown className="size-4 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Pro Plan</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">150 credits per day · resets daily</p>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-xs">150/day</Badge>
+            </div>
+            <div className="px-4 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-lg flex items-center justify-center bg-amber-500/10">
+                  <ShieldCheck className="size-4 text-amber-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Staff (Admin / Manager)</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Unlimited — bypass credit checks</p>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-xs">∞</Badge>
+            </div>
+            <div className="px-4 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-lg flex items-center justify-center bg-emerald-500/10">
+                  <Gift className="size-4 text-emerald-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Bonus Credits</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Admin-granted, never reset, consumed after daily balance</p>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-xs">Per-user</Badge>
+            </div>
+            <div className="px-4 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-lg flex items-center justify-center bg-purple-500/10">
+                  <Settings className="size-4 text-purple-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Custom Daily Limit Override</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Per-user override (set in edit dialog)</p>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-xs">Per-user</Badge>
+            </div>
+          </div>
+          <div className="px-4 py-3 bg-muted/30 border-t flex items-center gap-2 text-xs text-muted-foreground">
+            <Coins className="size-3" />
+            To adjust a user&apos;s credits, click the <Edit3 className="inline size-2.5" /> edit icon on their row.
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Users Table */}
       <Card>
         <CardHeader className="pb-3">
@@ -990,7 +1131,12 @@ export default function AdminPage() {
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Plan</th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Days Left</th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Source</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Usage</th>
+                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Coins className="size-3" />
+                        Credits
+                      </div>
+                    </th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Joined</th>
                     <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Actions</th>
                   </tr>
@@ -1091,11 +1237,42 @@ export default function AdminPage() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-xs text-muted-foreground">
-                          <span>{u.dailyUsage?.projectsCreated ?? 0} proj</span>
-                          <span className="mx-1">·</span>
-                          <span>{u.dailyUsage?.aiGenerations ?? 0} AI</span>
-                        </div>
+                        {u.role === 'admin' || u.role === 'manager' ? (
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant="secondary" className="text-[10px] gap-0.5">
+                              <Coins className="size-2.5" />
+                              ∞
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground">Staff</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <Coins className={cn(
+                                'size-3',
+                                (u.credits?.balance ?? 0) <= 0 ? 'text-red-500' : (u.credits?.balance ?? 0) <= 2 ? 'text-amber-500' : 'text-blue-500'
+                              )} />
+                              <span className={cn(
+                                'text-sm font-semibold',
+                                (u.credits?.balance ?? 0) <= 0 ? 'text-red-500' : (u.credits?.balance ?? 0) <= 2 ? 'text-amber-500' : 'text-foreground'
+                              )}>
+                                {u.credits?.balance ?? 0}
+                                <span className="text-[10px] text-muted-foreground font-normal">/{u.credits?.dailyLimit ?? 0}</span>
+                              </span>
+                            </div>
+                            {(u.credits?.bonusCredits ?? 0) > 0 && (
+                              <div className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+                                <Gift className="size-2.5" />
+                                +{u.credits.bonusCredits} bonus
+                              </div>
+                            )}
+                            {(u.credits?.lifetimeUsed ?? 0) > 0 && (
+                              <span className="text-[9px] text-muted-foreground">
+                                {u.credits.lifetimeUsed} used total
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         {formatDate(u.createdAt)}
@@ -1347,6 +1524,176 @@ export default function AdminPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* ═════════════════════════════════════════════════ */}
+              {/* ── Credit Management (hidden for staff roles) ──   */}
+              {/* ═════════════════════════════════════════════════ */}
+              {editRole !== 'admin' && editRole !== 'manager' && (
+                <div className="space-y-4">
+                  <Separator />
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Coins className="size-4 text-amber-500" />
+                      Credit Management
+                    </div>
+                    <p className="text-[11px] text-muted-foreground -mt-1">
+                      Free plan: 10 credits/day · Pro plan: 150 credits/day. 1 credit per AI action
+                      (text gen, voice gen, project create, scoring, YouTube AI reply, SEO improve).
+                    </p>
+
+                    {/* ── Current Credit State ── */}
+                    {editUser.credits && (
+                      <div className="rounded-lg bg-muted/50 p-3 space-y-1.5">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Daily Balance</span>
+                          <span className={cn(
+                            'font-semibold',
+                            editUser.credits.balance <= 0 ? 'text-red-500' : editUser.credits.balance <= 2 ? 'text-amber-500' : 'text-foreground'
+                          )}>
+                            {editUser.credits.balance} / {editUser.credits.dailyLimit > 0 ? editUser.credits.dailyLimit : (editUser.plan === 'pro' ? 150 : 10)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Bonus Credits</span>
+                          <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                            {editUser.credits.bonusCredits}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Lifetime Used</span>
+                          <span className="text-xs">{editUser.credits.lifetimeUsed}</span>
+                        </div>
+                        {editUser.credits.lastResetDate && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Last Reset</span>
+                            <span className="text-xs">{editUser.credits.lastResetDate}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── Daily Limit Override ── */}
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Settings className="size-3.5 text-muted-foreground" />
+                          <span className="text-sm font-medium">Custom Daily Limit</span>
+                        </div>
+                        <Switch
+                          checked={editCreditDailyLimitEnabled}
+                          onCheckedChange={setEditCreditDailyLimitEnabled}
+                        />
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Override the plan default (Free=10, Pro=150). Disable to revert to plan default.
+                      </p>
+                      {editCreditDailyLimitEnabled && (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="size-8"
+                            onClick={() => setEditCreditDailyLimit(Math.max(1, editCreditDailyLimit - 10))}
+                          >
+                            <Minus className="size-3" />
+                          </Button>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={10000}
+                            value={editCreditDailyLimit}
+                            onChange={(e) => setEditCreditDailyLimit(Math.max(1, Math.min(10000, parseInt(e.target.value) || 1)))}
+                            className="w-24 text-center"
+                          />
+                          <span className="text-xs text-muted-foreground">credits/day</span>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="size-8"
+                            onClick={() => setEditCreditDailyLimit(Math.min(10000, editCreditDailyLimit + 10))}
+                          >
+                            <Plus className="size-3" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Bonus Credits (Add/Subtract) ── */}
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Gift className="size-3.5 text-emerald-500" />
+                        <span className="text-sm font-medium">Bonus Credits</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Extra credits that never reset. Use negative to remove. Consumed after daily balance hits 0.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="size-8"
+                          onClick={() => setEditCreditBonusAdd(editCreditBonusAdd - 5)}
+                        >
+                          <Minus className="size-3" />
+                        </Button>
+                        <Input
+                          type="number"
+                          value={editCreditBonusAdd}
+                          onChange={(e) => setEditCreditBonusAdd(parseInt(e.target.value) || 0)}
+                          className="w-24 text-center"
+                        />
+                        <span className="text-xs text-muted-foreground">credits</span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="size-8"
+                          onClick={() => setEditCreditBonusAdd(editCreditBonusAdd + 5)}
+                        >
+                          <Plus className="size-3" />
+                        </Button>
+                        {/* Quick presets */}
+                        {[10, 25, 50, 100].map((amt) => (
+                          <Button
+                            key={amt}
+                            variant="ghost"
+                            size="sm"
+                            className="text-[11px] h-7 px-2"
+                            onClick={() => setEditCreditBonusAdd(amt)}
+                          >
+                            +{amt}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ── Reset Balance ── */}
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <RotateCcw className="size-3.5 text-blue-500" />
+                          <span className="text-sm font-medium">Reset Daily Balance</span>
+                        </div>
+                        <Switch
+                          checked={editCreditReset}
+                          onCheckedChange={setEditCreditReset}
+                        />
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Immediately refill the daily balance to the limit. Useful when testing or
+                        compensating a user for a failed operation.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Staff credit note */}
+              {(editRole === 'admin' || editRole === 'manager') && (
+                <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 p-3 text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2">
+                  <Coins className="size-3.5" />
+                  Staff roles bypass credit checks entirely — unlimited AI usage.
+                </div>
+              )}
             </div>
           )}
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models/User';
 import { getSession } from '@/lib/auth';
+import { PLAN_CREDIT_LIMITS } from '@/lib/credits';
 
 // POST /api/admin/users/create
 // Admin creates a new user account with email + password.
@@ -70,6 +71,9 @@ export async function POST(req: NextRequest) {
     // ── Build the user document ──
     // Admin-created accounts are pre-verified — no email verification sent.
     // planSource='manual' for Pro (admin-granted), null for Free.
+    // Credits: Pro = 150, Free = 10, Staff = bypass (balance set to 0, but
+    // requireCredits short-circuits for admin/manager anyway).
+    const todayDate = new Date().toISOString().split('T')[0];
     const newUserData: Record<string, unknown> = {
       name: userName,
       email: normalizedEmail,
@@ -80,6 +84,19 @@ export async function POST(req: NextRequest) {
       isVerified: true, // ← no email verification for admin-created accounts
       verificationToken: null,
       verificationTokenExpires: null,
+      credits: {
+        // Staff get 0 balance but bypass via requireCredits. Regular users
+        // start with their plan's daily limit so they can use the app
+        // immediately.
+        balance: userRole === 'admin' || userRole === 'manager'
+          ? 0
+          : (userPlan === 'pro' ? PLAN_CREDIT_LIMITS.pro : PLAN_CREDIT_LIMITS.free),
+        dailyLimit: 0,                  // 0 = use plan default
+        bonusCredits: 0,
+        lastResetDate: todayDate,
+        lifetimeUsed: 0,
+        transactions: [],
+      },
     };
 
     if (userPlan === 'pro') {

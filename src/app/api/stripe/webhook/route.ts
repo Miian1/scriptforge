@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models/User';
 import { getStripeClient } from '@/lib/stripe';
+import { PLAN_CREDIT_LIMITS } from '@/lib/credits';
 
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -147,11 +148,17 @@ export async function POST(req: NextRequest) {
             currentPeriodEnd: currentPeriodEndMs,
             cancelAtPeriodEnd,
           },
+          // ── Reset credits to Pro daily limit on upgrade ──
+          // Fresh Pro users should immediately get their 150 credits, not
+          // keep whatever Free balance (10) they had left.
+          'credits.balance': PLAN_CREDIT_LIMITS.pro,
+          'credits.lastResetDate': new Date().toISOString().split('T')[0],
         });
 
         console.log(
           `[Stripe Webhook] User ${userId} upgraded to Pro. Sub: ${subscriptionId}. ` +
-            `Period end: ${currentPeriodEndMs ? new Date(currentPeriodEndMs).toISOString() : 'unknown — safety net will sync'}.`
+            `Period end: ${currentPeriodEndMs ? new Date(currentPeriodEndMs).toISOString() : 'unknown — safety net will sync'}. ` +
+            `Credits reset to ${PLAN_CREDIT_LIMITS.pro}.`
         );
       }
     }
@@ -331,6 +338,9 @@ export async function POST(req: NextRequest) {
               currentPeriodEnd: 0,
               cancelAtPeriodEnd: false,
             };
+            // Reset credits to Free limit on downgrade
+            update['credits.balance'] = PLAN_CREDIT_LIMITS.free;
+            update['credits.lastResetDate'] = new Date().toISOString().split('T')[0];
             console.log(
               `[Stripe Webhook] Subscription ${subscription.id} status=${subscription.status}. User ${user._id} downgraded to free.`
             );
@@ -372,6 +382,9 @@ export async function POST(req: NextRequest) {
             currentPeriodEnd: 0,
             cancelAtPeriodEnd: false,
           },
+          // ── Reset credits to Free daily limit on downgrade ──
+          'credits.balance': PLAN_CREDIT_LIMITS.free,
+          'credits.lastResetDate': new Date().toISOString().split('T')[0],
         });
       } else if (customerId) {
         const user = await User.findOne({ 'stripe.customerId': customerId });
@@ -388,6 +401,9 @@ export async function POST(req: NextRequest) {
               currentPeriodEnd: 0,
               cancelAtPeriodEnd: false,
             },
+            // ── Reset credits to Free daily limit on downgrade ──
+            'credits.balance': PLAN_CREDIT_LIMITS.free,
+            'credits.lastResetDate': new Date().toISOString().split('T')[0],
           });
         }
       }

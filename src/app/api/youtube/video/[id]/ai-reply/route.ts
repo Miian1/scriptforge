@@ -69,8 +69,13 @@ export async function POST(
 - Do NOT use hashtags, emojis, or promotional language
 - Return ONLY the reply text, nothing else`;
 
-    // Call Gemini (this also checks/increments AI usage)
-    const replyText = await geminiServerCall({ prompt, maxTokens: 512, jsonMode: false });
+    // Call Gemini (this also checks/deducts credits)
+    const replyText = await geminiServerCall({
+      prompt,
+      maxTokens: 512,
+      jsonMode: false,
+      actionKey: 'AI_COMMENT_REPLY',
+    });
 
     // Clean up the reply (remove quotes if Gemini wraps it)
     const cleanReply = replyText.trim().replace(/^["']|["']$/g, '');

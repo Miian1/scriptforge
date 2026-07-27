@@ -82,7 +82,12 @@ Generate 15-25 highly relevant, optimized YouTube tags. Mix broad and specific t
 Return ONLY a JSON object: { "tags": ["tag1", "tag2", ...] }`;
     }
 
-    const responseText = await geminiServerCall({ prompt, maxTokens: 4096, jsonMode: true });
+    const responseText = await geminiServerCall({
+      prompt,
+      maxTokens: 4096,
+      jsonMode: true,
+      actionKey: 'AI_SEO_IMPROVE',
+    });
 
     // Parse JSON from response
     let improvedDescription: string | null = null;

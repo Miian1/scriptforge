@@ -24,6 +24,32 @@ export interface IDailyUsage {
   aiGenerations: number;
 }
 
+// ── Credit system ───────────────────────────────────────
+// Every AI action (text gen, voice gen, project create, score, etc.)
+// costs 1 credit. Free plan: 10 credits/day. Pro plan: 150 credits/day.
+// Admins/managers bypass credit checks entirely.
+//
+// `dailyLimit` overrides the plan default when > 0 (admin can set per-user).
+// `bonusCredits` are admin-granted extra credits that do NOT reset daily —
+// they persist until used. They are consumed after daily credits run out.
+// `lastResetDate` controls when daily credits were last refilled.
+// `transactions` is a capped log of the last 50 deductions for audit.
+export interface ICreditTransaction {
+  action: string;         // 'text_generation', 'voice_generation', etc.
+  amount: number;         // typically 1, but could be higher for batch ops
+  balanceAfter: number;   // credits balance right after this deduction
+  at: number;             // ms timestamp
+}
+
+export interface ICredits {
+  balance: number;        // current spendable daily credit balance
+  dailyLimit: number;     // 0 = use plan default (free=10, pro=150); >0 = custom override
+  bonusCredits: number;   // admin-granted, never resets, consumed after daily
+  lastResetDate: string;  // 'YYYY-MM-DD' — when balance was last refilled
+  lifetimeUsed: number;   // total credits ever consumed (audit)
+  transactions: ICreditTransaction[];
+}
+
 export interface IYouTubeConnection {
   connected: boolean;
   accessToken: string | null;
@@ -90,6 +116,7 @@ export interface IUser extends Document {
   verificationToken: string | null;
   verificationTokenExpires: Date | null;
   dailyUsage: IDailyUsage;
+  credits: ICredits;
   youtube: IYouTubeConnection;
   channelNiche: IChannelNiche;
   stripe: IStripeInfo;
@@ -103,6 +130,33 @@ const DailyUsageSchema = new Schema<IDailyUsage>({
   date: { type: String, required: true },
   projectsCreated: { type: Number, default: 0 },
   aiGenerations: { type: Number, default: 0 },
+});
+
+// ── Credit system schema ──
+// Free plan default: 10 credits/day. Pro plan default: 150 credits/day.
+// `dailyLimit=0` means "use plan default" — admin can override per-user.
+// `balance` is the daily balance that resets each day; `bonusCredits`
+// never resets and is consumed after balance hits 0.
+const CreditTransactionSchema = new Schema<ICreditTransaction>({
+  action: { type: String, required: true },
+  amount: { type: Number, required: true, default: 1 },
+  balanceAfter: { type: Number, required: true, default: 0 },
+  at: { type: Number, required: true, default: () => Date.now() },
+});
+
+const CreditsSchema = new Schema<ICredits>({
+  balance: { type: Number, default: 10 },          // free plan default on creation
+  dailyLimit: { type: Number, default: 0 },        // 0 = use plan default
+  bonusCredits: { type: Number, default: 0 },
+  lastResetDate: {
+    type: String,
+    default: () => new Date().toISOString().split('T')[0],
+  },
+  lifetimeUsed: { type: Number, default: 0 },
+  transactions: {
+    type: [CreditTransactionSchema],
+    default: () => [],
+  },
 });
 
 const YouTubeSchema = new Schema<IYouTubeConnection>({
@@ -180,6 +234,17 @@ const UserSchema = new Schema<IUser>(
     dailyUsage: {
       type: DailyUsageSchema,
       default: () => ({ date: new Date().toISOString().split('T')[0], projectsCreated: 0, aiGenerations: 0 }),
+    },
+    credits: {
+      type: CreditsSchema,
+      default: () => ({
+        balance: 10,
+        dailyLimit: 0,
+        bonusCredits: 0,
+        lastResetDate: new Date().toISOString().split('T')[0],
+        lifetimeUsed: 0,
+        transactions: [],
+      }),
     },
     youtube: {
       type: YouTubeSchema,

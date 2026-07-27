@@ -25,6 +25,20 @@ export interface AuthUser {
     projectsCreated: number;
     aiGenerations: number;
   };
+  // ── Credit system ──
+  // All values use -1 as a sentinel for "unlimited" (admin/manager).
+  // Regular users see real numbers. The client should treat any value < 0
+  // as Infinity for display purposes.
+  credits: {
+    balance: number;          // remaining daily credits (or -1 for unlimited)
+    bonusCredits: number;     // admin-granted credits, never reset
+    dailyLimit: number;       // plan default or admin override (or -1 for unlimited)
+    totalAvailable: number;   // balance + bonus (or -1 for unlimited)
+    lifetimeUsed: number;     // total credits ever consumed
+    lastResetDate: string;    // 'YYYY-MM-DD'
+    isStaff: boolean;         // true if user bypasses credit checks
+    plan: 'free' | 'pro';     // effective plan for credit limit purposes
+  };
   stripe: {
     customerId: string;
     subscriptionId: string;

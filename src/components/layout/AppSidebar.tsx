@@ -15,6 +15,7 @@ import {
   PlusCircle,
   ShieldCheck,
   UserCog,
+  Coins,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePathname, useRouter } from 'next/navigation';
@@ -278,6 +279,7 @@ function DesktopSidebar() {
   const router = useRouter();
   const userName = useAuthStore((s) => s.user?.name);
   const userRole = useAuthStore((s) => s.user?.role);
+  const credits = useAuthStore((s) => s.user?.credits);
 
   // Fetch tools config on mount
   useEffect(() => { loadTools(); }, [loadTools]);
@@ -352,6 +354,56 @@ function DesktopSidebar() {
 
       {/* User info + logout + collapse toggle */}
       <div className={cn('shrink-0 px-2 py-1 border-t flex flex-col gap-1', sidebar.border)}>
+        {/* ── Credit balance pill (expanded only, hidden for staff) ── */}
+        <AnimatePresence>
+          {!sidebarCollapsed && credits && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 36 }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden px-2"
+            >
+              {credits.isStaff ? (
+                <div className="flex items-center justify-between h-8 px-2.5 rounded-md bg-amber-500/10 border border-amber-500/20">
+                  <div className="flex items-center gap-1.5">
+                    <Coins className="size-3 text-amber-500" />
+                    <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">Staff Credits</span>
+                  </div>
+                  <span className="text-[11px] font-bold text-amber-700 dark:text-amber-300">∞</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => router.push('/plans')}
+                  className="w-full flex items-center justify-between h-8 px-2.5 rounded-md bg-muted/50 hover:bg-muted border border-border transition-colors group"
+                  title="View plans"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Coins className={cn(
+                      'size-3',
+                      credits.balance <= 0 ? 'text-red-500' : credits.balance <= 2 ? 'text-amber-500' : 'text-blue-500'
+                    )} />
+                    <span className="text-[11px] font-medium text-muted-foreground">Credits</span>
+                  </div>
+                  <div className="flex items-baseline gap-0.5">
+                    <span className={cn(
+                      'text-[12px] font-bold tabular-nums',
+                      credits.balance <= 0 ? 'text-red-500' : credits.balance <= 2 ? 'text-amber-500' : 'text-foreground'
+                    )}>
+                      {credits.balance}
+                    </span>
+                    <span className="text-[9px] text-muted-foreground">/{credits.dailyLimit > 0 ? credits.dailyLimit : (credits.plan === 'pro' ? 150 : 10)}</span>
+                    {credits.bonusCredits > 0 && (
+                      <span className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400 ml-0.5">
+                        +{credits.bonusCredits}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
         {/* User name (expanded only) */}
         <AnimatePresence>
           {!sidebarCollapsed && (

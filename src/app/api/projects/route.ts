@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import { ProjectModel } from '@/lib/models/Project';
 import { SceneModel } from '@/lib/models/Scene';
-import { User } from '@/lib/models/User';
 import { getSession } from '@/lib/auth';
-import { PLAN_LIMITS, getTodayKey, resetIfNewDay } from '@/lib/usage';
+import { requireCredits, refundCredits } from '@/lib/credits';
 
 // GET /api/projects — list user's projects
 export async function GET() {
@@ -40,49 +39,37 @@ export async function GET() {
   }
 }
 
-// POST /api/projects — create project (with usage limit check)
+// POST /api/projects — create project (1 credit deducted)
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    // ── Credit guard ──
+    const guard = await requireCredits('PROJECT_CREATION');
+    if (!guard.ok || !guard.userId) {
+      return NextResponse.json(
+        { error: guard.error || 'Access denied', code: guard.status === 429 ? 'CREDITS_EXHAUSTED' : undefined },
+        { status: guard.status },
+      );
     }
+    const userId = guard.userId;
 
     const body = await req.json();
     await connectDB();
 
-    // ── Usage limit check ──
-    const user = await User.findById(session.userId);
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    let project;
+    try {
+      project = await ProjectModel.create({
+        userId,
+        title: body.title || 'Untitled Project',
+        topic: body.topic || '',
+        description: body.description || '',
+        settings: body.settings || {},
+        status: body.status || 'draft',
+      });
+    } catch (err) {
+      // Refund if project creation failed
+      await refundCredits(userId, 'PROJECT_CREATION');
+      throw err;
     }
-
-    const plan = user.plan || 'free';
-    const limits = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS];
-    const usage = resetIfNewDay(user.dailyUsage, plan as 'free' | 'pro');
-
-    const isLifetime = plan === 'free';
-    if (usage.projectsCreated >= limits.projectsPerDay) {
-      return NextResponse.json({
-        error: isLifetime
-          ? `You've used your 1 free project. Upgrade to Pro for unlimited projects.`
-          : `You've reached your daily project limit (${limits.projectsPerDay}). Upgrade to Pro for unlimited projects.`,
-        code: 'PLAN_LIMIT_REACHED',
-      }, { status: 429 });
-    }
-
-    // Increment usage and save
-    user.dailyUsage = { ...usage, projectsCreated: usage.projectsCreated + 1 };
-    await user.save();
-
-    const project = await ProjectModel.create({
-      userId: session.userId,
-      title: body.title || 'Untitled Project',
-      topic: body.topic || '',
-      description: body.description || '',
-      settings: body.settings || {},
-      status: body.status || 'draft',
-    });
 
     return NextResponse.json({
       project: {
@@ -98,6 +85,7 @@ export async function POST(req: NextRequest) {
         createdAt: new Date(project.createdAt).getTime(),
         updatedAt: new Date(project.updatedAt).getTime(),
       },
+      credits: guard.state,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to create project';

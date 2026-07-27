@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models/User';
 import { generateVerificationToken, getVerificationExpiry, sendVerificationEmail } from '@/lib/email';
+import { PLAN_CREDIT_LIMITS } from '@/lib/credits';
 
 export async function POST(req: NextRequest) {
   try {
@@ -50,6 +51,8 @@ export async function POST(req: NextRequest) {
     const verificationTokenExpires = getVerificationExpiry();
 
     // Store user in DB — NOT verified yet
+    // Credits: free plan = 10/day, staff (admin) = unlimited (-1 sentinel)
+    const todayDate = new Date().toISOString().split('T')[0];
     const user = await User.create({
       name: name.trim(),
       email: normalizedEmail,
@@ -58,6 +61,14 @@ export async function POST(req: NextRequest) {
       isVerified: false,
       verificationToken,
       verificationTokenExpires,
+      credits: {
+        balance: role === 'admin' ? 0 : PLAN_CREDIT_LIMITS.free,
+        dailyLimit: 0,                          // 0 = use plan default
+        bonusCredits: 0,
+        lastResetDate: todayDate,
+        lifetimeUsed: 0,
+        transactions: [],
+      },
     });
 
     // Send verification email — await it so errors are caught

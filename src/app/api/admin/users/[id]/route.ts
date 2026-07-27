@@ -2,9 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models/User';
 import { getSession } from '@/lib/auth';
+import {
+  setCustomDailyLimit,
+  addBonusCredits,
+  resetUserCredits,
+  getDailyLimit,
+} from '@/lib/credits';
 
-// PUT /api/admin/users/[id] — update user plan, days, custom flag
-// body: { plan?, planExpiresAt?, isCustomPlan?, customPlan?, role?, addDays?, setDays?, reduceDays? }
+// PUT /api/admin/users/[id] — update user plan, days, role, credits
+// body: {
+//   plan?, planExpiresAt?, isCustomPlan?, customPlan?, role?,
+//   addDays?, setDays?, reduceDays?,
+//   // ── Credit operations ──
+//   creditDailyLimit?,        // number: 0 = plan default, >0 = custom override
+//   creditBonusAdd?,           // number: add (or subtract if negative) bonus credits
+//   creditReset?,              // boolean: reset daily balance to plan limit now
+// }
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -21,7 +34,18 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { plan, planExpiresAt, isCustomPlan, customPlan, role, setDays, reduceDays } = body;
+    const {
+      plan,
+      planExpiresAt,
+      isCustomPlan,
+      customPlan,
+      role,
+      setDays,
+      reduceDays,
+      creditDailyLimit,
+      creditBonusAdd,
+      creditReset,
+    } = body;
 
     await connectDB();
 
@@ -127,11 +151,41 @@ export async function PUT(
       update.role = role;
     }
 
-    if (Object.keys(update).length === 0) {
+    // Apply the user-doc updates first (plan, role, days, etc.)
+    if (Object.keys(update).length > 0) {
+      await User.findByIdAndUpdate(id, update);
+    }
+
+    // ── Credit operations ──
+    // These run AFTER the plan/role updates so the new plan is reflected in
+    // any credit reset (e.g. upgrading free→pro then resetting credits gives
+    // the user 150, not 10).
+    let creditOpPerformed = '';
+
+    // 1. Set custom daily credit limit override
+    if (creditDailyLimit !== undefined && typeof creditDailyLimit === 'number') {
+      const limit = Math.max(0, Math.min(10000, Math.floor(creditDailyLimit)));
+      await setCustomDailyLimit(id, limit);
+      creditOpPerformed = 'daily_limit_updated';
+    }
+
+    // 2. Add (or subtract) bonus credits
+    if (creditBonusAdd !== undefined && typeof creditBonusAdd === 'number' && creditBonusAdd !== 0) {
+      await addBonusCredits(id, creditBonusAdd);
+      creditOpPerformed = creditOpPerformed || 'bonus_added';
+    }
+
+    // 3. Reset daily balance to plan limit immediately
+    if (creditReset === true) {
+      await resetUserCredits(id);
+      creditOpPerformed = creditOpPerformed || 'credits_reset';
+    }
+
+    if (Object.keys(update).length === 0 && !creditOpPerformed) {
       return NextResponse.json({ error: 'No changes provided' }, { status: 400 });
     }
 
-    const updatedUser = await User.findByIdAndUpdate(id, update, { new: true }).select('-password');
+    const updatedUser = await User.findById(id).select('-password');
     if (!updatedUser) {
       return NextResponse.json({ error: 'Failed to update user' }, { status: 500 });
     }
@@ -151,6 +205,12 @@ export async function PUT(
       ? Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)))
       : 0;
 
+    // Compute credit info for the response
+    const isStaff = updatedUser.role === 'admin' || updatedUser.role === 'manager';
+    const creditDailyLimitEffective = isStaff
+      ? -1
+      : getDailyLimit(updatedUser.plan as 'free' | 'pro', (updatedUser.credits as { dailyLimit?: number })?.dailyLimit ?? 0);
+
     return NextResponse.json({
       success: true,
       user: {
@@ -164,7 +224,16 @@ export async function PUT(
         planSource: updatedUser.planSource || null,
         isCustomPlan: updatedUser.isCustomPlan,
         customPlan: updatedUser.customPlan,
+        // ── Credit info ──
+        credits: {
+          balance: isStaff ? -1 : (updatedUser.credits as { balance?: number })?.balance ?? 0,
+          bonusCredits: isStaff ? 0 : (updatedUser.credits as { bonusCredits?: number })?.bonusCredits ?? 0,
+          dailyLimit: creditDailyLimitEffective,
+          lifetimeUsed: (updatedUser.credits as { lifetimeUsed?: number })?.lifetimeUsed ?? 0,
+          lastResetDate: (updatedUser.credits as { lastResetDate?: string })?.lastResetDate || '',
+        },
       },
+      creditOp: creditOpPerformed || null,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to update user';

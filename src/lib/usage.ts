@@ -1,4 +1,5 @@
-import type { UserPlan, IDailyUsage, IChannelNiche, IChannelCharacter } from './models/User';
+import type { UserPlan, IDailyUsage, IChannelNiche, IChannelCharacter, ICredits } from './models/User';
+import { computeCreditState, getTodayKey as getCreditTodayKey } from './credits';
 
 // ── Plan Limits ────────────────────────────────────────
 
@@ -50,6 +51,7 @@ export function formatUserResponse(user: {
   youtube?: { connected?: boolean } | null;
   channelNiche?: IChannelNiche & { characters?: IChannelCharacter[] } | null;
   dailyUsage?: IDailyUsage;
+  credits?: ICredits | null;
   stripe?: { customerId?: string; subscriptionId?: string; currentPeriodEnd?: number; cancelAtPeriodEnd?: boolean } | null;
 }) {
   const plan = (user.plan || 'free') as UserPlan;
@@ -84,6 +86,23 @@ export function formatUserResponse(user: {
       ? Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)))
       : 0;
   }
+
+  // ── Credit state (lazy daily reset applied) ──
+  // Returns the effective balance, dailyLimit, bonus, and staff flag.
+  // For staff (admin/manager) we report Infinity-equivalent sentinel values
+  // so the client can render "Unlimited" instead of a number.
+  const creditsField = user.credits as ICredits | null | undefined;
+  const isStaff = user.role === 'admin' || user.role === 'manager';
+  let effectivePlanForCredits: 'free' | 'pro' = plan;
+  if (plan === 'pro') {
+    const stripeEnd = user.stripe?.currentPeriodEnd || 0;
+    const planEnd = (user.planExpiresAt as number) || 0;
+    const effectiveEnd = Math.max(stripeEnd, planEnd);
+    if (effectiveEnd > 0 && Date.now() > effectiveEnd) {
+      effectivePlanForCredits = 'free';
+    }
+  }
+  const creditState = computeCreditState(effectivePlanForCredits, user.role, creditsField);
 
   // Channel niche (including channel characters)
   const niche = user.channelNiche;
@@ -135,6 +154,16 @@ export function formatUserResponse(user: {
     youtubeConnected: user.youtube?.connected === true,
     channelNiche,
     dailyUsage: usage,
+    credits: {
+      balance: isStaff ? -1 : creditState.balance,         // -1 sentinel = unlimited
+      bonusCredits: isStaff ? 0 : creditState.bonusCredits,
+      dailyLimit: isStaff ? -1 : creditState.dailyLimit,    // -1 sentinel = unlimited
+      totalAvailable: isStaff ? -1 : creditState.balance + creditState.bonusCredits,
+      lifetimeUsed: creditsField?.lifetimeUsed ?? 0,
+      lastResetDate: creditsField?.lastResetDate || getCreditTodayKey(),
+      isStaff,
+      plan: effectivePlanForCredits,
+    },
     stripe: {
       customerId: user.stripe?.customerId || '',
       subscriptionId: user.stripe?.subscriptionId || '',
