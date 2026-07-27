@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models/User';
 import { signToken, createSessionCookie } from '@/lib/auth';
-import { formatUserResponse } from '@/lib/usage';
+import { formatUserResponse } from '@/lib/format-user';
 
 export async function GET(req: NextRequest) {
   try {

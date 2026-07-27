@@ -3,7 +3,7 @@ import type Stripe from 'stripe';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/lib/models/User';
 import { getSession } from '@/lib/auth';
-import { formatUserResponse } from '@/lib/usage';
+import { formatUserResponse } from '@/lib/format-user';
 
 export async function GET() {
   try {
