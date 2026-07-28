@@ -76,7 +76,7 @@ export async function GET() {
             if (u.role === 'admin' || u.role === 'manager') return -1;
             const override = u.credits?.dailyLimit ?? 0;
             if (override > 0) return override;
-            return u.plan === 'pro' ? 150 : 10;
+            return u.plan === 'pro' ? 8000 : 30;
           })(),
           lifetimeUsed: u.credits?.lifetimeUsed ?? 0,
           lastResetDate: u.credits?.lastResetDate || '',

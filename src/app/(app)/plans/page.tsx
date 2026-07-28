@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useAuthStore } from '@/lib/auth-store';
-import { PLAN_LIMITS } from '@/lib/usage';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -77,8 +76,8 @@ export default function PlansPage() {
   if (!user) return null;
 
   const isPro = user.plan === 'pro';
-  const freeLimits = PLAN_LIMITS.free;
-  const usage = user.dailyUsage || { date: '', projectsCreated: 0, aiGenerations: 0 };
+  const credits = user.credits || { balance: 0, dailyLimit: 30, totalAvailable: 0, lifetimeUsed: 0, bonusCredits: 0 };
+  const creditLimit = credits.dailyLimit > 0 ? credits.dailyLimit : 30;
 
   // Stripe subscription info
   const hasStripeSub = !!user.stripe?.subscriptionId;
@@ -151,8 +150,8 @@ export default function PlansPage() {
               </div>
               <p className="text-sm text-muted-foreground">
                 {isPro
-                  ? 'You have unlimited access to all features.'
-                  : `Used: ${(usage.projectsCreated ?? 0)}/${freeLimits.projectsPerDay === Infinity ? '∞' : freeLimits.projectsPerDay} project, ${(usage.aiGenerations ?? 0)}/${freeLimits.aiGenerationsPerDay} AI generations (one-time)`}
+                  ? 'You have 8,000 credits for the duration of your plan. No daily limits.'
+                  : `Credits: ${credits.balance}/${creditLimit} remaining today. ${(credits.lifetimeUsed ?? 0)} used lifetime.`}
               </p>
             </div>
             {!isPro && (
@@ -162,30 +161,30 @@ export default function PlansPage() {
             )}
           </div>
 
-          {/* Usage bars */}
+          {/* Credits bar */}
           {!isPro && (
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-muted-foreground">Projects Used</span>
-                  <span className="font-medium">{(usage.projectsCreated ?? 0)} / {freeLimits.projectsPerDay}</span>
+                  <span className="text-muted-foreground">Credits Used Today</span>
+                  <span className="font-medium">{creditLimit - credits.balance} / {creditLimit}</span>
                 </div>
                 <div className="h-2 rounded-full bg-muted overflow-hidden">
                   <div
                     className="h-full rounded-full bg-primary transition-all duration-500"
-                    style={{ width: `${Math.min(100, ((usage.projectsCreated ?? 0) / freeLimits.projectsPerDay) * 100)}%` }}
+                    style={{ width: `${Math.min(100, ((creditLimit - credits.balance) / creditLimit) * 100)}%` }}
                   />
                 </div>
               </div>
               <div>
                 <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-muted-foreground">AI Generations Used</span>
-                  <span className="font-medium">{(usage.aiGenerations ?? 0)} / {freeLimits.aiGenerationsPerDay}</span>
+                  <span className="text-muted-foreground">Lifetime Credits Used</span>
+                  <span className="font-medium">{credits.lifetimeUsed}</span>
                 </div>
                 <div className="h-2 rounded-full bg-muted overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-primary transition-all duration-500"
-                    style={{ width: `${Math.min(100, ((usage.aiGenerations ?? 0) / freeLimits.aiGenerationsPerDay) * 100)}%` }}
+                    className="h-full rounded-full bg-primary/50 transition-all duration-500"
+                    style={{ width: '100%' }}
                   />
                 </div>
               </div>

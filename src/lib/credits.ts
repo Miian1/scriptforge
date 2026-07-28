@@ -51,14 +51,18 @@ export function getTodayKey(): string {
 }
 
 /**
- * Resolve the effective daily credit limit for a FREE user.
- * If `credits.dailyLimit > 0`, that overrides the plan default.
- * For Pro users this is only informational (their balance is a pool).
+ * Resolve the effective credit limit for a user.
+ * FREE users: returns the daily reset amount (30 by default, or custom override).
+ * PRO users: returns the total pool (8000 by default, or custom override).
+ * For Pro users, `dailyLimit` represents the total one-time pool, NOT a daily cap.
  */
-export function getDailyLimit(plan: 'free' | 'pro', dailyLimitOverride: number): number {
+export function getCreditLimit(plan: 'free' | 'pro', dailyLimitOverride: number): number {
   if (dailyLimitOverride && dailyLimitOverride > 0) return dailyLimitOverride;
   return PLAN_CREDIT_LIMITS[plan] ?? PLAN_CREDIT_LIMITS.free;
 }
+
+// Backward-compatible alias (kept so existing call sites don't break)
+export const getDailyLimit = getCreditLimit;
 
 /**
  * Compute the *effective* credit state for a user.
@@ -86,7 +90,7 @@ export function computeCreditState(
   credits: ICredits | null | undefined,
 ): CreditState {
   const today = getTodayKey();
-  const dailyLimit = getDailyLimit(plan, credits?.dailyLimit ?? 0);
+  const dailyLimit = getCreditLimit(plan, credits?.dailyLimit ?? 0);
   const isStaff = role === 'admin' || role === 'manager';
 
   let balance = credits?.balance ?? 0;
@@ -450,7 +454,7 @@ export async function resetUserCredits(userId: string): Promise<void> {
   const user = await User.findById(userId).select('role plan credits');
   if (!user) return;
   const plan = user.plan === 'pro' ? 'pro' : 'free';
-  const limit = getDailyLimit(plan, (user.credits as ICredits | undefined)?.dailyLimit ?? 0);
+  const limit = getCreditLimit(plan, (user.credits as ICredits | undefined)?.dailyLimit ?? 0);
   await User.updateOne(
     { _id: userId },
     {
@@ -472,7 +476,7 @@ export async function grantProCredits(userId: string): Promise<void> {
   const user = await User.findById(userId).select('role plan credits');
   if (!user || user.plan !== 'pro') return;
   const credits = user.credits as ICredits | undefined;
-  const dailyLimit = getDailyLimit('pro', credits?.dailyLimit ?? 0);
+  const dailyLimit = getCreditLimit('pro', credits?.dailyLimit ?? 0);
   // Only grant if they haven't received their lump sum yet
   if ((credits?.balance ?? 0) < dailyLimit) {
     await User.updateOne(

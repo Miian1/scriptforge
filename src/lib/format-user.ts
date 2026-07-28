@@ -141,7 +141,7 @@ export function formatUserResponse(user: {
     credits: {
       balance: isStaff ? -1 : creditState.balance,         // -1 sentinel = unlimited
       bonusCredits: isStaff ? 0 : creditState.bonusCredits,
-      dailyLimit: isStaff ? -1 : creditState.dailyLimit,    // -1 sentinel = unlimited
+      dailyLimit: isStaff || effectivePlanForCredits === 'pro' ? -1 : creditState.dailyLimit,    // -1 = no daily cap (pro has pool)
       totalAvailable: isStaff ? -1 : creditState.balance + creditState.bonusCredits,
       lifetimeUsed: creditsField?.lifetimeUsed ?? 0,
       lastResetDate: creditsField?.lastResetDate || getCreditTodayKey(),

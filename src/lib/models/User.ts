@@ -26,7 +26,7 @@ export interface IDailyUsage {
 
 // ── Credit system ───────────────────────────────────────
 // Every AI action (text gen, voice gen, project create, score, etc.)
-// costs 1 credit. Free plan: 10 credits/day. Pro plan: 150 credits/day.
+// costs 1 credit. Free plan: 30 credits/day (daily reset). Pro plan: 8,000 credits (one-time pool).
 // Admins/managers bypass credit checks entirely.
 //
 // `dailyLimit` overrides the plan default when > 0 (admin can set per-user).

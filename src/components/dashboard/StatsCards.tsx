@@ -196,16 +196,17 @@ export default function StatsCards() {
   const creditsDailyLimit = user?.credits?.dailyLimit ?? 30;
   const creditsLifetimeUsed = user?.credits?.lifetimeUsed ?? 0;
   const isStaff = user?.credits?.isStaff ?? false;
+  const creditPlan = user?.credits?.plan ?? 'free';
 
   const completed = projects.filter((p) => p.status === 'completed').length;
   const drafts = projects.filter((p) => p.status === 'draft').length;
   const createdToday = user?.dailyUsage?.projectsCreated ?? 0;
 
-  // Credits remaining (handle -1 sentinel for staff)
+  // Credits remaining (handle -1 sentinel for staff & pro)
   const displayBalance = isStaff ? Infinity : creditsBalance;
-  const displayLimit = isStaff ? Infinity : (isPro ? 8000 : creditsDailyLimit);
-  const creditPercent = isStaff ? 100 : (displayLimit > 0 ? Math.min(100, (creditsBalance / displayLimit) * 100) : 0);
-  const creditRemaining = isStaff ? 'Unlimited' : String(creditsBalance);
+  const displayLimit = isStaff || creditPlan === 'pro' ? Infinity : (creditsDailyLimit > 0 ? creditsDailyLimit : 30);
+  const creditPercent = isStaff || creditPlan === 'pro' ? 100 : (displayLimit > 0 ? Math.min(100, (creditsBalance / displayLimit) * 100) : 0);
+  const creditRemaining = isStaff || creditPlan === 'pro' ? String(creditsBalance) : String(creditsBalance);
 
   // Generate deterministic fake "trend" data for the SVG backgrounds
   const projectTrend = useMemo(() => {

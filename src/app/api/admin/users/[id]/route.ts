@@ -159,7 +159,7 @@ export async function PUT(
     // ── Credit operations ──
     // These run AFTER the plan/role updates so the new plan is reflected in
     // any credit reset (e.g. upgrading free→pro then resetting credits gives
-    // the user 150, not 10).
+    // the user 8000, not 30).
     let creditOpPerformed = '';
 
     // 1. Set custom daily credit limit override

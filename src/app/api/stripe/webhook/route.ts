@@ -148,9 +148,9 @@ export async function POST(req: NextRequest) {
             currentPeriodEnd: currentPeriodEndMs,
             cancelAtPeriodEnd,
           },
-          // ── Reset credits to Pro daily limit on upgrade ──
-          // Fresh Pro users should immediately get their 150 credits, not
-          // keep whatever Free balance (10) they had left.
+          // ── Grant Pro credits on upgrade ──
+          // Fresh Pro users get their 8,000 credit pool immediately, not
+          // keep whatever Free balance (30) they had left.
           'credits.balance': PLAN_CREDIT_LIMITS.pro,
           'credits.lastResetDate': new Date().toISOString().split('T')[0],
         });
@@ -382,7 +382,7 @@ export async function POST(req: NextRequest) {
             currentPeriodEnd: 0,
             cancelAtPeriodEnd: false,
           },
-          // ── Reset credits to Free daily limit on downgrade ──
+          // ── Reset to Free daily credits on downgrade ──
           'credits.balance': PLAN_CREDIT_LIMITS.free,
           'credits.lastResetDate': new Date().toISOString().split('T')[0],
         });
@@ -401,7 +401,7 @@ export async function POST(req: NextRequest) {
               currentPeriodEnd: 0,
               cancelAtPeriodEnd: false,
             },
-            // ── Reset credits to Free daily limit on downgrade ──
+            // ── Reset to Free daily credits on downgrade ──
             'credits.balance': PLAN_CREDIT_LIMITS.free,
             'credits.lastResetDate': new Date().toISOString().split('T')[0],
           });

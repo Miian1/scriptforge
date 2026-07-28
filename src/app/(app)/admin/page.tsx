@@ -208,9 +208,9 @@ export default function AdminPage() {
       setEditCreditDailyLimitEnabled(false);
       setEditCreditDailyLimit(0);
     } else {
-      const hasOverride = u.credits?.dailyLimit > 0 && u.credits.dailyLimit !== 10 && u.credits.dailyLimit !== 150;
+      const hasOverride = u.credits?.dailyLimit > 0 && u.credits.dailyLimit !== 30 && u.credits.dailyLimit !== 8000;
       setEditCreditDailyLimitEnabled(hasOverride);
-      setEditCreditDailyLimit(hasOverride ? u.credits.dailyLimit : (u.plan === 'pro' ? 150 : 10));
+      setEditCreditDailyLimit(hasOverride ? u.credits.dailyLimit : (u.plan === 'pro' ? 8000 : 30));
     }
     setEditCreditBonusAdd(0);
     setEditCreditReset(false);
@@ -1257,7 +1257,7 @@ export default function AdminPage() {
                                 (u.credits?.balance ?? 0) <= 0 ? 'text-red-500' : (u.credits?.balance ?? 0) <= 2 ? 'text-amber-500' : 'text-foreground'
                               )}>
                                 {u.credits?.balance ?? 0}
-                                <span className="text-[10px] text-muted-foreground font-normal">/{u.credits?.dailyLimit ?? 0}</span>
+                                <span className="text-[10px] text-muted-foreground font-normal">{u.plan === 'pro' ? '' : `/${u.credits?.dailyLimit ?? 30}`}</span>
                               </span>
                             </div>
                             {(u.credits?.bonusCredits ?? 0) > 0 && (

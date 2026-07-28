@@ -392,7 +392,7 @@ function DesktopSidebar() {
                     )}>
                       {credits.balance}
                     </span>
-                    <span className="text-[9px] text-muted-foreground">/{credits.dailyLimit > 0 ? credits.dailyLimit : (credits.plan === 'pro' ? 150 : 10)}</span>
+                    <span className="text-[9px] text-muted-foreground">{credits.dailyLimit < 0 ? '' : `/${credits.dailyLimit}`}</span>
                     {credits.bonusCredits > 0 && (
                       <span className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400 ml-0.5">
                         +{credits.bonusCredits}
