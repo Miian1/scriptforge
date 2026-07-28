@@ -22,11 +22,16 @@ export interface ChannelNiche {
   characters?: ChannelCharacter[];
 }
 
+/**
+ * Build the channel niche context block for prompts.
+ * This includes brand guidelines AND (critically) character definitions
+ * with HARD rules for consistent usage across ALL scenes.
+ */
 function buildNicheContext(niche?: ChannelNiche | null): string {
   if (!niche || (!niche.visualTheme && !niche.writingStyle && !niche.audience && !niche.language && !niche.description && !niche.channelName)) {
     return '';
   }
-  let ctx = '\n## Channel Niche & Brand Guidelines\nThe user has a YouTube channel with specific style preferences. Follow these guidelines closely:\n';
+  let ctx = '\n## Channel Niche & Brand Guidelines\nThe user has a YouTube channel with specific style preferences. Follow these guidelines STRICTLY:\n';
   if (niche.channelName) ctx += `- Channel Name: ${niche.channelName}\n`;
   if (niche.channelCategory) ctx += `- Channel Category: ${niche.channelCategory}\n`;
   if (niche.channelDescription) ctx += `- About Channel: ${niche.channelDescription}\n`;
@@ -36,29 +41,107 @@ function buildNicheContext(niche?: ChannelNiche | null): string {
   if (niche.language) ctx += `- Channel Language: ${niche.language}\n`;
   if (niche.description) ctx += `\n### Detailed Niche Context:\n${niche.description}\n`;
 
-  // ── Channel Characters ──
-  // Inject recurring characters so the AI references them in scene image
-  // prompts, narration voice, and animation. The AI is instructed to:
-  //   - Use these characters when relevant (don't force them)
-  //   - Match the visual prompt to the channel's visual theme
-  //   - Mimic personality cues in the narration
+  // ── Channel Characters (MANDATORY usage) ──
   const validChars = (niche.characters || []).filter((c) => c.name && c.name.trim());
   if (validChars.length > 0) {
-    ctx += `\n### Channel Characters (recurring personas)\n`;
-    ctx += `The user has defined the following recurring characters for this channel. When a scene naturally features a character (host, narrator, expert, mascot), use one of these — do NOT invent new ones unless the scene explicitly demands it.\n\n`;
+    ctx += `\n### MANDATORY: Channel Characters (Recurring Personas)\n`;
+    ctx += `The following characters are DEFINED for this channel. You MUST use them in EVERY scene that features a person, host, narrator, expert, or any humanoid figure. NEVER invent random or generic characters. Every person shown in imagePrompt or mentioned in narration MUST be one of these characters.\n\n`;
     validChars.forEach((c, i) => {
-      ctx += `**Character ${i + 1}: ${c.name.trim()}**\n`;
+      ctx += `**CHARACTER ${i + 1}: "${c.name.trim()}"**\n`;
       if (c.role) ctx += `- Role: ${c.role.trim()}\n`;
-      if (c.description) ctx += `- Description: ${c.description.trim()}\n`;
-      if (c.visualPrompt) ctx += `- Visual Prompt (must be incorporated into imagePrompt when this character appears): ${c.visualPrompt.trim()}\n`;
-      if (c.personalityPrompt) ctx += `- Personality / Voice (must be reflected in narration when this character speaks): ${c.personalityPrompt.trim()}\n`;
+      if (c.description) ctx += `- Full Description: ${c.description.trim()}\n`;
+      if (c.visualPrompt) ctx += `- EXACT Visual Appearance (copy this VERBATIM into every imagePrompt where this character appears): "${c.visualPrompt.trim()}"\n`;
+      if (c.personalityPrompt) ctx += `- EXACT Voice & Personality (match this VERBATIM in every narration where this character speaks): "${c.personalityPrompt.trim()}"\n`;
       ctx += `\n`;
     });
-    ctx += `IMPORTANT: When a scene features one of these characters, the imagePrompt MUST include the character's visual description (fused with the channel's visual theme), and the narration MUST match the character's personality and voice.\n`;
+
+    // Hard consistency rules
+    ctx += `### CHARACTER CONSISTENCY RULES (FOLLOW STRICTLY):\n`;
+    ctx += `1. **EVERY scene that shows a person** MUST feature one of the above characters as the primary figure. No exceptions.\n`;
+    ctx += `2. **Visual identity must be IDENTICAL in every scene.** The same character must look exactly the same across ALL scenes — same face, same clothing, same features, same colors. Copy the "EXACT Visual Appearance" text verbatim into the imagePrompt.\n`;
+    ctx += `3. **Voice must be IDENTICAL in every scene.** When a character narrates, their tone, vocabulary, and speaking style must match their "EXACT Voice & Personality" verbatim.\n`;
+    ctx += `4. **Distribute characters naturally.** If multiple characters exist, assign them to scenes based on their role (e.g., the Host appears most often, the Expert appears in educational scenes). Do NOT cluster all scenes around one character.\n`;
+    ctx += `5. **NEVER describe a character generically** (e.g. "a man in a suit", "a woman presenting"). ALWAYS use the character's NAME and their EXACT visual description.\n`;
+    ctx += `6. **In imagePrompt**: ALWAYS start the character description with the character's name and paste their full visual prompt. Example format: "[Character Name], [EXACT Visual Appearance], [scene environment and composition]".\n`;
+    ctx += `7. **In narration**: When a character speaks, their dialogue MUST reflect their personality prompt. The narration voice changes depending on WHO is speaking.\n`;
   }
 
-  ctx += '\nIMPORTANT: Generate content that matches this channel\'s brand identity. The narration, visual prompts, and overall tone should feel like it belongs on this channel.';
+  ctx += '\nIMPORTANT: Generate content that matches this channel\'s brand identity. The narration, visual prompts, and overall tone should feel like it belongs on this channel. Characters must remain 100% consistent across all scenes.';
   return ctx;
+}
+
+/**
+ * Build a compact character reference card for injection into
+ * per-scene instructions and regeneration prompts.
+ * This is a shorter version that reinforces consistency without
+ * repeating the full niche context.
+ */
+function buildCharacterRef(niche?: ChannelNiche | null): string {
+  if (!niche) return '';
+  const validChars = (niche.characters || []).filter((c) => c.name && c.name.trim());
+  if (validChars.length === 0) return '';
+
+  let ref = `\n### CHARACTER REFERENCE (use in EVERY scene with a person):\n`;
+  validChars.forEach((c) => {
+    ref += `- "${c.name.trim()}"`;
+    if (c.role) ref += ` (${c.role.trim()})`;
+    ref += `\n  Visual: ${c.visualPrompt.trim() || 'Not specified'}\n`;
+    ref += `  Voice: ${c.personalityPrompt.trim() || 'Not specified'}\n`;
+  });
+  ref += `\nRule: Copy the EXACT visual description into imagePrompt. Match the EXACT voice in narration. NEVER invent unnamed characters.\n`;
+  return ref;
+}
+
+/**
+ * Build a CRITICAL RULES-level block enforcing character consistency.
+ * This is injected at the end of the rules section to have maximum
+ * attention weight — LLMs tend to follow instructions near the end more.
+ */
+function buildCharacterConsistencyRule(niche?: ChannelNiche | null): string {
+  if (!niche) return '';
+  const validChars = (niche.characters || []).filter((c) => c.name && c.name.trim());
+  if (validChars.length === 0) return '';
+
+  return `\n### ⚠️ CHARACTER ENFORCEMENT (HIGHEST PRIORITY — VERIFY BEFORE OUTPUT):
+- Before outputting each scene, check: Does the imagePrompt start with a defined character's name and include their EXACT visual description? If not, FIX IT.
+- Before outputting each scene, check: Does the narration match the character's EXACT personality? If not, FIX IT.
+- Every scene's notes MUST include a "character" field naming which channel character appears.
+- FAILURE TO USE THE DEFINED CHARACTERS = FAILURE TO FOLLOW INSTRUCTIONS.`;
+}
+
+/**
+ * Build a character assignment guide for multi-scene generation.
+ * Tells the AI which character should appear in which scene range,
+ * preventing the AI from losing track across long scripts.
+ */
+function buildSceneCharacterInstructions(
+  niche?: ChannelNiche | null,
+  scenesInPhase: number,
+  startScene: number,
+): string {
+  if (!niche) return '';
+  const validChars = (niche.characters || []).filter((c) => c.name && c.name.trim());
+  if (validChars.length === 0) return '';
+
+  const names = validChars.map((c) => `"${c.name.trim()}"`).join(', ');
+  const host = validChars.find((c) => c.role?.toLowerCase().includes('host')) || validChars[0];
+  const others = validChars.filter((c) => c !== host);
+
+  let instructions = `\n### Character Assignment Guide for Scenes ${startScene}–${startScene + scenesInPhase - 1}:\n`;
+  instructions += `Available characters: ${names}.\n`;
+
+  if (validChars.length === 1) {
+    instructions += `- Character "${host.name.trim()}" should appear as the primary figure in ALL ${scenesInPhase} scenes.\n`;
+  } else {
+    instructions += `- "${host.name.trim()}" (Host) should appear in the MAJORITY of scenes as the primary presenter/narrator.\n`;
+    others.forEach((c) => {
+      instructions += `- "${c.name.trim()}" (${c.role.trim() || 'Supporting'}) should appear in 1-2 scenes where their expertise/role is most relevant.\n`;
+    });
+    instructions += `\nDecide NOW which scenes each character appears in, then be CONSISTENT throughout. Do NOT randomly switch characters between scenes — plan the assignment first.\n`;
+  }
+
+  instructions += `\nFor EVERY scene, the imagePrompt and narration MUST clearly feature the assigned character — no faceless/generic figures.\n`;
+  return instructions;
 }
 
 // ---------- Prompt templates ----------
@@ -139,7 +222,7 @@ IMPORTANT: Continue the narrative seamlessly from where the previous phase ended
     ? `## ALSO generate these metadata fields at the top level of the JSON (alongside "scenes"):
 1. **videoDescription**: A compelling 3-5 sentence YouTube video description optimized for SEO. Include the main keyword in the first line. Add relevant hashtags at the end. Make it engaging and include a call-to-action.
 2. **tags**: An array of 8-12 relevant YouTube SEO tags (lowercase strings). Mix broad and long-tail keywords related to the topic.
-3. **thumbnailPrompt**: A detailed AI image generation prompt for the video thumbnail. Eye-catching, bold colors, clear text overlay space, conveys the video's main idea at a glance. Style: ${settings.theme}. Max 150 words.
+3. **thumbnailPrompt**: A detailed AI image generation prompt for the video thumbnail. MUST feature the main channel character (with their EXACT visual appearance) in an eye-catching pose. Bold colors, clear text overlay space, conveys the video's main idea at a glance. Style: ${settings.theme}. Max 150 words.
 
 `
     : '';
@@ -169,10 +252,11 @@ For each scene, generate:
 1. **title**: A short descriptive scene title (5-8 words)
 2. **estimatedDuration**: Set to ${sceneLength} (this is the fixed scene length)
 3. **goal**: What this scene accomplishes (1-2 sentences)
-4. **narration**: Complete spoken narration for a ${sceneLength}-second scene. Write it as if speaking directly to the camera. Include pacing cues in brackets like [pause], [dramatic music]. Keep it concise and impactful for the short duration. Must be in ${settings.language}.
-5. **imagePrompt**: A detailed AI image generation prompt describing: environment, characters, camera angle, composition, lighting, colors, mood, style, and quality. Must be compatible with Midjourney/DALL-E style generators. Use the theme "${settings.theme}" as the visual style. If a channel character is featured, incorporate their visual prompt. In English.
-6. **animationPrompt**: A cinematic image-to-video prompt describing: camera movement, character motion, facial expressions, background movement, environmental effects, transitions, lighting changes, and motion style. Compatible with Google Veo, Runway, Kling, PixVerse, Pika, Luma. In English.
+4. **narration**: Complete spoken narration for a ${sceneLength}-second scene. Write in the voice of the character assigned to this scene — match their EXACT personality, vocabulary, and speaking style. Include pacing cues in brackets like [pause], [dramatic music]. Must be in ${settings.language}.
+5. **imagePrompt**: A detailed AI image generation prompt. MUST start with the assigned character's name and EXACT visual appearance (copied verbatim), then describe the environment, camera angle, composition, lighting, colors, mood, style, and quality. Must be compatible with Midjourney/DALL-E style generators. Use the theme "${settings.theme}" as the visual style. ALWAYS include the character — NEVER use generic descriptions like "a person" or "someone". In English.
+6. **animationPrompt**: A cinematic image-to-video prompt. Animate the assigned character according to their personality — their expressions, gestures, and movement style should match who they are. Describe: camera movement, character motion, facial expressions, background movement, environmental effects, transitions, lighting changes, and motion style. Compatible with Google Veo, Runway, Kling, PixVerse, Pika, Luma. In English.
 7. **notes** containing:
+   - "character": The name of the channel character featured in this scene
    - "emotion": The primary emotion conveyed
    - "visualFocus": What the viewer's eye should be drawn to
    - "transitionSuggestion": How to transition to the next scene
@@ -187,7 +271,9 @@ ${metadataSection}
 - Each narration should fit within ${sceneLength} seconds of speaking time.
 - Ensure scenes flow logically with proper pacing.
 - ${isLastPhase ? 'This is the FINAL phase — ensure a satisfying conclusion to the video.' : `After this phase, ${settings.totalScenes - phase.sceneEnd} more scenes remain. Set up anticipation for what comes next.`}
-- ${!isFirstPhase && !isLastPhase ? 'This is a MIDDLE phase — maintain momentum and develop the core content.' : ''}`;
+- ${!isFirstPhase && !isLastPhase ? 'This is a MIDDLE phase — maintain momentum and develop the core content.' : ''}
+${buildCharacterConsistencyRule(niche)}
+${buildSceneCharacterInstructions(niche, scenesInThisPhase, phase.sceneStart)}`;
 
 }
 
@@ -218,10 +304,11 @@ For each scene, generate:
 1. **title**: A short descriptive scene title (5-8 words)
 2. **estimatedDuration**: Set to ${sceneLength} (this is the fixed scene length)
 3. **goal**: What this scene accomplishes (1-2 sentences)
-4. **narration**: Complete spoken narration for a ${sceneLength}-second scene. Write it as if speaking directly to the camera. Include pacing cues in brackets like [pause], [dramatic music]. Keep it concise and impactful for the short duration.
-5. **imagePrompt**: A detailed AI image generation prompt describing: environment, characters, camera angle, composition, lighting, colors, mood, style, and quality. Must be compatible with Midjourney/DALL-E style generators. Use the theme "${settings.theme}" as the visual style. In English.
-6. **animationPrompt**: A cinematic image-to-video prompt describing: camera movement, character motion, facial expressions, background movement, environmental effects, transitions, lighting changes, and motion style. Compatible with Google Veo, Runway, Kling, PixVerse, Pika, Luma. In English.
+4. **narration**: Complete spoken narration for a ${sceneLength}-second scene. Write in the voice of the character assigned to this scene — match their EXACT personality, vocabulary, and speaking style. Include pacing cues in brackets like [pause], [dramatic music].
+5. **imagePrompt**: A detailed AI image generation prompt. MUST start with the assigned character's name and EXACT visual appearance (copied verbatim), then describe the environment, camera angle, composition, lighting, colors, mood, style, and quality. Must be compatible with Midjourney/DALL-E style generators. Use the theme "${settings.theme}" as the visual style. ALWAYS include the character — NEVER use generic descriptions like "a person" or "someone". In English.
+6. **animationPrompt**: A cinematic image-to-video prompt. Animate the assigned character according to their personality — their expressions, gestures, and movement style should match who they are. Describe: camera movement, character motion, facial expressions, background movement, environmental effects, transitions, lighting changes, and motion style. Compatible with Google Veo, Runway, Kling, PixVerse, Pika, Luma. In English.
 7. **notes** containing:
+   - "character": The name of the channel character featured in this scene
    - "emotion": The primary emotion conveyed
    - "visualFocus": What the viewer's eye should be drawn to
    - "transitionSuggestion": How to transition to the next scene
@@ -230,7 +317,7 @@ For each scene, generate:
 ## ALSO generate these metadata fields at the top level of the JSON (alongside "scenes"):
 1. **videoDescription**: A compelling 3-5 sentence YouTube video description optimized for SEO. Include the main keyword in the first line. Add relevant hashtags at the end. Make it engaging and include a call-to-action.
 2. **tags**: An array of 8-12 relevant YouTube SEO tags (lowercase strings). Mix broad and long-tail keywords related to the topic.
-3. **thumbnailPrompt**: A detailed AI image generation prompt for the video thumbnail. Eye-catching, bold colors, clear text overlay space, conveys the video's main idea at a glance. Style: ${settings.theme}. Max 150 words.
+3. **thumbnailPrompt**: A detailed AI image generation prompt for the video thumbnail. MUST feature the main channel character (with their EXACT visual appearance) in an eye-catching pose. Bold colors, clear text overlay space, conveys the video's main idea at a glance. Style: ${settings.theme}. Max 150 words.
 
 ## CRITICAL RULES
 - Return ONLY valid JSON — no markdown, no code fences, no explanation.
@@ -241,7 +328,8 @@ For each scene, generate:
 - Each narration should fit within ${sceneLength} seconds of speaking time.
 - Image and animation prompts should be highly detailed and specific.
 - Ensure scenes flow logically with proper pacing.
-- Total estimated duration of all scenes should match the requested video duration.`;
+- Total estimated duration of all scenes should match the requested video duration.
+${buildCharacterConsistencyRule(niche)}`;
 }
 
 function buildRegenPrompt(
@@ -263,8 +351,9 @@ Writing style: ${project.settings.writingStyle}
 Target audience: ${project.settings.targetAudience}
 Scene length: ${sceneLength} seconds
 ${buildNicheContext(niche)}
+${buildCharacterRef(niche)}
 This is scene ${scene.sceneNumber} of ${totalScenes} total scenes.
-Generate a compelling, natural narration for this ${sceneLength}-second scene (approximately ${Math.round(sceneLength * 2.5)}-${Math.round(sceneLength * 3.5)} words). Include pacing cues in brackets like [pause], [dramatic music], etc.
+Generate a compelling, natural narration for this ${sceneLength}-second scene (approximately ${Math.round(sceneLength * 2.5)}-${Math.round(sceneLength * 3.5)} words). Write in the EXACT voice and personality of the character assigned to this scene. Include pacing cues in brackets like [pause], [dramatic music], etc.
 Return ONLY valid JSON with a single key "narration" containing the narration text. No markdown fences.`;
   }
   if (regenField === 'imagePrompt') {
@@ -273,8 +362,8 @@ Video topic: ${project.topic}
 Scene title: ${scene.title}
 Scene goal: ${scene.goal}
 Visual theme: ${project.settings.theme}
-${buildNicheContext(niche)}
-Generate a detailed AI image prompt describing: environment, characters, camera angle, composition, lighting, colors, mood, style, and quality. Use the "${project.settings.theme}" visual style. If a channel character is featured in this scene, incorporate their visual prompt. Make it compatible with Midjourney/DALL-E.
+${buildCharacterRef(niche)}
+CRITICAL: The imagePrompt MUST start with the channel character's name and their EXACT visual appearance (copied verbatim). Then describe the environment, composition, lighting, mood, and style. NEVER use generic descriptions like "a person" or "someone". Use the "${project.settings.theme}" visual style. Make it compatible with Midjourney/DALL-E.
 Return ONLY valid JSON with a single key "imagePrompt" containing the prompt text. No markdown fences.`;
   }
   if (regenField === 'animationPrompt') {
@@ -283,8 +372,8 @@ Video topic: ${project.topic}
 Scene title: ${scene.title}
 Scene goal: ${scene.goal}
 Visual theme: ${project.settings.theme}
-${buildNicheContext(niche)}
-Generate a cinematic image-to-video prompt describing: camera movement, character motion, facial expressions, background movement, environmental effects, transitions, lighting changes, and motion style. If a channel character is featured, animate them according to their personality. Compatible with Google Veo, Runway, Kling, PixVerse, Pika, Luma.
+${buildCharacterRef(niche)}
+CRITICAL: Animate the channel character according to their EXACT personality — their expressions, gestures, and movement style must match who they are. Describe: camera movement, character motion, facial expressions, background movement, environmental effects, transitions, lighting changes, and motion style. Compatible with Google Veo, Runway, Kling, PixVerse, Pika, Luma.
 Return ONLY valid JSON with a single key "animationPrompt" containing the prompt text. No markdown fences.`;
   }
 
@@ -298,11 +387,15 @@ Language: ${project.settings.language}
 Writing style: ${project.settings.writingStyle}
 Target audience: ${project.settings.targetAudience}
 
+${buildCharacterRef(niche)}
+
 This is scene ${scene.sceneNumber} of ${totalScenes} total scenes.
 
-Generate a complete replacement scene with: title, estimatedDuration (set to ${sceneLength}), goal, narration (in ${project.settings.language}, for a ${sceneLength}-second scene, with pacing cues in brackets), imagePrompt (detailed, in English, for AI image generation in ${project.settings.theme} style), animationPrompt (detailed, in English, for AI video generation), and notes (emotion, visualFocus, transitionSuggestion, importantDetails).
+Generate a complete replacement scene with: title, estimatedDuration (set to ${sceneLength}), goal, narration (in ${project.settings.language}, for a ${sceneLength}-second scene, written in the character's EXACT voice, with pacing cues in brackets), imagePrompt (detailed, in English, MUST include the character's EXACT name and visual appearance, for AI image generation in ${project.settings.theme} style), animationPrompt (detailed, in English, animate the character per their personality, for AI video generation), and notes (character, emotion, visualFocus, transitionSuggestion, importantDetails).
 
-Return ONLY valid JSON: { "title": "...", "estimatedDuration": ${sceneLength}, "goal": "...", "narration": "...", "imagePrompt": "...", "animationPrompt": "...", "notes": { "emotion": "...", "visualFocus": "...", "transitionSuggestion": "...", "importantDetails": "..." } }. No markdown fences.`;
+CRITICAL: The character featured in this scene must look and sound IDENTICAL to the channel's character definition. Copy their visual prompt verbatim into the imagePrompt.
+
+Return ONLY valid JSON: { "title": "...", "estimatedDuration": ${sceneLength}, "goal": "...", "narration": "...", "imagePrompt": "...", "animationPrompt": "...", "notes": { "character": "...", "emotion": "...", "visualFocus": "...", "transitionSuggestion": "...", "importantDetails": "..." } }. No markdown fences.`;
 }
 
 // ---------- Server-side API call ----------
