@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Check, Zap, Crown, ArrowLeft, Loader2, CreditCard, MessageCircle, Banknote, Phone, AlertTriangle, CalendarClock, RefreshCw, ShieldCheck, Mail } from 'lucide-react';
+import { Check, Zap, Crown, ArrowLeft, Loader2, CreditCard, MessageCircle, Banknote, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -57,7 +57,6 @@ export default function PlansPage() {
   const checkSession = useAuthStore((s) => s.checkSession);
   const [loadingStripe, setLoadingStripe] = useState(false);
   const [showLocalPayment, setShowLocalPayment] = useState(false);
-  const [managingSub, setManagingSub] = useState(false);
 
   // Handle Stripe success/cancel redirects
   useEffect(() => {
@@ -79,12 +78,6 @@ export default function PlansPage() {
   const credits = user.credits || { balance: 0, dailyLimit: 30, totalAvailable: 0, lifetimeUsed: 0, bonusCredits: 0 };
   const creditLimit = credits.dailyLimit > 0 ? credits.dailyLimit : 30;
 
-  // Stripe subscription info
-  const hasStripeSub = !!user.stripe?.subscriptionId;
-  const cancelAtEnd = user.stripe?.cancelAtPeriodEnd === true;
-  const periodEnd = user.planExpiresAt || user.stripe?.currentPeriodEnd || 0;
-  const daysLeft = user.planDaysLeft || daysUntil(periodEnd);
-
   const handleUpgradeStripe = async () => {
     setLoadingStripe(true);
     try {
@@ -99,28 +92,6 @@ export default function PlansPage() {
       toast.error('Network error. Please try again.');
     } finally {
       setLoadingStripe(false);
-    }
-  };
-
-  const handleManageSubscription = async (action: 'cancel' | 'resume') => {
-    setManagingSub(true);
-    try {
-      const res = await fetch('/api/stripe/manage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(data.message);
-        checkSession(); // refresh user data
-      } else {
-        toast.error(data.error || 'Failed to update subscription');
-      }
-    } catch {
-      toast.error('Network error. Please try again.');
-    } finally {
-      setManagingSub(false);
     }
   };
 
@@ -191,116 +162,19 @@ export default function PlansPage() {
             </div>
           )}
 
-          {/* ── Billing Info (Pro only) ── */}
-          {isPro && hasStripeSub && (
-            <div className="mt-5 pt-5 border-t">
-              <div className="flex items-center gap-2 text-sm font-semibold mb-3">
-                <CreditCard className="size-4 text-primary" />
-                Billing Information
-              </div>
-
-              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-                {/* Period end */}
-                {periodEnd > 0 && (
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <CalendarClock className="size-3.5" />
-                      {cancelAtEnd ? 'Expires on' : 'Next billing date'}
-                    </div>
-                    <span className="font-medium">
-                      {formatDate(periodEnd)}
-                      {daysLeft > 0 && (
-                        <span className="text-muted-foreground ml-2">
-                          ({daysLeft} day{daysLeft !== 1 ? 's' : ''} left)
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                )}
-
-                {/* Cancelled warning */}
-                {cancelAtEnd && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-start gap-2 rounded-lg bg-amber-500/5 border border-amber-500/20 p-3"
-                  >
-                    <AlertTriangle className="size-4 text-amber-500 shrink-0 mt-0.5" />
-                    <div className="text-xs text-muted-foreground">
-                      <p className="font-medium text-amber-600 dark:text-amber-400">
-                        Auto-renewal cancelled
-                      </p>
-                      <p className="mt-0.5">
-                        Your Pro access will continue until {formatDate(periodEnd)}.
-                        After that, your plan will revert to Free. You can resume auto-renewal anytime before that date.
-                      </p>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* Active subscription badge */}
-                {!cancelAtEnd && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <ShieldCheck className="size-3.5 text-emerald-500" />
-                    <span>Auto-renewal is active. You&apos;ll be billed $9/month automatically.</span>
-                  </div>
-                )}
-
-                <Separator />
-
-                {/* Manage buttons */}
-                <div className="flex flex-col sm:flex-row gap-2">
-                  {cancelAtEnd ? (
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="gap-2"
-                      onClick={() => handleManageSubscription('resume')}
-                      disabled={managingSub}
-                    >
-                      {managingSub ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <RefreshCw className="size-3.5" />
-                      )}
-                      Resume Auto-Renewal
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2 text-destructive hover:text-destructive"
-                      onClick={() => handleManageSubscription('cancel')}
-                      disabled={managingSub}
-                    >
-                      {managingSub ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <AlertTriangle className="size-3.5" />
-                      )}
-                      Cancel Auto-Renewal
-                    </Button>
-                  )}
-
-                  <p className="text-[11px] text-muted-foreground">
-                    {cancelAtEnd
-                      ? 'Click to re-enable automatic billing at the end of your period.'
-                      : 'Cancel at the end of your billing period. You keep Pro access until then.'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Pro but no Stripe sub (manual upgrade) */}
-          {isPro && !hasStripeSub && (
+          {/* ── Pro plan info ── */}
+          {isPro && (
             <div className="mt-5 pt-5 border-t">
               <div className="rounded-lg bg-muted/30 border p-3 text-xs text-muted-foreground flex items-start gap-2">
-                <MessageCircle className="size-3.5 shrink-0 mt-0.5" />
-                <p>
-                  Your Pro plan was activated by admin. To manage auto-renewal settings,
-                  contact the admin on WhatsApp.
-                </p>
+                <Crown className="size-3.5 text-primary shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-foreground text-sm">Your Pro plan is active</p>
+                  <p className="mt-0.5">
+                    {user.planExpiresAt > 0
+                      ? `Plan valid until ${formatDate(user.planExpiresAt)}. Contact admin to extend.`
+                      : 'Contact admin to manage your plan.'}
+                  </p>
+                </div>
               </div>
             </div>
           )}
