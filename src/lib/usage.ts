@@ -1,4 +1,4 @@
-// ── Client-safe plan limits & daily usage helpers ─────
+// ── Client-safe plan info & daily usage helpers ─────
 //
 // ⚠️  This file MUST stay pure (no mongoose / mongodb / credits imports).
 // It is imported by Client Components (plans page, dashboard, editor).
@@ -9,18 +9,19 @@
 
 import type { UserPlan, IDailyUsage } from './models/User';
 
-// ── Plan Limits ────────────────────────────────────────
+// ── Plan Info ──────────────────────────────────────────
+// AI generation limits have been REPLACED by the credits system.
+// Free = 30 credits/day, Pro = 8,000 credits per plan (no daily reset).
+// See src/lib/credits.ts for the full credit logic.
 
 export const PLAN_LIMITS = {
   free: {
-    projectsPerDay: 1,
-    aiGenerationsPerDay: 3,
+    creditsPerDay: 30,
     canRegenerate: false,
     label: 'Free',
   },
   pro: {
-    projectsPerDay: Infinity,
-    aiGenerationsPerDay: 100,
+    creditsTotal: 8000,
     canRegenerate: true,
     label: 'Pro',
   },
@@ -47,5 +48,5 @@ export function resetIfNewDay(usage: IDailyUsage, plan: 'free' | 'pro' = 'free')
   return usage;
 }
 
-// Re-export UserPlan for convenience (type-only, erased at compile time)
+// Re-export types for convenience (type-only, erased at compile time)
 export type { UserPlan, IDailyUsage };

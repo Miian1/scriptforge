@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     const verificationTokenExpires = getVerificationExpiry();
 
     // Store user in DB — NOT verified yet
-    // Credits: free plan = 10/day, staff (admin) = unlimited (-1 sentinel)
+    // Credits: free plan = 30/day, staff (admin) = unlimited (-1 sentinel)
     const todayDate = new Date().toISOString().split('T')[0];
     const user = await User.create({
       name: name.trim(),

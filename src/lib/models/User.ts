@@ -43,7 +43,7 @@ export interface ICreditTransaction {
 
 export interface ICredits {
   balance: number;        // current spendable daily credit balance
-  dailyLimit: number;     // 0 = use plan default (free=10, pro=150); >0 = custom override
+  dailyLimit: number;     // 0 = use plan default (free=30, pro=8000); >0 = custom override
   bonusCredits: number;   // admin-granted, never resets, consumed after daily
   lastResetDate: string;  // 'YYYY-MM-DD' — when balance was last refilled
   lifetimeUsed: number;   // total credits ever consumed (audit)
@@ -133,7 +133,7 @@ const DailyUsageSchema = new Schema<IDailyUsage>({
 });
 
 // ── Credit system schema ──
-// Free plan default: 10 credits/day. Pro plan default: 150 credits/day.
+// Free plan default: 30 credits/day. Pro plan default: 8000 credits (lump sum, no daily reset).
 // `dailyLimit=0` means "use plan default" — admin can override per-user.
 // `balance` is the daily balance that resets each day; `bonusCredits`
 // never resets and is consumed after balance hits 0.
@@ -145,7 +145,7 @@ const CreditTransactionSchema = new Schema<ICreditTransaction>({
 });
 
 const CreditsSchema = new Schema<ICredits>({
-  balance: { type: Number, default: 10 },          // free plan default on creation
+  balance: { type: Number, default: 30 },          // free plan default on creation
   dailyLimit: { type: Number, default: 0 },        // 0 = use plan default
   bonusCredits: { type: Number, default: 0 },
   lastResetDate: {
@@ -238,7 +238,7 @@ const UserSchema = new Schema<IUser>(
     credits: {
       type: CreditsSchema,
       default: () => ({
-        balance: 10,
+        balance: 30,
         dailyLimit: 0,
         bonusCredits: 0,
         lastResetDate: new Date().toISOString().split('T')[0],

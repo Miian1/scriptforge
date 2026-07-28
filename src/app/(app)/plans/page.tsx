@@ -20,16 +20,14 @@ const WHATSAPP_LINK = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent
 const EMAIL_LINK = `mailto:${ADMIN_EMAIL}?subject=${encodeURIComponent('ScriptForge Pro Plan Inquiry')}&body=${encodeURIComponent('Hi! I am interested in upgrading to ScriptForge Pro. Please share the payment details.')}`;
 
 const FREE_FEATURES = [
-  '1 project (one-time)',
-  '3 AI generations (one-time)',
+  '30 credits per day (resets daily)',
   'Connect YouTube channel',
   'View video details & comments',
   'Basic editing & reordering',
 ];
 
 const PRO_FEATURES = [
-  'Unlimited projects',
-  '100 AI generations per day',
+  '8,000 credits per plan (no daily reset)',
   'Regenerate any scene content',
   'Connect YouTube channel',
   'AI-powered comment replies',

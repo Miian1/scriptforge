@@ -4,11 +4,11 @@
 // If saveAudio=true and sceneId provided, saves to disk, creates GeneratedAudio record, updates scene.
 // Returns: audio/wav binary stream (with audioPath and audioRecordId in headers)
 //
-// Voice generation is a Pro-only feature AND costs 1 credit per call.
+// Voice generation is a Pro-only feature AND costs 2 credits per call.
 // The Pro gate is enforced inside requireCredits via the plan-expiry check
 // (expired Pro = free limits). For free users we still need the explicit
 // Pro gate — that's what requirePro is for. The credit check alone would
-// allow a free user to call this (they have 10 credits) — we don't want
+// allow a free user to call this (they have 30 credits) — we don't want
 // that for voice gen.
 
 import { NextRequest, NextResponse } from 'next/server';

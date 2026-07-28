@@ -1,21 +1,23 @@
 // ── Credit system core ────────────────────────────────
 //
-// Every billable AI action (text gen, voice gen, project create, AI score,
-// YouTube AI reply, YouTube SEO improve) costs exactly 1 credit per call.
+// Every billable AI action costs credits:
+//   Text generation  → 1 credit
+//   Voice generation → 2 credits
+//   Project create   → 1 credit
+//   Scoring, YouTube AI reply, SEO improve → 1 credit each
 //
 // Plan defaults:
-//   free → 10 credits / day
-//   pro  → 150 credits / day
+//   free → 30 credits / day  (daily reset)
+//   pro  → 8,000 credits      (lump sum — NO daily reset, lasts until plan ends)
 //   admin / manager → unlimited (bypass)
 //
 // `dailyLimit` on the user record overrides the plan default when > 0.
 // `bonusCredits` are admin-granted and never reset — they're consumed after
-// the daily `balance` reaches 0. They are stored separately and decremented
-// only when the daily balance is exhausted.
+// the `balance` reaches 0.
 //
-// Daily reset is triggered lazily inside `getUserCreditState()` and
-// `deductCredits()` — whenever `lastResetDate !== today`, the balance is
-// refilled to the plan/override limit before the operation runs.
+// Daily reset (FREE ONLY) is triggered lazily inside `computeCreditState()`
+// and `requireCredits()` — whenever `lastResetDate !== today`, the balance
+// is refilled to 30 for free users. Pro users are NEVER auto-reset.
 
 import { getSession } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
@@ -24,17 +26,14 @@ import type { ICredits } from '@/lib/models/User';
 
 // ── Plan defaults ────────────────────────────────────────
 export const PLAN_CREDIT_LIMITS = {
-  free: 10,
-  pro: 150,
+  free: 30,       // 30 credits per day, resets daily
+  pro: 8000,      // 8000 credits lump sum, no daily reset
 } as const;
 
 // ── Billable actions ─────────────────────────────────────
-// Each entry is a known action type. `cost` is normally 1 (the user's spec
-// says "per generation reduce 1 limit"). Kept as a map so we can adjust
-// per-action cost later without rewriting call sites.
 export const CREDIT_ACTIONS = {
   TEXT_GENERATION:    { key: 'text_generation',    label: 'AI Text Generation',    cost: 1 },
-  VOICE_GENERATION:   { key: 'voice_generation',   label: 'AI Voice Generation',   cost: 1 },
+  VOICE_GENERATION:   { key: 'voice_generation',   label: 'AI Voice Generation',   cost: 2 },
   PROJECT_CREATION:   { key: 'project_creation',   label: 'Project Creation',      cost: 1 },
   PROJECT_SCORING:    { key: 'project_scoring',    label: 'AI Project Scoring',    cost: 1 },
   AI_COMMENT_REPLY:   { key: 'ai_comment_reply',   label: 'AI Comment Reply',      cost: 1 },
@@ -52,8 +51,9 @@ export function getTodayKey(): string {
 }
 
 /**
- * Resolve the effective daily credit limit for a user.
+ * Resolve the effective daily credit limit for a FREE user.
  * If `credits.dailyLimit > 0`, that overrides the plan default.
+ * For Pro users this is only informational (their balance is a pool).
  */
 export function getDailyLimit(plan: 'free' | 'pro', dailyLimitOverride: number): number {
   if (dailyLimitOverride && dailyLimitOverride > 0) return dailyLimitOverride;
@@ -61,16 +61,14 @@ export function getDailyLimit(plan: 'free' | 'pro', dailyLimitOverride: number):
 }
 
 /**
- * Compute the *effective* credit state for a user, applying a lazy daily
- * reset if needed. Does NOT mutate the DB — caller is responsible for
- * persisting any reset.
+ * Compute the *effective* credit state for a user.
  *
- * Returns:
- *   - balance: today's spendable daily credits (already reset if new day)
- *   - bonusCredits: separate, never-reset pool
- *   - dailyLimit: effective limit
- *   - totalAvailable: balance + bonusCredits
- *   - needsReset: true if the DB needs to be updated with the new balance
+ * FREE users: get a daily reset (balance refilled to 30 when new day).
+ * PRO users: NO daily reset — their balance is a one-time pool of 8000
+ *            credits that only depletes. We only reset when the plan
+ *            is first activated (first Pro day) or admin explicitly resets.
+ *
+ * Does NOT mutate the DB — caller is responsible for persisting any reset.
  */
 export interface CreditState {
   balance: number;
@@ -96,9 +94,22 @@ export function computeCreditState(
   const lastResetDate = credits?.lastResetDate ?? '';
   let needsReset = false;
 
-  if (lastResetDate !== today) {
-    balance = dailyLimit;
-    needsReset = true;
+  if (plan === 'free') {
+    // ── FREE: daily reset ──
+    if (lastResetDate !== today) {
+      balance = dailyLimit;
+      needsReset = true;
+    }
+  } else {
+    // ── PRO: no daily reset ──
+    // Balance is a pool that only depletes.
+    // We only auto-reset if balance is 0 AND lifetimeUsed is 0
+    // (i.e. brand new Pro user who was just upgraded — give them 8000).
+    // Otherwise, leave balance as-is (no refill).
+    if (balance === 0 && (credits?.lifetimeUsed ?? 0) === 0) {
+      balance = dailyLimit; // 8000 for fresh Pro users
+      needsReset = true;
+    }
   }
 
   return {
@@ -155,7 +166,7 @@ export interface CreditGuardResult {
  *   1. session check (401)
  *   2. user fetch
  *   3. staff bypass (admin/manager → no deduction, ok=true)
- *   4. lazy daily reset
+ *   4. lazy daily reset (FREE ONLY — Pro users never auto-reset)
  *   5. balance+bonus check (429 if insufficient)
  *   6. atomic deduction (balance first, then bonus)
  *   7. transaction log push (capped to last 50)
@@ -176,9 +187,6 @@ export async function requireCredits(
   }
 
   await connectDB();
-  // We need the full user doc (plan, role, credits subdoc) for the check
-  // and the deduction. Using .save() ensures the transaction array cap
-  // works correctly via $slice on save.
   const user = await User.findById(session.userId).select('role plan planExpiresAt stripe credits');
   if (!user) {
     return { ok: false, error: 'User not found', status: 404 };
@@ -219,8 +227,7 @@ export async function requireCredits(
   const creditsField = user.credits as ICredits | undefined;
   const state = computeCreditState(effectivePlan, user.role, creditsField);
 
-  // ── Persist the daily reset if needed ──
-  // We do this BEFORE the deduction so the deduction reflects the new day.
+  // ── Persist the daily reset if needed (free users only in practice) ──
   if (state.needsReset) {
     if (!user.credits) {
       user.credits = {
@@ -250,20 +257,25 @@ export async function requireCredits(
   // ── Check balance ──
   const totalAvail = user.credits.balance + user.credits.bonusCredits;
   if (totalAvail < action.cost) {
-    const dailyLimit = state.dailyLimit;
+    if (effectivePlan === 'free') {
+      return {
+        ok: false,
+        error: `You've used all your daily credits. ${state.dailyLimit} credits reset tomorrow. Upgrade to Pro for 8,000 credits per plan.`,
+        status: 429,
+        state,
+        action,
+      };
+    }
     return {
       ok: false,
-      error:
-        effectivePlan === 'free'
-          ? `You've used all ${dailyLimit} daily credits on the Free plan. Upgrade to Pro for 150 credits/day.`
-          : `You've used all ${dailyLimit} daily Pro credits. Credits reset tomorrow or contact an admin for bonus credits.`,
+      error: `You've used all your Pro credits. Contact an admin for more credits or renew your plan.`,
       status: 429,
       state,
       action,
     };
   }
 
-  // ── Atomic deduction: daily balance first, then bonus ──
+  // ── Atomic deduction: balance first, then bonus ──
   let remaining: number = action.cost;
   if (user.credits.balance >= remaining) {
     user.credits.balance -= remaining;
@@ -320,24 +332,26 @@ export async function requireCredits(
 export async function refundCredits(
   userId: string,
   actionKey: CreditActionKey,
-  amount: number = 1,
+  amount?: number,
 ): Promise<void> {
   try {
     const action = CREDIT_ACTIONS[actionKey];
     if (!action) return;
+    // Default to the action's cost if no amount specified
+    const refundAmount = amount ?? action.cost;
     await connectDB();
     await User.updateOne(
       { _id: userId },
       {
         $inc: {
-          'credits.balance': amount,
-          'credits.lifetimeUsed': -amount,
+          'credits.balance': refundAmount,
+          'credits.lifetimeUsed': -refundAmount,
         },
         $push: {
           'credits.transactions': {
             $each: [{
               action: `refund:${action.key}`,
-              amount: -amount,
+              amount: -refundAmount,
               balanceAfter: -1, // unknown — caller can ignore
               at: Date.now(),
             }],
@@ -407,7 +421,7 @@ export async function getUserCreditState(userId: string): Promise<CreditState | 
  */
 export async function setCustomDailyLimit(userId: string, dailyLimit: number): Promise<void> {
   await connectDB();
-  const limit = Math.max(0, Math.min(10000, Math.floor(dailyLimit)));
+  const limit = Math.max(0, Math.min(100000, Math.floor(dailyLimit)));
   await User.updateOne(
     { _id: userId },
     { $set: { 'credits.dailyLimit': limit } },
@@ -419,7 +433,7 @@ export async function setCustomDailyLimit(userId: string, dailyLimit: number): P
  */
 export async function addBonusCredits(userId: string, amount: number): Promise<void> {
   await connectDB();
-  const amt = Math.max(-10000, Math.min(10000, Math.floor(amount)));
+  const amt = Math.max(-100000, Math.min(100000, Math.floor(amount)));
   await User.updateOne(
     { _id: userId },
     { $inc: { 'credits.bonusCredits': amt } },
@@ -427,7 +441,9 @@ export async function addBonusCredits(userId: string, amount: number): Promise<v
 }
 
 /**
- * Admin helper: reset a user's daily balance to their plan limit immediately.
+ * Admin helper: reset a user's balance to their plan limit immediately.
+ * For free users: resets daily balance to 30.
+ * For pro users: sets balance back to 8000 (lump sum).
  */
 export async function resetUserCredits(userId: string): Promise<void> {
   await connectDB();
@@ -444,4 +460,29 @@ export async function resetUserCredits(userId: string): Promise<void> {
       },
     },
   );
+}
+
+/**
+ * Grant Pro credits — called when a user is upgraded to Pro (Stripe checkout,
+ * admin manual, etc.). Sets their balance to 8000 if they haven't gotten
+ * their lump sum yet (balance is 0 and lifetimeUsed is 0 or low).
+ */
+export async function grantProCredits(userId: string): Promise<void> {
+  await connectDB();
+  const user = await User.findById(userId).select('role plan credits');
+  if (!user || user.plan !== 'pro') return;
+  const credits = user.credits as ICredits | undefined;
+  const dailyLimit = getDailyLimit('pro', credits?.dailyLimit ?? 0);
+  // Only grant if they haven't received their lump sum yet
+  if ((credits?.balance ?? 0) < dailyLimit) {
+    await User.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          'credits.balance': dailyLimit,
+          'credits.lastResetDate': getTodayKey(),
+        },
+      },
+    );
+  }
 }

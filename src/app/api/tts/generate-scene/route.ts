@@ -5,7 +5,7 @@
 // If saveAudio=true, saves to disk, creates GeneratedAudio record, updates scene.
 // Returns: audio/wav binary stream (with X-Audio-Path and X-Audio-Record-Id headers)
 //
-// Voice generation is Pro-only AND costs 1 credit per call.
+// Voice generation is Pro-only AND costs 2 credits per call.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';

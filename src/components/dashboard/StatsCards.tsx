@@ -9,12 +9,12 @@ import {
   Crown,
   Flame,
   CalendarClock,
+  Coins,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/lib/store';
 import { useAuthStore } from '@/lib/auth-store';
-import { PLAN_LIMITS } from '@/lib/usage';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
@@ -188,22 +188,24 @@ export default function StatsCards() {
   const router = useRouter();
 
   const isPro = user?.plan === 'pro';
-  const plan = user?.plan || 'free';
-  const limits = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS];
-  const usage = user?.dailyUsage;
   const planDaysLeft = user?.planDaysLeft ?? 0;
+
+  // Credits state from auth store
+  const creditsBalance = user?.credits?.balance ?? 0;
+  const creditsTotal = user?.credits?.totalAvailable ?? 0;
+  const creditsDailyLimit = user?.credits?.dailyLimit ?? 30;
+  const creditsLifetimeUsed = user?.credits?.lifetimeUsed ?? 0;
+  const isStaff = user?.credits?.isStaff ?? false;
 
   const completed = projects.filter((p) => p.status === 'completed').length;
   const drafts = projects.filter((p) => p.status === 'draft').length;
-  const createdToday = usage?.projectsCreated ?? 0;
-  const aiUsedToday = usage?.aiGenerations ?? 0;
+  const createdToday = user?.dailyUsage?.projectsCreated ?? 0;
 
-  const projectsLeft = isPro
-    ? null
-    : Math.max(0, limits.projectsPerDay - createdToday);
-  const aiLeft = Math.max(0, limits.aiGenerationsPerDay - aiUsedToday);
-  const projectPercent = isPro ? 100 : Math.min(100, (createdToday / limits.projectsPerDay) * 100);
-  const aiPercent = Math.min(100, (aiUsedToday / limits.aiGenerationsPerDay) * 100);
+  // Credits remaining (handle -1 sentinel for staff)
+  const displayBalance = isStaff ? Infinity : creditsBalance;
+  const displayLimit = isStaff ? Infinity : (isPro ? 8000 : creditsDailyLimit);
+  const creditPercent = isStaff ? 100 : (displayLimit > 0 ? Math.min(100, (creditsBalance / displayLimit) * 100) : 0);
+  const creditRemaining = isStaff ? 'Unlimited' : String(creditsBalance);
 
   // Generate deterministic fake "trend" data for the SVG backgrounds
   const projectTrend = useMemo(() => {
@@ -212,14 +214,6 @@ export default function StatsCards() {
       Math.max(1, projects.length - 6 + i + Math.floor(Math.random() * 3))
     );
   }, [projects.length]);
-
-  const aiTrend = useMemo(
-    () =>
-      Array.from({ length: 6 }, (_, i) =>
-        Math.max(1, Math.floor(aiUsedToday * (0.4 + (i / 5) * 0.8) + Math.random() * 2))
-      ),
-    [aiUsedToday],
-  );
 
   const barData = useMemo(
     () =>
@@ -266,7 +260,7 @@ export default function StatsCards() {
         </Card>
       </motion.div>
 
-      {/* ── Card 2: Projects Created Today ── */}
+      {/* ── Card 2: Created Today ── */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -288,54 +282,16 @@ export default function StatsCards() {
                     Created Today
                   </p>
                   <p className="text-lg font-bold leading-tight">
-                    {isPro ? (
-                      <>
-                        {createdToday}{' '}
-                        <span className="text-sm font-normal text-muted-foreground">today</span>
-                      </>
-                    ) : (
-                      <>
-                        {createdToday}{' '}
-                        <span className="text-sm font-normal text-muted-foreground">
-                          / {limits.projectsPerDay}
-                        </span>
-                      </>
-                    )}
+                    {createdToday}
                   </p>
                 </div>
               </div>
-              {!isPro && projectsLeft === 0 && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs gap-1"
-                  onClick={() => router.push('/plans')}
-                >
-                  Upgrade
-                  <ArrowRight className="size-3" />
-                </Button>
-              )}
             </div>
-            {!isPro && (
-              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                <div
-                  className={cn(
-                    'h-full rounded-full transition-all duration-500',
-                    projectPercent >= 100
-                      ? 'bg-red-500'
-                      : projectPercent >= 70
-                        ? 'bg-amber-500'
-                        : 'bg-violet-500',
-                  )}
-                  style={{ width: `${projectPercent}%` }}
-                />
-              </div>
-            )}
           </CardContent>
         </Card>
       </motion.div>
 
-      {/* ── Card 3: AI Generations Used Today ── */}
+      {/* ── Card 3: Credits Balance ── */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -344,30 +300,42 @@ export default function StatsCards() {
         <Card className="relative h-full overflow-hidden">
           {/* Background graph */}
           <div className="absolute bottom-0 right-0 w-[130px] h-[64px]">
-            <AreaSparkline points={aiTrend} color="#10b981" className="w-full h-full" />
+            <AreaSparkline
+              points={Array.from({ length: 6 }, (_, i) =>
+                Math.max(1, Math.floor(displayBalance * (1 - (i / 5) * 0.8) + Math.random() * 3))
+              )}
+              color="#10b981"
+              className="w-full h-full"
+            />
           </div>
           <CardContent className="relative p-4 space-y-2.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10">
-                  <Sparkles className="size-4 text-emerald-500" />
+                  <Coins className="size-4 text-emerald-500" />
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                    AI Generations Today
+                    Credits
                   </p>
                   <p className="text-lg font-bold leading-tight">
-                    {aiUsedToday}{' '}
-                    <span className="text-sm font-normal text-muted-foreground">
-                      / {limits.aiGenerationsPerDay}
-                    </span>
+                    {isStaff ? (
+                      <span className="text-emerald-500">Unlimited</span>
+                    ) : (
+                      <>
+                        {creditRemaining}
+                        {!isPro && (
+                          <span className="text-sm font-normal text-muted-foreground"> / {displayLimit}</span>
+                        )}
+                      </>
+                    )}
                   </p>
                   <p className="text-[10px] text-muted-foreground">
-                    {aiLeft} remaining
+                    {isStaff ? 'Staff bypass' : isPro ? `${creditsLifetimeUsed} used total` : `${creditsBalance} remaining today`}
                   </p>
                 </div>
               </div>
-              {!isPro && aiLeft === 0 && (
+              {!isStaff && creditsBalance <= 3 && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -379,19 +347,23 @@ export default function StatsCards() {
                 </Button>
               )}
             </div>
-            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className={cn(
-                  'h-full rounded-full transition-all duration-500',
-                  aiPercent >= 100
-                    ? 'bg-red-500'
-                    : aiPercent >= 70
-                      ? 'bg-amber-500'
-                      : 'bg-emerald-500',
-                )}
-                style={{ width: `${aiPercent}%` }}
-              />
-            </div>
+            {!isStaff && (
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-all duration-500',
+                    creditPercent >= 100
+                      ? 'bg-emerald-500'
+                      : creditPercent >= 70
+                        ? 'bg-emerald-500'
+                        : creditPercent >= 30
+                          ? 'bg-amber-500'
+                          : 'bg-red-500',
+                  )}
+                  style={{ width: `${creditPercent}%` }}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>

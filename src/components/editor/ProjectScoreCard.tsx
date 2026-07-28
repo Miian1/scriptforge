@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/auth-store';
-import { PLAN_LIMITS } from '@/lib/usage';
+
 import { useAppStore } from '@/lib/store';
 import type { ScoreEntry } from '@/lib/types';
 
@@ -128,8 +128,6 @@ export default function ProjectScoreCard({ project }: ProjectScoreCardProps) {
     if (loading) return;
 
     const user = useAuthStore.getState().user;
-    const plan = user?.plan || 'free';
-    const limits = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS];
 
     setLoading(true);
     try {

@@ -1017,7 +1017,7 @@ export default function AdminPage() {
             Credit System
           </CardTitle>
           <CardDescription>
-            AI usage is metered per-action. Each generation (text, voice, project create, scoring, YouTube AI reply, SEO improve) costs exactly 1 credit.
+            AI usage is metered per-action. Text generation costs 1 credit, voice generation costs 2 credits. Project create, scoring, YouTube AI reply, and SEO improve each cost 1 credit.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -1029,10 +1029,10 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <p className="text-sm font-medium">Free Plan</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">10 credits per day · resets daily</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">30 credits per day · resets daily</p>
                 </div>
               </div>
-              <Badge variant="outline" className="text-xs">10/day</Badge>
+              <Badge variant="outline" className="text-xs">30/day</Badge>
             </div>
             <div className="px-4 py-3.5 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1041,10 +1041,10 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <p className="text-sm font-medium">Pro Plan</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">150 credits per day · resets daily</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">8,000 credits · no daily reset · lasts until plan ends</p>
                 </div>
               </div>
-              <Badge variant="outline" className="text-xs">150/day</Badge>
+              <Badge variant="outline" className="text-xs">8,000/plan</Badge>
             </div>
             <div className="px-4 py-3.5 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1537,20 +1537,19 @@ export default function AdminPage() {
                       Credit Management
                     </div>
                     <p className="text-[11px] text-muted-foreground -mt-1">
-                      Free plan: 10 credits/day · Pro plan: 150 credits/day. 1 credit per AI action
-                      (text gen, voice gen, project create, scoring, YouTube AI reply, SEO improve).
+                      Free plan: 30 credits/day (resets daily) · Pro plan: 8,000 credits (no daily reset, lasts until plan ends). Text gen = 1 credit, voice gen = 2 credits, other actions = 1 credit.
                     </p>
 
                     {/* ── Current Credit State ── */}
                     {editUser.credits && (
                       <div className="rounded-lg bg-muted/50 p-3 space-y-1.5">
                         <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Daily Balance</span>
+                          <span className="text-muted-foreground">Credit Balance</span>
                           <span className={cn(
                             'font-semibold',
-                            editUser.credits.balance <= 0 ? 'text-red-500' : editUser.credits.balance <= 2 ? 'text-amber-500' : 'text-foreground'
+                            editUser.credits.balance <= 0 ? 'text-red-500' : editUser.credits.balance <= 5 ? 'text-amber-500' : 'text-foreground'
                           )}>
-                            {editUser.credits.balance} / {editUser.credits.dailyLimit > 0 ? editUser.credits.dailyLimit : (editUser.plan === 'pro' ? 150 : 10)}
+                            {editUser.credits.balance}{editUser.plan === 'pro' ? '' : ` / ${editUser.credits.dailyLimit > 0 ? editUser.credits.dailyLimit : 30}`}
                           </span>
                         </div>
                         <div className="flex justify-between text-sm">
@@ -1585,7 +1584,7 @@ export default function AdminPage() {
                         />
                       </div>
                       <p className="text-[11px] text-muted-foreground">
-                        Override the plan default (Free=10, Pro=150). Disable to revert to plan default.
+                        Override the plan default (Free=30, Pro=8000). Disable to revert to plan default.
                       </p>
                       {editCreditDailyLimitEnabled && (
                         <div className="flex items-center gap-2">
@@ -1671,7 +1670,7 @@ export default function AdminPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <RotateCcw className="size-3.5 text-blue-500" />
-                          <span className="text-sm font-medium">Reset Daily Balance</span>
+                          <span className="text-sm font-medium">Reset Credit Balance</span>
                         </div>
                         <Switch
                           checked={editCreditReset}
@@ -1679,8 +1678,7 @@ export default function AdminPage() {
                         />
                       </div>
                       <p className="text-[11px] text-muted-foreground">
-                        Immediately refill the daily balance to the limit. Useful when testing or
-                        compensating a user for a failed operation.
+                        Immediately refill the balance to the plan limit (Free=30, Pro=8,000). Useful when testing or compensating a user.
                       </p>
                     </div>
                   </div>

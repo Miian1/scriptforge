@@ -71,8 +71,8 @@ export async function POST(req: NextRequest) {
     // ── Build the user document ──
     // Admin-created accounts are pre-verified — no email verification sent.
     // planSource='manual' for Pro (admin-granted), null for Free.
-    // Credits: Pro = 150, Free = 10, Staff = bypass (balance set to 0, but
-    // requireCredits short-circuits for admin/manager anyway).
+    // Credits: Pro = 8,000 lump sum, Free = 30/day, Staff = bypass (balance
+    // set to 0, but requireCredits short-circuits for admin/manager anyway).
     const todayDate = new Date().toISOString().split('T')[0];
     const newUserData: Record<string, unknown> = {
       name: userName,
